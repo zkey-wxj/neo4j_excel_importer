@@ -14,6 +14,7 @@ Excel 结构约定
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
 from collections.abc import Generator
@@ -29,6 +30,7 @@ from tools.types import (
     RelationPayload,
     node_from_excel_row,
     relation_from_excel_row,
+    ensure_mapping
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +88,9 @@ class ImportGraphTool(Tool):
     _REL_HEADER_3 = ["SourceID", "RelationType", "TargetID"]
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
+        tool_parameters = ensure_mapping(tool_parameters, "tool_parameters")
+        credentials = ensure_mapping(self.runtime.credentials, "runtime.credentials")
+
         # ── 1. 参数读取 ──────────────────────────────────────────────────
         excel_url   = str(tool_parameters.get("excel_url") or "").strip()
         excel_files = tool_parameters.get("excel_file")          # dify Files 对象或 File 对象
@@ -93,9 +98,9 @@ class ImportGraphTool(Tool):
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
 
-        neo4j_uri  = str(self.runtime.credentials.get("neo4j_uri",  "")).strip()
-        neo4j_user = str(self.runtime.credentials.get("neo4j_user", "")).strip()
-        neo4j_pwd  = str(self.runtime.credentials.get("neo4j_password", "")).strip()
+        neo4j_uri  = str(credentials.get("neo4j_uri",  "")).strip()
+        neo4j_user = str(credentials.get("neo4j_user", "")).strip()
+        neo4j_pwd  = str(credentials.get("neo4j_password", "")).strip()
 
         logger.info(
             "ImportGraphTool invoked | uri=%s user=%s batch=%d clear=%s",

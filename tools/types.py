@@ -28,6 +28,19 @@ def clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def ensure_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception as exc:
+            raise ValueError(f"{field_name} 必须是对象，字符串无法解析为 JSON：{exc}") from exc
+        if isinstance(parsed, Mapping):
+            return parsed
+    raise ValueError(f"{field_name} 必须是 JSON 对象。")
+
+
 def sanitize_label(text: str) -> str:
     value = clean_text(text)
     value = re.sub(r"[/\\\-\s]+", "_", value)
@@ -41,6 +54,7 @@ def sanitize_rel_type(text: str) -> str:
 
 
 def node_from_excel_row(row: Mapping[str, Any]) -> NodePayload:
+    row = ensure_mapping(row, field_name="node_row")
     node_type = clean_text(row.get("node_type"))
     return NodePayload(
         nodeId=clean_text(row.get("NodeID")),
@@ -56,6 +70,7 @@ def node_from_excel_row(row: Mapping[str, Any]) -> NodePayload:
 
 
 def relation_from_excel_row(row: Mapping[str, Any]) -> RelationPayload:
+    row = ensure_mapping(row, field_name="relation_row")
     return RelationPayload(
         src=clean_text(row.get("SourceID")),
         tgt=clean_text(row.get("TargetID")),
@@ -89,8 +104,7 @@ def parse_relation_json(relation_json: str) -> RelationPayload:
 
 
 def normalize_node(payload: Any, *, index: int) -> NodePayload:
-    if not isinstance(payload, Mapping):
-        raise ValueError(f"nodes_json[{index}] 必须是 JSON 对象。")
+    payload = ensure_mapping(payload, field_name=f"nodes_json[{index}]")
 
     node_id = clean_text(payload.get("nodeId"))
     if not node_id:
@@ -113,8 +127,7 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
 
 
 def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
-    if not isinstance(payload, Mapping):
-        raise ValueError(f"relations_json[{index}] 必须是 JSON 对象。")
+    payload = ensure_mapping(payload, field_name=f"relations_json[{index}]")
 
     src = clean_text(payload.get("src"))
     tgt = clean_text(payload.get("tgt"))
