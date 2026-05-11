@@ -14,10 +14,8 @@ Excel 结构约定
 from __future__ import annotations
 
 import io
-import re
 import logging
-import tempfile
-import os
+import re
 from collections.abc import Generator
 from typing import Any
 
@@ -26,6 +24,12 @@ from neo4j import GraphDatabase
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
+from tools.types import (
+    NodePayload,
+    RelationPayload,
+    node_from_excel_row,
+    relation_from_excel_row,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -85,6 +89,7 @@ class ImportGraphTool(Tool):
         # ── 1. 参数读取 ──────────────────────────────────────────────────
         excel_url   = str(tool_parameters.get("excel_url") or "").strip()
         excel_files = tool_parameters.get("excel_file")          # dify Files 对象或 File 对象
+        excel_text  = str(tool_parameters.get("excel_text") or "").strip()
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
 
@@ -98,27 +103,35 @@ class ImportGraphTool(Tool):
         )
 
         # ── 2. 参数校验 ──────────────────────────────────────────────────
-        if not excel_url and excel_files is None:
-            yield self.create_text_message("❌ 请提供 excel_url 或上传 excel_file，两者不能同时为空。")
+        if not excel_text and not excel_url and not self._has_uploaded_files(excel_files):
+            yield self.create_text_message("❌ 请提供 excel_text、excel_url 或上传 excel_file，三者不能同时为空。")
             return
 
-        # ── 3. 读取 Excel 字节 ───────────────────────────────────────────
-        yield self.create_text_message("⏳ 正在读取 Excel 文件…")
-        try:
-            excel_bytes = self._load_excel_bytes(excel_url, excel_files)
-        except Exception as exc:
-            logger.error("读取 Excel 失败: %s", exc)
-            yield self.create_text_message(f"❌ 读取 Excel 失败：{exc}")
-            return
+        # ── 3. 读取并解析图谱 ────────────────────────────────────────────
+        if excel_text:
+            yield self.create_text_message("⏳ 正在解析 Markdown 图谱文本…")
+            try:
+                nodes_df, rels_df = self._parse_markdown_tables(excel_text)
+            except Exception as exc:
+                logger.error("解析 Markdown 文本失败: %s", exc)
+                yield self.create_text_message(f"❌ 解析 Markdown 文本失败：{exc}")
+                return
+        else:
+            yield self.create_text_message("⏳ 正在读取 Excel 文件…")
+            try:
+                excel_bytes = self._load_excel_bytes(excel_url, excel_files)
+            except Exception as exc:
+                logger.error("读取 Excel 失败: %s", exc)
+                yield self.create_text_message(f"❌ 读取 Excel 失败：{exc}")
+                return
 
-        # ── 4. 解析 Excel ────────────────────────────────────────────────
-        yield self.create_text_message("⏳ 正在解析图谱结构…")
-        try:
-            nodes_df, rels_df = self._parse_excel(excel_bytes)
-        except Exception as exc:
-            logger.error("解析 Excel 失败: %s", exc)
-            yield self.create_text_message(f"❌ 解析 Excel 失败：{exc}")
-            return
+            yield self.create_text_message("⏳ 正在解析图谱结构…")
+            try:
+                nodes_df, rels_df = self._parse_excel(excel_bytes)
+            except Exception as exc:
+                logger.error("解析 Excel 失败: %s", exc)
+                yield self.create_text_message(f"❌ 解析 Excel 失败：{exc}")
+                return
 
         logger.info("解析完成 | nodes=%d rels=%d", len(nodes_df), len(rels_df))
         yield self.create_text_message(
@@ -156,18 +169,20 @@ class ImportGraphTool(Tool):
     # ── 内部：加载 Excel 字节 ────────────────────────────────────────────
 
     def _load_excel_bytes(self, excel_url: str, excel_files: Any) -> bytes:
-        if excel_files is not None:
+        if self._has_uploaded_files(excel_files):
             selected_file = self._pick_first_xlsx_file(excel_files)
             if selected_file is None:
-                raise ValueError("上传文件中未找到 .xlsx 文件。")
-
-            # Dify File 对象：优先用 .blob，回退 .url
-            if hasattr(selected_file, "blob") and selected_file.blob:
-                return selected_file.blob
-            if hasattr(selected_file, "url") and selected_file.url:
-                excel_url = selected_file.url
+                if not excel_url:
+                    raise ValueError("上传文件中未找到 .xlsx 文件，且未提供 excel_url。")
             else:
-                raise ValueError("选中的 .xlsx 文件既没有 blob 也没有 url。")
+                # Dify File 对象：优先用 .blob，回退 .url
+                if hasattr(selected_file, "blob") and selected_file.blob:
+                    return selected_file.blob
+                if hasattr(selected_file, "url") and selected_file.url:
+                    excel_url = selected_file.url
+                else:
+                    if not excel_url:
+                        raise ValueError("选中的 .xlsx 文件既没有 blob 也没有 url，且未提供 excel_url。")
 
         if excel_url:
             import urllib.request
@@ -193,6 +208,126 @@ class ImportGraphTool(Tool):
                 return file_obj
 
         return None
+
+    @staticmethod
+    def _has_uploaded_files(excel_files: Any) -> bool:
+        if excel_files is None:
+            return False
+        if isinstance(excel_files, list):
+            return len(excel_files) > 0
+        return True
+
+    # ── 内部：解析 Markdown 表格 ────────────────────────────────────────
+
+    def _parse_markdown_tables(self, excel_text: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        tables = self._split_markdown_tables(excel_text)
+        if not tables:
+            raise ValueError("未检测到 Markdown 表格。")
+
+        node_blocks: list[pd.DataFrame] = []
+        rel_blocks: list[pd.DataFrame] = []
+
+        for table in tables:
+            header = [col.strip() for col in table[0]]
+            rows = table[1:]
+            if self._is_node_header(header):
+                node_rows = []
+                for row in rows:
+                    if len(row) < 8:
+                        continue
+                    node_rows.append(
+                        {
+                            "NodeID": row[0],
+                            "name": row[1],
+                            "node_type": row[2],
+                            "definition": row[3],
+                            "level": row[4],
+                            "grade_range": row[5],
+                            "keywords": row[6],
+                            "teaching_tip": row[7],
+                        }
+                    )
+                if node_rows:
+                    node_blocks.append(pd.DataFrame(node_rows))
+                continue
+
+            if self._is_rel_header(header):
+                rel_rows = []
+                has_desc = len(header) >= 4 and header[3] == "说明"
+                for row in rows:
+                    if len(row) < 3:
+                        continue
+                    rel_rows.append(
+                        {
+                            "SourceID": row[0],
+                            "RelationType": row[1],
+                            "TargetID": row[2],
+                            "description": row[3] if has_desc and len(row) > 3 else "",
+                        }
+                    )
+                if rel_rows:
+                    rel_blocks.append(pd.DataFrame(rel_rows))
+
+        if node_blocks:
+            nodes_df = (
+                pd.concat(node_blocks, ignore_index=True)
+                .drop_duplicates(subset="NodeID")
+                .reset_index(drop=True)
+            )
+        else:
+            nodes_df = pd.DataFrame(columns=self._NODE_HEADER)
+
+        if rel_blocks:
+            rels_df = (
+                pd.concat(rel_blocks, ignore_index=True)
+                .drop_duplicates(subset=["SourceID", "RelationType", "TargetID"])
+                .reset_index(drop=True)
+            )
+        else:
+            rels_df = pd.DataFrame(columns=["SourceID", "RelationType", "TargetID", "description"])
+
+        return nodes_df, rels_df
+
+    @staticmethod
+    def _is_node_header(header: list[str]) -> bool:
+        expected = ["NodeID", "name", "node_type", "definition", "level", "grade_range", "keywords", "teaching_tip"]
+        return header[: len(expected)] == expected
+
+    @staticmethod
+    def _is_rel_header(header: list[str]) -> bool:
+        return len(header) >= 3 and header[:3] == ["SourceID", "RelationType", "TargetID"]
+
+    @staticmethod
+    def _split_markdown_tables(text: str) -> list[list[list[str]]]:
+        lines = [line.rstrip() for line in text.splitlines()]
+        blocks: list[list[str]] = []
+        current: list[str] = []
+
+        for line in lines:
+            if "|" in line:
+                current.append(line.strip())
+            else:
+                if current:
+                    blocks.append(current)
+                    current = []
+        if current:
+            blocks.append(current)
+
+        tables: list[list[list[str]]] = []
+        for block in blocks:
+            parsed_rows: list[list[str]] = []
+            for row in block:
+                cells = [cell.strip() for cell in row.strip("|").split("|")]
+                if not cells:
+                    continue
+                # 跳过 markdown 分隔行，如 |---|---|
+                if all(re.fullmatch(r":?-{3,}:?", cell or "") for cell in cells):
+                    continue
+                parsed_rows.append(cells)
+            if len(parsed_rows) >= 2:
+                tables.append(parsed_rows)
+
+        return tables
 
     # ── 内部：解析 Excel ─────────────────────────────────────────────────
 
@@ -288,18 +423,6 @@ class ImportGraphTool(Tool):
     # ── 内部：写入 Neo4j ─────────────────────────────────────────────────
 
     @staticmethod
-    def _sanitize_label(text: str) -> str:
-        text = text.strip()
-        text = re.sub(r"[/\\\-\s]+", "_", text)
-        return text or "Node"
-
-    @staticmethod
-    def _sanitize_rel_type(text: str) -> str:
-        text = text.strip()
-        text = re.sub(r"[/\\\-\s]+", "_", text)
-        return text or "RELATED_TO"
-
-    @staticmethod
     def _has_apoc(session) -> bool:
         try:
             session.run("RETURN apoc.version()").single()
@@ -338,21 +461,9 @@ class ImportGraphTool(Tool):
                 logger.info("APOC 可用: %s", apoc)
 
                 # ── 写节点 ───────────────────────────────────────────
-                node_rows = []
+                node_rows: list[NodePayload] = []
                 for _, row in nodes_df.iterrows():
-                    nt    = str(row.get("node_type", "")).strip()
-                    label = self._sanitize_label(nt) if nt else "Node"
-                    node_rows.append({
-                        "nodeId":      str(row["NodeID"]).strip(),
-                        "name":        str(row.get("name", "")).strip(),
-                        "nodeType":    nt,
-                        "label":       label,
-                        "definition":  str(row.get("definition", "")).strip(),
-                        "level":       str(row.get("level", "")).strip(),
-                        "gradeRange":  str(row.get("grade_range", "")).strip(),
-                        "keywords":    str(row.get("keywords", "")).strip(),
-                        "teachingTip": str(row.get("teaching_tip", "")).strip(),
-                    })
+                    node_rows.append(node_from_excel_row(row.to_dict()))
 
                 for start in range(0, len(node_rows), batch_size):
                     batch = node_rows[start: start + batch_size]
@@ -361,7 +472,7 @@ class ImportGraphTool(Tool):
 
                 # ── 写关系 ───────────────────────────────────────────
                 rel_cypher = _UPSERT_RELS_APOC if apoc else _UPSERT_RELS_GENERIC
-                rel_rows   = []
+                rel_rows: list[RelationPayload] = []
                 known_ids  = {r["nodeId"] for r in node_rows}
 
                 for _, row in rels_df.iterrows():
@@ -371,12 +482,7 @@ class ImportGraphTool(Tool):
                         skipped_rels += 1
                         logger.warning("跳过关系（节点缺失）: %s → %s", src, tgt)
                         continue
-                    rel_rows.append({
-                        "src":     src,
-                        "tgt":     tgt,
-                        "relType": self._sanitize_rel_type(str(row["RelationType"])),
-                        "desc":    str(row.get("description", "")).strip(),
-                    })
+                    rel_rows.append(relation_from_excel_row(row.to_dict()))
 
                 for start in range(0, len(rel_rows), batch_size):
                     batch = rel_rows[start: start + batch_size]

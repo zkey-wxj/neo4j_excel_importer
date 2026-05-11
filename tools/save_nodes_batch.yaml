@@ -1,0 +1,52 @@
+identity:
+  name: save_nodes_batch
+  author: wxj
+  label:
+    en_US: Save Nodes Batch
+    zh_Hans: 批量保存节点
+
+description:
+  human:
+    en_US: Save node data to Neo4j in batch with JSON rows.
+    zh_Hans: 使用 JSON 数组批量保存节点数据到 Neo4j。
+  llm: Save nodes in batch. JSON items must use nodeId/name/nodeType/label/definition/level/gradeRange/keywords/teachingTip.
+
+parameters:
+  - name: nodes_json
+    type: string
+    required: true
+    label:
+      en_US: Nodes JSON
+      zh_Hans: 节点 JSON
+    human_description:
+      en_US: JSON array of node objects. Fields must match import_graph write format.
+      zh_Hans: 节点对象 JSON 数组，字段必须与 import_graph 写库格式一致。
+    llm_description: JSON array. Each item uses nodeId, name, nodeType, label, definition, level, gradeRange, keywords, teachingTip.
+    form: llm
+
+  - name: batch_size
+    type: number
+    required: false
+    default: 500
+    label:
+      en_US: Batch Size
+      zh_Hans: 批次大小
+    human_description:
+      en_US: Number of rows per Neo4j transaction.
+      zh_Hans: 每次 Neo4j 事务写入的行数。
+    llm_description: Batch size for node writes.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    nodes_count:
+      type: integer
+      description: Number of nodes merged into Neo4j.
+    summary:
+      type: string
+      description: Human-readable save summary.
+
+extra:
+  python:
+    source: tools/save_nodes_batch.py

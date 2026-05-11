@@ -1,0 +1,52 @@
+identity:
+  name: save_relations_batch
+  author: wxj
+  label:
+    en_US: Save Relations Batch
+    zh_Hans: 批量保存关系
+
+description:
+  human:
+    en_US: Save relation data to Neo4j in batch with JSON rows.
+    zh_Hans: 使用 JSON 数组批量保存关系数据到 Neo4j。
+  llm: Save relations in batch. JSON items must use src/tgt/relType/desc.
+
+parameters:
+  - name: relations_json
+    type: string
+    required: true
+    label:
+      en_US: Relations JSON
+      zh_Hans: 关系 JSON
+    human_description:
+      en_US: JSON array of relation objects. Fields must match import_graph write format.
+      zh_Hans: 关系对象 JSON 数组，字段必须与 import_graph 写库格式一致。
+    llm_description: JSON array. Each item uses src, tgt, relType, desc.
+    form: llm
+
+  - name: batch_size
+    type: number
+    required: false
+    default: 500
+    label:
+      en_US: Batch Size
+      zh_Hans: 批次大小
+    human_description:
+      en_US: Number of rows per Neo4j transaction.
+      zh_Hans: 每次 Neo4j 事务写入的行数。
+    llm_description: Batch size for relation writes.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    rels_count:
+      type: integer
+      description: Number of relationships merged into Neo4j.
+    summary:
+      type: string
+      description: Human-readable save summary.
+
+extra:
+  python:
+    source: tools/save_relations_batch.py

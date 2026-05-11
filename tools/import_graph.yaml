@@ -1,6 +1,6 @@
 identity:
   name: import_graph
-  author: yourorg
+  author: wxj
   label:
     en_US: Import Graph from Excel
     zh_Hans: 从 Excel 导入图谱
@@ -42,6 +42,18 @@ parameters:
       zh_Hans: 直接上传文件（与 excel_url 二选一）。仅使用第一个 .xlsx 文件。
     llm_description: Uploaded files list. Only the first .xlsx file will be used.
     form: form
+
+  - name: excel_text
+    type: string
+    required: false
+    label:
+      en_US: Excel Markdown Text
+      zh_Hans: Excel Markdown 文本
+    human_description:
+      en_US: Markdown table text converted from Excel. If provided, it will be used first.
+      zh_Hans: 从 Excel 转换得到的 Markdown 表格文本。若提供则优先使用。
+    llm_description: Markdown table text for nodes and relationships. Preferred in agent scenarios to avoid file serialization.
+    form: llm
 
   - name: batch_size
     type: number

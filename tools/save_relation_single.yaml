@@ -1,0 +1,39 @@
+identity:
+  name: save_relation_single
+  author: wxj
+  label:
+    en_US: Save Single Relation
+    zh_Hans: 保存单条关系数据
+
+description:
+  human:
+    en_US: Save one relation object to Neo4j.
+    zh_Hans: 保存单条关系对象到 Neo4j。
+  llm: Save one relation. JSON must use src/tgt/relType/desc.
+
+parameters:
+  - name: relation_json
+    type: string
+    required: true
+    label:
+      en_US: Relation JSON
+      zh_Hans: 关系 JSON
+    human_description:
+      en_US: JSON object with relation fields matching import_graph write format.
+      zh_Hans: 关系 JSON 对象，字段与 import_graph 写库格式一致。
+    llm_description: JSON object with src, tgt, relType, desc.
+    form: llm
+
+output_schema:
+  type: object
+  properties:
+    rels_count:
+      type: integer
+      description: Number of relationships merged into Neo4j.
+    summary:
+      type: string
+      description: Human-readable save summary.
+
+extra:
+  python:
+    source: tools/save_relation_single.py

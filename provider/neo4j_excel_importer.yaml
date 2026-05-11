@@ -1,5 +1,5 @@
 identity:
-  author: yourorg
+  author: wxj
   name: neo4j_excel_importer
   label:
     en_US: Neo4j Excel Graph Importer
@@ -40,6 +40,11 @@ credentials_for_provider:
 
 tools:
   - tools/import_graph.yaml
+  - tools/neo4j_query.yaml
+  - tools/save_nodes_batch.yaml
+  - tools/save_node_single.yaml
+  - tools/save_relations_batch.yaml
+  - tools/save_relation_single.yaml
 
 extra:
   python:
