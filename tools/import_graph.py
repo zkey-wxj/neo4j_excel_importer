@@ -86,6 +86,7 @@ class ImportGraphTool(Tool):
         "level", "grade_range", "keywords", "teaching_tip",
     ]
     _REL_HEADER_3 = ["SourceID", "RelationType", "TargetID"]
+    _PROGRESS_VARIABLE = "summary"
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         tool_parameters = ensure_mapping(tool_parameters, "tool_parameters")
@@ -106,6 +107,7 @@ class ImportGraphTool(Tool):
             "ImportGraphTool invoked | uri=%s user=%s batch=%d clear=%s",
             neo4j_uri, neo4j_user, batch_size, clear_first,
         )
+        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🚀 开始导入图谱任务...\n")
 
         # ── 2. 参数校验 ──────────────────────────────────────────────────
         if not excel_text and not excel_url and not self._has_uploaded_files(excel_files):
@@ -114,6 +116,7 @@ class ImportGraphTool(Tool):
 
         # ── 3. 读取并解析图谱 ────────────────────────────────────────────
         if excel_text:
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧩 检测到 excel_text，开始解析 Markdown 图谱...\n")
             yield self.create_text_message("⏳ 正在解析 Markdown 图谱文本…")
             try:
                 nodes_df, rels_df = self._parse_markdown_tables(excel_text)
@@ -122,6 +125,7 @@ class ImportGraphTool(Tool):
                 yield self.create_text_message(f"❌ 解析 Markdown 文本失败：{exc}")
                 return
         else:
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "📥 开始读取 Excel 文件...\n")
             yield self.create_text_message("⏳ 正在读取 Excel 文件…")
             try:
                 excel_bytes = self._load_excel_bytes(excel_url, excel_files)
@@ -130,6 +134,7 @@ class ImportGraphTool(Tool):
                 yield self.create_text_message(f"❌ 读取 Excel 失败：{exc}")
                 return
 
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧩 Excel 已读取，开始解析图谱结构...\n")
             yield self.create_text_message("⏳ 正在解析图谱结构…")
             try:
                 nodes_df, rels_df = self._parse_excel(excel_bytes)
@@ -139,6 +144,10 @@ class ImportGraphTool(Tool):
                 return
 
         logger.info("解析完成 | nodes=%d rels=%d", len(nodes_df), len(rels_df))
+        yield self.create_stream_variable_message(
+            self._PROGRESS_VARIABLE,
+            f"✅ 解析完成：节点 {len(nodes_df)}，关系 {len(rels_df)}。\n"
+        )
         yield self.create_text_message(
             f"✅ 解析完成：{len(nodes_df)} 个节点，{len(rels_df)} 条关系。\n"
             "⏳ 正在写入 Neo4j…"
@@ -146,18 +155,20 @@ class ImportGraphTool(Tool):
 
         # ── 5. 写入 Neo4j ────────────────────────────────────────────────
         try:
-            stats = self._write_to_neo4j(
+            stats = yield from self._write_to_neo4j(
                 nodes_df, rels_df, neo4j_uri, neo4j_user, neo4j_pwd,
                 batch_size=batch_size, clear_first=clear_first,
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败：{exc}\n")
             yield self.create_text_message(f"❌ 写入 Neo4j 失败：{exc}")
             return
 
         # ── 6. 构建结果 ──────────────────────────────────────────────────
         summary = self._build_summary(stats)
         logger.info("导入完成 | %s", summary)
+        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🎉 Neo4j 写入完成，正在汇总统计结果...\n")
 
         # 工作流变量输出
         yield self.create_variable_message("nodes_count",     stats["nodes_count"])
@@ -445,7 +456,8 @@ class ImportGraphTool(Tool):
         *,
         batch_size: int = 500,
         clear_first: bool = False,
-    ) -> dict:
+    ) -> Generator[ToolInvokeMessage, None, dict[str, Any]]:
+        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🔌 正在连接 Neo4j...\n")
         driver = GraphDatabase.driver(uri, auth=(user, pwd))
         skipped_rels = 0
 
@@ -454,9 +466,11 @@ class ImportGraphTool(Tool):
                 # 可选：清空
                 if clear_first:
                     logger.warning("执行清库操作！")
+                    yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "⚠️ 已启用 clear_before_import，先执行清库...\n")
                     session.run("MATCH (n) DETACH DELETE n")
 
                 # 约束
+                yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧱 正在校验/创建唯一约束...\n")
                 try:
                     session.run(_CONSTRAINT_CYPHER)
                 except Exception as e:
@@ -464,16 +478,29 @@ class ImportGraphTool(Tool):
 
                 apoc = self._has_apoc(session)
                 logger.info("APOC 可用: %s", apoc)
+                yield self.create_stream_variable_message(
+                    self._PROGRESS_VARIABLE,
+                    f"🧪 APOC 可用性：{'可用' if apoc else '不可用，使用通用关系写入'}。\n"
+                )
 
                 # ── 写节点 ───────────────────────────────────────────
                 node_rows: list[NodePayload] = []
                 for _, row in nodes_df.iterrows():
                     node_rows.append(node_from_excel_row(row.to_dict()))
 
+                yield self.create_stream_variable_message(
+                    self._PROGRESS_VARIABLE,
+                    f"📦 开始写入节点，共 {len(node_rows)} 条，批大小 {batch_size}。\n"
+                )
                 for start in range(0, len(node_rows), batch_size):
                     batch = node_rows[start: start + batch_size]
                     session.run(_UPSERT_NODES, rows=batch)
-                    logger.info("节点写入 %d/%d", min(start + batch_size, len(node_rows)), len(node_rows))
+                    current = min(start + batch_size, len(node_rows))
+                    logger.info("节点写入 %d/%d", current, len(node_rows))
+                    yield self.create_stream_variable_message(
+                        self._PROGRESS_VARIABLE,
+                        f"📦 节点写入进度：{current}/{len(node_rows)}。\n"
+                    )
 
                 # ── 写关系 ───────────────────────────────────────────
                 rel_cypher = _UPSERT_RELS_APOC if apoc else _UPSERT_RELS_GENERIC
@@ -489,14 +516,27 @@ class ImportGraphTool(Tool):
                         continue
                     rel_rows.append(relation_from_excel_row(row.to_dict()))
 
+                yield self.create_stream_variable_message(
+                    self._PROGRESS_VARIABLE,
+                    f"🔗 开始写入关系，共 {len(rel_rows)} 条，跳过 {skipped_rels} 条。\n"
+                )
                 for start in range(0, len(rel_rows), batch_size):
                     batch = rel_rows[start: start + batch_size]
                     try:
                         session.run(rel_cypher, rows=batch)
                     except Exception as e:
                         logger.warning("关系批次失败，退回通用模式: %s", e)
+                        yield self.create_stream_variable_message(
+                            self._PROGRESS_VARIABLE,
+                            f"⚠️ 关系批次触发回退，改用通用模式：{e}\n"
+                        )
                         session.run(_UPSERT_RELS_GENERIC, rows=batch)
-                    logger.info("关系写入 %d/%d", min(start + batch_size, len(rel_rows)), len(rel_rows))
+                    current = min(start + batch_size, len(rel_rows))
+                    logger.info("关系写入 %d/%d", current, len(rel_rows))
+                    yield self.create_stream_variable_message(
+                        self._PROGRESS_VARIABLE,
+                        f"🔗 关系写入进度：{current}/{len(rel_rows)}。\n"
+                    )
 
         finally:
             driver.close()
@@ -511,6 +551,11 @@ class ImportGraphTool(Tool):
             rels_df["RelationType"].value_counts().to_dict()
             if "RelationType" in rels_df.columns
             else {}
+        )
+
+        yield self.create_stream_variable_message(
+            self._PROGRESS_VARIABLE,
+            f"✅ 写入阶段完成：节点 {len(node_rows)}，关系 {len(rel_rows)}，跳过 {skipped_rels}。\n"
         )
 
         return {
