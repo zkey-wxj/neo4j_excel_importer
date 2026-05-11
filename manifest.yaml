@@ -18,7 +18,7 @@ resource:
       size: 1048576
 plugins:
   tools:
-    - "tools/import_graph.yaml"
+    - "provider/neo4j_excel_importer.yaml"
 meta:
   version: 0.0.1
   arch:
