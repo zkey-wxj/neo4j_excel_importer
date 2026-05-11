@@ -93,4 +93,4 @@ output_schema:
 
 extra:
   python:
-    source: provider/tools/import_graph.py
+    source: tools/import_graph.py

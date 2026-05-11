@@ -5,6 +5,9 @@ name: "neo4j_excel_importer"
 label:
   en_US: "Neo4j Excel Graph Importer"
   zh_Hans: "Neo4j Excel 图谱导入器"
+description:
+  en_US: "Import structured Excel knowledge-graph data into Neo4j."
+  zh_Hans: "将结构化 Excel 知识图谱数据导入 Neo4j。"
 created_at: "2026-05-11T00:00:00Z"
 icon: "icon.svg"
 resource:
@@ -12,9 +15,10 @@ resource:
   permission:
     storage:
       enabled: false
+      size: 1048576
 plugins:
   tools:
-    - "provider/neo4j_excel_importer.yaml"
+    - "tools/import_graph.yaml"
 meta:
   version: 0.0.1
   arch:
