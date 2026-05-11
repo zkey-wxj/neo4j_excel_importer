@@ -1,0 +1,27 @@
+version: 0.0.1
+type: "plugin"
+author: "wxj"
+name: "neo4j_excel_importer"
+label:
+  en_US: "Neo4j Excel Graph Importer"
+  zh_Hans: "Neo4j Excel 图谱导入器"
+created_at: "2026-05-11T00:00:00Z"
+icon: "icon.svg"
+resource:
+  memory: 268435456   # 256 MB —— pandas + openpyxl + neo4j driver
+  permission:
+    storage:
+      enabled: false
+plugins:
+  tools:
+    - "provider/neo4j_excel_importer.yaml"
+meta:
+  version: 0.0.1
+  arch:
+    - "amd64"
+    - "arm64"
+  runner:
+    language: "python"
+    version: "3.12"
+    entrypoint: "main"
+privacy: "./privacy.md"

@@ -1,0 +1,105 @@
+# .github/workflows/plugin-publish.yml
+
+name: Package And Release Plugin
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  package_plugin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Print working directory
+        run: |
+          pwd
+          ls -la
+
+      - name: Download CLI tool
+        run: |
+          mkdir -p $RUNNER_TEMP/bin
+          cd $RUNNER_TEMP/bin
+
+          wget https://github.com/langgenius/dify-plugin-daemon/releases/latest/download/dify-plugin-linux-amd64
+
+          chmod +x dify-plugin-linux-amd64
+
+          echo "CLI tool downloaded:"
+          ls -la
+
+      - name: Get plugin info
+        id: plugin_info
+        run: |
+          PLUGIN_NAME=$(grep "^name:" manifest.yaml | awk '{print $2}')
+          VERSION=$(grep "^version:" manifest.yaml | awk '{print $2}')
+
+          echo "Plugin name: $PLUGIN_NAME"
+          echo "Plugin version: $VERSION"
+
+          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Package plugin
+        id: package
+        run: |
+          cd $GITHUB_WORKSPACE
+
+          PACKAGE_NAME="${{ steps.plugin_info.outputs.plugin_name }}-${{ steps.plugin_info.outputs.version }}.difypkg"
+
+          echo "Packaging plugin to: $PACKAGE_NAME"
+
+          $RUNNER_TEMP/bin/dify-plugin-linux-amd64 plugin package . -o "$PACKAGE_NAME"
+
+          echo "Package result:"
+          ls -lh "$PACKAGE_NAME"
+
+          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
+
+      - name: Resolve previous version tag
+        id: previous_tag
+        run: |
+          CURRENT_TAG="v${{ steps.plugin_info.outputs.version }}"
+          PREVIOUS_TAG=$(git tag --list "v*" --sort=-v:refname | grep -vx "$CURRENT_TAG" | head -n 1 || true)
+
+          echo "Current tag: $CURRENT_TAG"
+          echo "Previous tag: ${PREVIOUS_TAG:-<none>}"
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.plugin_info.outputs.version }}
+          name: v${{ steps.plugin_info.outputs.version }}
+          previous_tag: ${{ steps.previous_tag.outputs.previous_tag }}
+          generate_release_notes: true
+          files: |
+            ${{ env.PACKAGE_NAME }}
+
+          body: |
+            ## Plugin Release
+
+            Plugin: ${{ steps.plugin_info.outputs.plugin_name }}
+
+            Version: ${{ steps.plugin_info.outputs.version }}
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print release info
+        run: |
+          echo "Release completed"
+          echo "Plugin: ${{ steps.plugin_info.outputs.plugin_name }}"
+          echo "Version: ${{ steps.plugin_info.outputs.version }}"
+          echo "Package: ${{ env.PACKAGE_NAME }}"
