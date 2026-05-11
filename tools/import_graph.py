@@ -84,7 +84,7 @@ class ImportGraphTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         # ── 1. 参数读取 ──────────────────────────────────────────────────
         excel_url   = str(tool_parameters.get("excel_url") or "").strip()
-        excel_file  = tool_parameters.get("excel_file")          # dify File 对象
+        excel_files = tool_parameters.get("excel_file")          # dify Files 对象或 File 对象
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
 
@@ -98,14 +98,14 @@ class ImportGraphTool(Tool):
         )
 
         # ── 2. 参数校验 ──────────────────────────────────────────────────
-        if not excel_url and excel_file is None:
+        if not excel_url and excel_files is None:
             yield self.create_text_message("❌ 请提供 excel_url 或上传 excel_file，两者不能同时为空。")
             return
 
         # ── 3. 读取 Excel 字节 ───────────────────────────────────────────
         yield self.create_text_message("⏳ 正在读取 Excel 文件…")
         try:
-            excel_bytes = self._load_excel_bytes(excel_url, excel_file)
+            excel_bytes = self._load_excel_bytes(excel_url, excel_files)
         except Exception as exc:
             logger.error("读取 Excel 失败: %s", exc)
             yield self.create_text_message(f"❌ 读取 Excel 失败：{exc}")
@@ -155,15 +155,19 @@ class ImportGraphTool(Tool):
 
     # ── 内部：加载 Excel 字节 ────────────────────────────────────────────
 
-    def _load_excel_bytes(self, excel_url: str, excel_file: Any) -> bytes:
-        if excel_file is not None:
+    def _load_excel_bytes(self, excel_url: str, excel_files: Any) -> bytes:
+        if excel_files is not None:
+            selected_file = self._pick_first_xlsx_file(excel_files)
+            if selected_file is None:
+                raise ValueError("上传文件中未找到 .xlsx 文件。")
+
             # Dify File 对象：优先用 .blob，回退 .url
-            if hasattr(excel_file, "blob") and excel_file.blob:
-                return excel_file.blob
-            if hasattr(excel_file, "url") and excel_file.url:
-                excel_url = excel_file.url
+            if hasattr(selected_file, "blob") and selected_file.blob:
+                return selected_file.blob
+            if hasattr(selected_file, "url") and selected_file.url:
+                excel_url = selected_file.url
             else:
-                raise ValueError("excel_file 既没有 blob 也没有 url。")
+                raise ValueError("选中的 .xlsx 文件既没有 blob 也没有 url。")
 
         if excel_url:
             import urllib.request
@@ -171,6 +175,24 @@ class ImportGraphTool(Tool):
                 return resp.read()
 
         raise ValueError("无法获取 Excel 数据。")
+
+    @staticmethod
+    def _pick_first_xlsx_file(excel_files: Any) -> Any | None:
+        if isinstance(excel_files, list):
+            candidates = excel_files
+        else:
+            candidates = [excel_files]
+
+        for file_obj in candidates:
+            filename = str(
+                getattr(file_obj, "filename", None)
+                or getattr(file_obj, "name", None)
+                or ""
+            ).strip().lower()
+            if filename.endswith(".xlsx"):
+                return file_obj
+
+        return None
 
     # ── 内部：解析 Excel ─────────────────────────────────────────────────
 

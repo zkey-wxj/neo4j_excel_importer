@@ -32,15 +32,15 @@ parameters:
     form: llm
 
   - name: excel_file
-    type: file
+    type: files
     required: false
     label:
       en_US: Excel File (Upload)
       zh_Hans: Excel 文件（上传）
     human_description:
-      en_US: Upload the .xlsx file directly (use this OR excel_url).
-      zh_Hans: 直接上传 .xlsx 文件（与 excel_url 二选一）。
-    llm_description: The uploaded .xlsx file.
+      en_US: Upload files directly (use this OR excel_url). Only the first .xlsx file will be used.
+      zh_Hans: 直接上传文件（与 excel_url 二选一）。仅使用第一个 .xlsx 文件。
+    llm_description: Uploaded files list. Only the first .xlsx file will be used.
     form: form
 
   - name: batch_size
