@@ -50,7 +50,7 @@ parameters:
       IMPORTANT: Always use parameterized queries with $parameter syntax for dynamic values to prevent injection attacks.
       Example: MATCH (n:Person {name: $personName, age: $age}) RETURN n
       Then provide the parameters separately in the 'parameters' field as a JSON object: {"personName": "John", "age": 30}
-    form: form
+    form: llm
   - name: parameters
     type: string
     required: false
@@ -77,7 +77,7 @@ parameters:
       Example: If query uses $personName and $minAge, provide: {"personName": "John", "minAge": 25}
       Values can be strings, numbers, booleans, arrays, or nested objects.
       Leave empty/null if the query doesn't use parameters.
-    form: form
+    form: llm
   - name: max_records
     type: number
     required: false

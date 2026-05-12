@@ -22,6 +22,27 @@ parameters:
       en_US: JSON array of node objects. Fields must match import_graph write format.
       zh_Hans: 节点对象 JSON 数组，字段必须与 import_graph 写库格式一致。
     llm_description: Array of node objects. Each item uses nodeId, name, labels, description, groupId, properties.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          nodeId:
+            type: string
+          name:
+            type: string
+          labels:
+            type: array
+            items:
+              type: string
+          description:
+            type: string
+          groupId:
+            type: string
+          properties:
+            type: object
+        required:
+          - nodeId
     form: llm
 
   - name: batch_size

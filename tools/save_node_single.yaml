@@ -22,6 +22,25 @@ parameters:
       en_US: JSON object with node fields matching import_graph write format.
       zh_Hans: 节点 JSON 对象，字段与 import_graph 写库格式一致。
     llm_description: Object with nodeId, name, labels, description, groupId, properties.
+    schema:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        name:
+          type: string
+        labels:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        groupId:
+          type: string
+        properties:
+          type: object
+      required:
+        - nodeId
     form: llm
 
 output_schema:
