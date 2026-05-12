@@ -404,14 +404,28 @@ class ImportGraphTool(Tool):
                 return False
         return True
 
+    @staticmethod
+    def _matches_any(value: str, candidates: list[str]) -> bool:
+        text = str(value or "").strip()
+        return any(text == str(candidate or "").strip() for candidate in candidates)
+
     def _is_node_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         node = mapping["node"]
         label_fields = self._normalize_label_fields(node.get("labels"))
         desc_fields = self._normalize_description_fields(node.get("description", node.get("definition")))
-        first_label = label_fields[0] if label_fields else "node_type"
-        first_desc = desc_fields[0] if desc_fields else "description"
-        expected = [node["nodeId"], node["name"], first_label, first_desc]
-        return self._starts_with(row, expected)
+        if len(row) < 4:
+            return False
+        if row[0].strip() != str(node["nodeId"]).strip():
+            return False
+        if row[1].strip() != str(node["name"]).strip():
+            return False
+
+        effective_labels = label_fields or ["node_type"]
+        if not self._matches_any(row[2], effective_labels):
+            return False
+
+        effective_desc_fields = desc_fields or ["description", "definition", "说明", "备注", "简介"]
+        return self._matches_any(row[3], effective_desc_fields)
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
