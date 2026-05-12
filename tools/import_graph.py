@@ -165,7 +165,6 @@ class ImportGraphTool(Tool):
         # ── 3. 读取并解析图谱 ────────────────────────────────────────────
         if excel_text:
             yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧩 检测到 excel_text，开始解析 Markdown 图谱...\n")
-            yield self.create_text_message("⏳ 正在解析 Markdown 图谱文本…")
             try:
                 nodes_df, rels_df = self._parse_markdown_tables(excel_text, mapping)
             except Exception as exc:
@@ -174,7 +173,6 @@ class ImportGraphTool(Tool):
                 return
         else:
             yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "📥 开始读取 Excel 文件...\n")
-            yield self.create_text_message("⏳ 正在读取 Excel 文件…")
             try:
                 excel_bytes = self._load_excel_bytes(excel_url)
             except Exception as exc:
@@ -183,7 +181,6 @@ class ImportGraphTool(Tool):
                 return
 
             yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧩 Excel 已读取，开始解析图谱结构...\n")
-            yield self.create_text_message("⏳ 正在解析图谱结构…")
             try:
                 nodes_df, rels_df = self._parse_excel(excel_bytes, mapping)
             except Exception as exc:
@@ -195,10 +192,6 @@ class ImportGraphTool(Tool):
         yield self.create_stream_variable_message(
             self._PROGRESS_VARIABLE,
             f"✅ 解析完成：节点 {len(nodes_df)}，关系 {len(rels_df)}。\n"
-        )
-        yield self.create_text_message(
-            f"✅ 解析完成：{len(nodes_df)} 个节点，{len(rels_df)} 条关系。\n"
-            "⏳ 正在写入 Neo4j…"
         )
 
         # ── 5. 写入 Neo4j ────────────────────────────────────────────────
@@ -216,7 +209,7 @@ class ImportGraphTool(Tool):
         # ── 6. 构建结果 ──────────────────────────────────────────────────
         summary = self._build_summary(stats)
         logger.info("导入完成 | %s", summary)
-        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🎉 Neo4j 写入完成，正在汇总统计结果...\n")
+        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🎉 Neo4j 写入完成\n\n{summary}")
         self._save_group_id_to_session(group_id)
 
         # 工作流变量输出
@@ -226,11 +219,9 @@ class ImportGraphTool(Tool):
         yield self.create_variable_message("skipped_rels",    stats["skipped_rels"])
         yield self.create_variable_message("node_type_stats", stats["node_type_stats"])
         yield self.create_variable_message("rel_type_stats",  stats["rel_type_stats"])
-        yield self.create_variable_message("summary",         summary)
 
         # 人类可读输出
-        yield self.create_text_message(f"✅ 导入完成！\n\n{summary}")
-        yield self.create_json_message(stats)
+        yield self.create_text_message(f"✅ 导入完成！\n\ngroup_id: {group_id}\n{summary}")
 
     # ── 内部：加载 Excel 字节 ────────────────────────────────────────────
 
