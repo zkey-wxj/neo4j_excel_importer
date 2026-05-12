@@ -7,19 +7,22 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from tools.graph_write_common import get_credentials, write_nodes
-from tools.types import parse_nodes_json
+from tools.types import normalize_node
 
 
 class SaveNodesBatchTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        nodes_json = str(tool_parameters.get("nodes_json") or "").strip()
+        nodes_payload = tool_parameters.get("nodes_json")
         batch_size = int(tool_parameters.get("batch_size") or 500)
-        if not nodes_json:
+        if nodes_payload is None:
             yield self.create_text_message("❌ nodes_json 不能为空。")
+            return
+        if not isinstance(nodes_payload, list):
+            yield self.create_text_message("❌ nodes_json 必须是数组。")
             return
 
         try:
-            rows = parse_nodes_json(nodes_json)
+            rows = [normalize_node(item, index=i) for i, item in enumerate(nodes_payload)]
             uri, user, pwd = get_credentials(self.runtime)
             count = write_nodes(uri, user, pwd, rows, batch_size=batch_size)
         except Exception as exc:

@@ -7,18 +7,18 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from tools.graph_write_common import get_credentials, write_nodes
-from tools.types import parse_node_json
+from tools.types import normalize_node
 
 
 class SaveNodeSingleTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        node_json = str(tool_parameters.get("node_json") or "").strip()
-        if not node_json:
+        node_payload = tool_parameters.get("node_json")
+        if node_payload is None:
             yield self.create_text_message("❌ node_json 不能为空。")
             return
 
         try:
-            row = parse_node_json(node_json)
+            row = normalize_node(node_payload, index=0)
             uri, user, pwd = get_credentials(self.runtime)
             count = write_nodes(uri, user, pwd, [row], batch_size=1)
         except Exception as exc:

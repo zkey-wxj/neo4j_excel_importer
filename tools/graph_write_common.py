@@ -15,20 +15,28 @@ UPSERT_NODES = """
 UNWIND $rows AS row
 MERGE (n:KnowledgeNode {nodeId: row.nodeId})
 SET n.name        = row.name,
-    n.nodeType    = row.nodeType,
-    n.label       = row.label,
-    n.definition  = row.definition,
-    n.level       = row.level,
-    n.gradeRange  = row.gradeRange,
-    n.keywords    = row.keywords,
-    n.teachingTip = row.teachingTip
+    n.description = row.description,
+    n.groupId     = row.groupId
+SET n += row.properties
+WITH n, row
+CALL apoc.create.addLabels(n, row.labels) YIELD node
+RETURN count(node)
+"""
+
+UPSERT_NODES_GENERIC = """
+UNWIND $rows AS row
+MERGE (n:KnowledgeNode {nodeId: row.nodeId})
+SET n.name        = row.name,
+    n.description = row.description,
+    n.groupId     = row.groupId
+SET n += row.properties
 """
 
 UPSERT_RELS_APOC = """
 UNWIND $rows AS row
 MATCH (src:KnowledgeNode {nodeId: row.src})
 MATCH (tgt:KnowledgeNode {nodeId: row.tgt})
-CALL apoc.merge.relationship(src, row.relType, {}, {description: row.desc}, tgt)
+CALL apoc.merge.relationship(src, row.relType, {groupId: row.groupId}, row.properties, tgt)
 YIELD rel RETURN count(rel)
 """
 
@@ -36,8 +44,8 @@ UPSERT_RELS_GENERIC = """
 UNWIND $rows AS row
 MATCH (src:KnowledgeNode {nodeId: row.src})
 MATCH (tgt:KnowledgeNode {nodeId: row.tgt})
-MERGE (src)-[r:RELATED {relType: row.relType}]->(tgt)
-SET r.description = row.desc
+MERGE (src)-[r:RELATED {relType: row.relType, groupId: row.groupId}]->(tgt)
+SET r += row.properties
 """
 
 
@@ -68,9 +76,16 @@ def write_nodes(
     try:
         with driver.session() as session:
             session.run(CONSTRAINT_CYPHER)
+            apoc = has_apoc(session)
             for start in range(0, len(rows), batch_size):
                 batch = rows[start: start + batch_size]
-                session.run(UPSERT_NODES, rows=batch)
+                try:
+                    if apoc:
+                        session.run(UPSERT_NODES, rows=batch)
+                    else:
+                        session.run(UPSERT_NODES_GENERIC, rows=batch)
+                except Exception:
+                    session.run(UPSERT_NODES_GENERIC, rows=batch)
     finally:
         driver.close()
     return len(rows)

@@ -9,19 +9,49 @@ description:
   human:
     en_US: Save relation data to Neo4j in batch with JSON rows.
     zh_Hans: 使用 JSON 数组批量保存关系数据到 Neo4j。
-  llm: Save relations in batch. JSON items must use src/tgt/relType/desc.
+  llm: Save relations in batch. JSON items must use src/tgt/relType/description/groupId/properties.
 
 parameters:
   - name: relations_json
-    type: string
+    type: array
     required: true
     label:
       en_US: Relations JSON
       zh_Hans: 关系 JSON
     human_description:
-      en_US: JSON array of relation objects. Fields must match import_graph write format.
-      zh_Hans: 关系对象 JSON 数组，字段必须与 import_graph 写库格式一致。
-    llm_description: JSON array. Each item uses src, tgt, relType, desc.
+      en_US: >
+        Array of relation objects.
+        Each item required: src, tgt, relType.
+        Optional: description, groupId, properties.
+      zh_Hans: >
+        关系对象数组。
+        每项必填：src、tgt、relType。
+        可选：description、groupId、properties。
+    llm_description: >
+      Array item fields:
+      src(string, required), tgt(string, required), relType(string, required),
+      description(string, optional), groupId(string, optional), properties(object, optional).
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          src:
+            type: string
+          tgt:
+            type: string
+          relType:
+            type: string
+          description:
+            type: string
+          groupId:
+            type: string
+          properties:
+            type: object
+        required:
+          - src
+          - tgt
+          - relType
     form: llm
 
   - name: batch_size

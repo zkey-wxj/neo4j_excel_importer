@@ -8,20 +8,19 @@ from typing import Any, Mapping, TypedDict
 class NodePayload(TypedDict):
     nodeId: str
     name: str
-    nodeType: str
-    label: str
-    definition: str
-    level: str
-    gradeRange: str
-    keywords: str
-    teachingTip: str
+    labels: list[str]
+    description: str
+    groupId: str
+    properties: dict[str, Any]
 
 
 class RelationPayload(TypedDict):
     src: str
     tgt: str
     relType: str
-    desc: str
+    description: str
+    groupId: str
+    properties: dict[str, Any]
 
 
 def clean_text(value: Any) -> str:
@@ -53,29 +52,146 @@ def sanitize_rel_type(text: str) -> str:
     return value or "RELATED_TO"
 
 
-def node_from_excel_row(row: Mapping[str, Any]) -> NodePayload:
+def normalize_labels(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        labels: list[str] = []
+        for item in value:
+            label = sanitize_label(item)
+            if label and label not in labels:
+                labels.append(label)
+        return labels
+
+    text = clean_text(value)
+    if not text:
+        return []
+
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, list):
+            labels = normalize_labels(parsed)
+            if labels:
+                return labels
+
+    return [sanitize_label(text)]
+
+
+def normalize_property_value(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, list):
+        normalized_list: list[Any] = []
+        for item in value:
+            if isinstance(item, str):
+                normalized_list.append(item.strip())
+            elif isinstance(item, (bool, int, float)):
+                normalized_list.append(item)
+            else:
+                normalized_list.append(clean_text(item))
+        return normalized_list
+    return clean_text(value)
+
+
+def normalize_properties(
+    value: Any,
+    *,
+    field_name: str,
+) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field_name} 必须是 JSON 对象。")
+
+    result: dict[str, Any] = {}
+    for key, raw_value in value.items():
+        property_key = clean_text(key)
+        if not property_key:
+            continue
+        normalized_value = normalize_property_value(raw_value)
+        if normalized_value == "":
+            continue
+        result[property_key] = normalized_value
+    return result
+
+
+def collect_extra_properties(
+    row: Mapping[str, Any],
+    *,
+    excluded_keys: set[str],
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    for key, raw_value in row.items():
+        key_text = clean_text(key)
+        if key_text in excluded_keys:
+            continue
+        normalized_value = normalize_property_value(raw_value)
+        if normalized_value == "":
+            continue
+        properties[key_text] = normalized_value
+    return properties
+
+
+def node_from_excel_row(
+    row: Mapping[str, Any],
+    *,
+    group_id: str = "",
+) -> NodePayload:
     row = ensure_mapping(row, field_name="node_row")
-    node_type = clean_text(row.get("node_type"))
+    labels = normalize_labels(row.get("node_type"))
+    effective_group_id = clean_text(group_id or row.get("group_id"))
+    description = clean_text(
+        row.get("description")
+        or row.get("definition")
+        or row.get("说明")
+        or row.get("备注")
+        or row.get("简介")
+    )
+    properties = collect_extra_properties(
+        row,
+        excluded_keys={"NodeID", "name", "node_type", "description", "definition", "group_id", "说明", "备注", "简介"},
+    )
     return NodePayload(
         nodeId=clean_text(row.get("NodeID")),
         name=clean_text(row.get("name")),
-        nodeType=node_type,
-        label=sanitize_label(node_type) if node_type else "Node",
-        definition=clean_text(row.get("definition")),
-        level=clean_text(row.get("level")),
-        gradeRange=clean_text(row.get("grade_range")),
-        keywords=clean_text(row.get("keywords")),
-        teachingTip=clean_text(row.get("teaching_tip")),
+        labels=labels or ["Node"],
+        description=description,
+        groupId=effective_group_id,
+        properties=properties,
     )
 
 
-def relation_from_excel_row(row: Mapping[str, Any]) -> RelationPayload:
+def relation_from_excel_row(
+    row: Mapping[str, Any],
+    *,
+    group_id: str = "",
+) -> RelationPayload:
     row = ensure_mapping(row, field_name="relation_row")
+    effective_group_id = clean_text(group_id or row.get("group_id"))
+    description = clean_text(
+        row.get("description")
+        or row.get("说明")
+        or row.get("备注")
+        or row.get("简介")
+    )
+    properties = collect_extra_properties(
+        row,
+        excluded_keys={"SourceID", "RelationType", "TargetID", "group_id", "description", "说明", "备注", "简介"},
+    )
     return RelationPayload(
         src=clean_text(row.get("SourceID")),
         tgt=clean_text(row.get("TargetID")),
         relType=sanitize_rel_type(clean_text(row.get("RelationType"))),
-        desc=clean_text(row.get("description")),
+        description=description,
+        groupId=effective_group_id,
+        properties=properties,
     )
 
 
@@ -110,19 +226,52 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
     if not node_id:
         raise ValueError(f"nodes_json[{index}].nodeId 不能为空。")
 
-    node_type = clean_text(payload.get("nodeType"))
-    label = clean_text(payload.get("label")) or (sanitize_label(node_type) if node_type else "Node")
+    labels = normalize_labels(payload.get("labels"))
+    if not labels:
+        labels = ["Node"]
+
+    group_id = clean_text(payload.get("groupId") or payload.get("group_id"))
+    description = clean_text(
+        payload.get("description")
+        or payload.get("definition")
+        or payload.get("说明")
+        or payload.get("备注")
+        or payload.get("简介")
+    )
+    properties = normalize_properties(
+        payload.get("properties"),
+        field_name=f"nodes_json[{index}].properties",
+    )
+
+    fixed_keys = {
+        "nodeId",
+        "name",
+        "labels",
+        "description",
+        "definition",
+        "groupId",
+        "group_id",
+        "properties",
+        "说明",
+        "备注",
+        "简介",
+    }
+    for key, raw_value in payload.items():
+        if key in fixed_keys:
+            continue
+        normalized_value = normalize_property_value(raw_value)
+        if normalized_value == "":
+            continue
+        if key not in properties:
+            properties[key] = normalized_value
 
     return NodePayload(
         nodeId=node_id,
         name=clean_text(payload.get("name")),
-        nodeType=node_type,
-        label=label,
-        definition=clean_text(payload.get("definition")),
-        level=clean_text(payload.get("level")),
-        gradeRange=clean_text(payload.get("gradeRange")),
-        keywords=clean_text(payload.get("keywords")),
-        teachingTip=clean_text(payload.get("teachingTip")),
+        labels=labels,
+        description=description,
+        groupId=group_id,
+        properties=properties,
     )
 
 
@@ -140,9 +289,33 @@ def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
     if not rel_type:
         raise ValueError(f"relations_json[{index}].relType 不能为空。")
 
+    group_id = clean_text(payload.get("groupId") or payload.get("group_id"))
+    description = clean_text(
+        payload.get("description")
+        or payload.get("说明")
+        or payload.get("备注")
+        or payload.get("简介")
+    )
+    properties = normalize_properties(
+        payload.get("properties"),
+        field_name=f"relations_json[{index}].properties",
+    )
+
+    fixed_keys = {"src", "tgt", "relType", "description", "groupId", "group_id", "properties", "说明", "备注", "简介"}
+    for key, raw_value in payload.items():
+        if key in fixed_keys:
+            continue
+        normalized_value = normalize_property_value(raw_value)
+        if normalized_value == "":
+            continue
+        if key not in properties:
+            properties[key] = normalized_value
+
     return RelationPayload(
         src=src,
         tgt=tgt,
         relType=sanitize_rel_type(rel_type),
-        desc=clean_text(payload.get("desc")),
+        description=description,
+        groupId=group_id,
+        properties=properties,
     )

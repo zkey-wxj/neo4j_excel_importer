@@ -7,19 +7,22 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from tools.graph_write_common import get_credentials, write_relations
-from tools.types import parse_relations_json
+from tools.types import normalize_relation
 
 
 class SaveRelationsBatchTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        relations_json = str(tool_parameters.get("relations_json") or "").strip()
+        relations_payload = tool_parameters.get("relations_json")
         batch_size = int(tool_parameters.get("batch_size") or 500)
-        if not relations_json:
+        if relations_payload is None:
             yield self.create_text_message("❌ relations_json 不能为空。")
+            return
+        if not isinstance(relations_payload, list):
+            yield self.create_text_message("❌ relations_json 必须是数组。")
             return
 
         try:
-            rows = parse_relations_json(relations_json)
+            rows = [normalize_relation(item, index=i) for i, item in enumerate(relations_payload)]
             uri, user, pwd = get_credentials(self.runtime)
             count = write_relations(uri, user, pwd, rows, batch_size=batch_size)
         except Exception as exc:

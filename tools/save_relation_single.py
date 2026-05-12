@@ -7,18 +7,18 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from tools.graph_write_common import get_credentials, write_relations
-from tools.types import parse_relation_json
+from tools.types import normalize_relation
 
 
 class SaveRelationSingleTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        relation_json = str(tool_parameters.get("relation_json") or "").strip()
-        if not relation_json:
+        relation_payload = tool_parameters.get("relation_json")
+        if relation_payload is None:
             yield self.create_text_message("❌ relation_json 不能为空。")
             return
 
         try:
-            row = parse_relation_json(relation_json)
+            row = normalize_relation(relation_payload, index=0)
             uri, user, pwd = get_credentials(self.runtime)
             count = write_relations(uri, user, pwd, [row], batch_size=1)
         except Exception as exc:

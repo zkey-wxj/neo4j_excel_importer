@@ -9,11 +9,11 @@ description:
   human:
     en_US: Save node data to Neo4j in batch with JSON rows.
     zh_Hans: 使用 JSON 数组批量保存节点数据到 Neo4j。
-  llm: Save nodes in batch. JSON items must use nodeId/name/nodeType/label/definition/level/gradeRange/keywords/teachingTip.
+  llm: Save nodes in batch. JSON items must use nodeId/name/labels/description/groupId/properties.
 
 parameters:
   - name: nodes_json
-    type: string
+    type: array
     required: true
     label:
       en_US: Nodes JSON
@@ -21,7 +21,7 @@ parameters:
     human_description:
       en_US: JSON array of node objects. Fields must match import_graph write format.
       zh_Hans: 节点对象 JSON 数组，字段必须与 import_graph 写库格式一致。
-    llm_description: JSON array. Each item uses nodeId, name, nodeType, label, definition, level, gradeRange, keywords, teachingTip.
+    llm_description: Array of node objects. Each item uses nodeId, name, labels, description, groupId, properties.
     form: llm
 
   - name: batch_size

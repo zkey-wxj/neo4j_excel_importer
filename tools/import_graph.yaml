@@ -8,15 +8,15 @@ identity:
 description:
   human:
     en_US: >
-      Parse a structured Excel file containing node tables (NodeID / name / node_type …)
-      and relationship tables (SourceID / RelationType / TargetID), then import
-      the graph into a Neo4j database via MERGE (idempotent).
+      Parse graph tables from Excel/Markdown using mapping-driven headers, then import
+      nodes and relationships into Neo4j with MERGE (idempotent). Title rows are converted
+      to title nodes, and "包含" relations are auto-generated from title nodes to child nodes.
     zh_Hans: >
-      解析包含节点表（NodeID / name / node_type …）和关系表（SourceID / RelationType /
-      TargetID）的结构化 Excel 文件，通过 MERGE 幂等写入 Neo4j 数据库。
+      基于字段映射解析 Excel/Markdown 图谱表格，并通过 MERGE 幂等写入 Neo4j。
+      标题行会自动转换为标题节点，并自动生成“包含”关系连接到子节点。
   llm: >
-    Parse a knowledge-graph Excel file and import nodes + relationships into Neo4j.
-    Returns import statistics as structured variables (nodes_count, rels_count, skipped_rels).
+    Parse mapped graph tables from Excel/Markdown and import nodes + relationships into Neo4j.
+    Supports title-row to title-node conversion and auto "包含" edges. Returns import statistics.
 
 parameters:
   - name: excel_url
@@ -26,9 +26,19 @@ parameters:
       en_US: Excel File URL
       zh_Hans: Excel 文件 URL
     human_description:
-      en_US: Public URL pointing to the .xlsx file (use this OR excel_file).
-      zh_Hans: 指向 .xlsx 文件的公开 URL（与 excel_file 二选一）。
-    llm_description: Public HTTPS URL of the Excel file to import.
+      en_US: >
+        Public URL of a .xlsx file (use this OR excel_file). Parsing follows `mapping` definitions.
+        If `mapping` is omitted, default headers are used:
+        node table: NodeID | name | node_type | description;
+        relation table: SourceID | RelationType | TargetID.
+      zh_Hans: >
+        指向 .xlsx 文件的公开 URL（与 excel_file 二选一）。解析会按 `mapping` 映射执行；
+        不传 `mapping` 时使用默认表头：
+        节点表 NodeID | name | node_type | description，
+        关系表 SourceID | RelationType | TargetID。
+    llm_description: >
+      Public HTTPS URL of the .xlsx file. Header detection is mapping-driven.
+      Title rows (first cell non-empty, others empty/nan) are treated as title nodes.
     form: llm
 
   - name: excel_file
@@ -38,9 +48,14 @@ parameters:
       en_US: Excel File (Upload)
       zh_Hans: Excel 文件（上传）
     human_description:
-      en_US: Upload files directly (use this OR excel_url). Only the first .xlsx file will be used.
-      zh_Hans: 直接上传文件（与 excel_url 二选一）。仅使用第一个 .xlsx 文件。
-    llm_description: Uploaded files list. Only the first .xlsx file will be used.
+      en_US: >
+        Upload files directly (use this OR excel_url). Only the first .xlsx file is used.
+        Parsing is mapping-driven and consistent with excel_url.
+      zh_Hans: >
+        直接上传文件（与 excel_url 二选一），仅使用第一个 .xlsx 文件。
+        解析规则与 excel_url 一致，按 `mapping` 映射驱动。
+    llm_description: >
+      Uploaded files list. Only the first .xlsx file is used. Uses mapping-driven header detection.
     form: form
 
   - name: excel_text
@@ -50,9 +65,15 @@ parameters:
       en_US: Excel Markdown Text
       zh_Hans: Excel Markdown 文本
     human_description:
-      en_US: Markdown table text converted from Excel. If provided, it will be used first.
-      zh_Hans: 从 Excel 转换得到的 Markdown 表格文本。若提供则优先使用。
-    llm_description: Markdown table text for nodes and relationships. Preferred in agent scenarios to avoid file serialization.
+      en_US: >
+        Markdown table text converted from Excel. If provided, it is preferred over excel_url/excel_file.
+        Supports repeated headers inside one large block and title rows between sections.
+      zh_Hans: >
+        从 Excel 转换得到的 Markdown 表格文本。若提供则优先于 excel_url/excel_file。
+        支持同一大块内重复出现表头，也支持表头之间穿插标题行。
+    llm_description: >
+      Markdown table text for nodes and relations. Mapping-driven header detection.
+      Repeated headers and section title rows are supported.
     form: llm
 
   - name: batch_size
@@ -81,24 +102,142 @@ parameters:
     llm_description: If true, wipes the Neo4j database before importing.
     form: form
 
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: >
+        Optional group identifier for this import batch. If omitted, the tool reuses the last group_id
+        in current Dify session storage; if none exists, a new UUID will be generated.
+      zh_Hans: >
+        本次导入的可选分组标识。若不传，工具会优先复用当前 Dify 会话存储中的上次 group_id；
+        若会话中不存在，则自动生成新的 UUID。
+    llm_description: >
+      Optional import group id. If absent, load from current session storage key `import_graph:last_group_id`,
+      otherwise auto-generate a UUID.
+    form: llm
+
+  - name: mapping
+    type: object
+    required: false
+    label:
+      en_US: Field Mapping Object
+      zh_Hans: 字段映射对象
+    human_description:
+      en_US: >
+        JSON object for explicit field mapping. If omitted, the following default mapping is used:
+        {
+          "node": {
+            "nodeId": "NodeID",
+            "name": "name",
+            "labels": ["node_type"],
+            "description": ["description", "definition", "说明", "备注", "简介"],
+            "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"]
+          },
+          "relation": {
+            "src": "SourceID",
+            "relType": "RelationType",
+            "tgt": "TargetID",
+            "description": ["description", "说明", "备注", "简介"],
+            "properties": ["说明", "description", "*"]
+          },
+          "groupId": "group_id"
+        }
+      zh_Hans: >
+        字段映射 JSON 对象。不传时使用以下默认映射：
+        {
+          "node": {
+            "nodeId": "NodeID",
+            "name": "name",
+            "labels": ["node_type"],
+            "description": ["description", "definition", "说明", "备注", "简介"],
+            "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"]
+          },
+          "relation": {
+            "src": "SourceID",
+            "relType": "RelationType",
+            "tgt": "TargetID",
+            "description": ["description", "说明", "备注", "简介"],
+            "properties": ["说明", "description", "*"]
+          },
+          "groupId": "group_id"
+        }
+    llm_description: >
+      Optional mapping JSON object for node/relation fields:
+      node.nodeId, node.name, node.labels, node.description, node.properties[],
+      relation.src, relation.relType, relation.tgt, relation.description, relation.properties[],
+      groupId.
+    schema:
+      type: object
+      properties:
+        node:
+          type: object
+          properties:
+            nodeId:
+              type: string
+            name:
+              type: string
+            labels:
+              type: array
+              items:
+                type: string
+            description:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+            properties:
+              type: array
+              items:
+                type: string
+        relation:
+          type: object
+          properties:
+            src:
+              type: string
+            relType:
+              type: string
+            tgt:
+              type: string
+            description:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+            properties:
+              type: array
+              items:
+                type: string
+        groupId:
+          type: string
+    form: llm
+
 output_schema:
   type: object
   properties:
+    group_id:
+      type: string
+      description: Group id used in current import and persisted in current Dify session storage.
     nodes_count:
       type: integer
-      description: Number of nodes successfully merged into Neo4j.
+      description: Number of merged nodes (including auto-generated title nodes).
     rels_count:
       type: integer
-      description: Number of relationships successfully merged into Neo4j.
+      description: Number of merged relationships (including auto-generated "包含" edges).
     skipped_rels:
       type: integer
       description: Number of relationships skipped because source or target node was missing.
     node_type_stats:
       type: object
-      description: Mapping of node_type → count.
+      description: Mapping of source node_type values from parsed rows to counts.
     rel_type_stats:
       type: object
-      description: Mapping of relation_type → count.
+      description: Mapping of source relation type values to counts.
     summary:
       type: string
       description: Human-readable import summary.
