@@ -43,6 +43,18 @@ parameters:
         - nodeId
     form: llm
 
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional default group id for this write. Used when node_json has no groupId/group_id.
+      zh_Hans: 本次写入的可选默认分组 ID；当 node_json 未提供 groupId/group_id 时使用。
+    llm_description: Optional default group id for this write operation.
+    form: llm
+
 output_schema:
   type: object
   properties:

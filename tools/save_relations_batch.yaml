@@ -67,6 +67,18 @@ parameters:
     llm_description: Batch size for relation writes.
     form: form
 
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional default group id for this batch. Used when an item has no groupId/group_id.
+      zh_Hans: 本批次写入的可选默认分组 ID；当某条关系未提供 groupId/group_id 时使用。
+    llm_description: Optional default group id for this batch write operation.
+    form: llm
+
 output_schema:
   type: object
   properties:
