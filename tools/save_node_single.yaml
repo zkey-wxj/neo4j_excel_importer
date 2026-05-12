@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save one node object to Neo4j.
     zh_Hans: 保存单个节点对象到 Neo4j。
-  llm: Save one node. JSON must use nodeId/name/labels/description/groupId/properties.
+  llm: Save one node. JSON uses uid/name/labels/description/group_id/properties/meta.
 
 parameters:
   - name: node_json
@@ -21,11 +21,11 @@ parameters:
     human_description:
       en_US: JSON object with node fields matching import_graph write format.
       zh_Hans: 节点 JSON 对象，字段与 import_graph 写库格式一致。
-    llm_description: Object with nodeId, name, labels, description, groupId, properties.
+    llm_description: Object with uid, name, labels, description, group_id, properties, meta.
     schema:
       type: object
       properties:
-        nodeId:
+        uid:
           type: string
         name:
           type: string
@@ -35,12 +35,23 @@ parameters:
             type: string
         description:
           type: string
-        groupId:
+        group_id:
           type: string
         properties:
           type: object
+        meta:
+          type: object
+          properties:
+            created_at:
+              type: string
+            updated_at:
+              type: string
+            source:
+              type: string
+            version:
+              type: integer
       required:
-        - nodeId
+        - uid
     form: llm
 
   - name: group_id
@@ -50,8 +61,8 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional default group id for this write. Used when node_json has no groupId/group_id.
-      zh_Hans: 本次写入的可选默认分组 ID；当 node_json 未提供 groupId/group_id 时使用。
+      en_US: Optional default group id for this write. Used when node_json has no group_id.
+      zh_Hans: 本次写入的可选默认分组 ID；当 node_json 未提供 group_id 时使用。
     llm_description: Optional default group id for this write operation.
     form: llm
 

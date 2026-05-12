@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save one relation object to Neo4j.
     zh_Hans: 保存单条关系对象到 Neo4j。
-  llm: Save one relation. JSON must use src/tgt/relType/description/groupId/properties.
+  llm: Save one relation. JSON uses source_uid/target_uid/rel_type/direction/description/group_id/properties/meta.
 
 parameters:
   - name: relation_json
@@ -20,34 +20,49 @@ parameters:
       zh_Hans: 关系 JSON
     human_description:
       en_US: >
-        Relation object. Required fields: src, tgt, relType.
-        Optional fields: description, groupId, properties.
+        Relation object. Required fields: source_uid, target_uid, rel_type.
+        Optional fields: direction, description, group_id, properties, meta.
       zh_Hans: >
-        关系对象。必填字段：src、tgt、relType。
-        可选字段：description、groupId、properties。
+        关系对象。必填字段：source_uid、target_uid、rel_type。
+        可选字段：direction、description、group_id、properties、meta。
     llm_description: >
       Object fields:
-      src(string, required), tgt(string, required), relType(string, required),
-      description(string, optional), groupId(string, optional), properties(object, optional).
+      source_uid(string, required), target_uid(string, required), rel_type(string, required),
+      direction(forward|bidirectional, optional), description(string, optional),
+      group_id(string, optional), properties(object, optional), meta(object, optional).
     schema:
       type: object
       properties:
-        src:
+        source_uid:
           type: string
-        tgt:
+        target_uid:
           type: string
-        relType:
+        rel_type:
           type: string
+        direction:
+          type: string
+          enum: [forward, bidirectional]
         description:
           type: string
-        groupId:
+        group_id:
           type: string
         properties:
           type: object
+        meta:
+          type: object
+          properties:
+            created_at:
+              type: string
+            updated_at:
+              type: string
+            source:
+              type: string
+            version:
+              type: integer
       required:
-        - src
-        - tgt
-        - relType
+        - source_uid
+        - target_uid
+        - rel_type
     form: llm
 
   - name: group_id
@@ -57,8 +72,8 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional default group id for this write. Used when relation_json has no groupId/group_id.
-      zh_Hans: 本次写入的可选默认分组 ID；当 relation_json 未提供 groupId/group_id 时使用。
+      en_US: Optional default group id for this write. Used when relation_json has no group_id.
+      zh_Hans: 本次写入的可选默认分组 ID；当 relation_json 未提供 group_id 时使用。
     llm_description: Optional default group id for this write operation.
     form: llm
 

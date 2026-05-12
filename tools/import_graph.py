@@ -6,8 +6,8 @@ import_graph.py — Dify Tool
 --------
 1) 映射驱动：
    默认使用 DEFAULT_FIELD_MAPPING（也可通过工具参数 mapping 覆盖）。
-   - 节点核心字段：nodeId / name / labels / description
-   - 关系核心字段：src / relType / tgt
+   - 节点核心字段：uid / name / labels / description / group_id
+   - 关系核心字段：source_uid / rel_type / target_uid / group_id
    - 其余字段按映射进入 properties
 
 2) 表头扫描：
@@ -26,19 +26,23 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 from collections.abc import Generator
 from typing import Any
 
 import pandas as pd
-from neo4j import GraphDatabase
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
-from tools.types import (
+from core.graph_write_common import (
+    clear_graph,
+    get_apoc_capabilities,
+    write_nodes,
+    write_relations,
+)
+from core.types import (
     NodePayload,
     RelationPayload,
-    node_from_excel_row,
-    relation_from_excel_row,
     ensure_mapping,
     normalize_labels,
     normalize_properties,
@@ -52,68 +56,30 @@ logger.addHandler(plugin_logger_handler)
 # 测试脚本 markdown_format_recognizer.py 同步的默认映射
 DEFAULT_FIELD_MAPPING: dict[str, Any] = {
     "node": {
-        "nodeId": "NodeID",
+        "uid": "NodeID",
         "name": "name",
-        "labels": ["node_type"],
-        "description": ["description", "definition", "说明", "备注", "简介"],
-        "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"],
+        "labels": ["node_type", "keywords"],
+        "description": ["definition", "description", "说明", "备注", "简介"],
+        "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
     "relation": {
-        "src": "SourceID",
-        "relType": "RelationType",
-        "tgt": "TargetID",
+        "source_uid": "SourceID",
+        "rel_type": "RelationType",
+        "target_uid": "TargetID",
         "description": ["description", "说明", "备注", "简介"],
-        "properties": ["*"],
+        "properties": [],
     },
-    "groupId": "group_id",
 }
 _LABEL_SPLIT_PATTERN = re.compile(r"[;,，；]+")
 
-# ── Cypher 模板 ─────────────────────────────────────────────────────────────
 
-_CONSTRAINT_CYPHER = (
-    "CREATE CONSTRAINT IF NOT EXISTS "
-    "FOR (n:KnowledgeNode) REQUIRE n.nodeId IS UNIQUE"
-)
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-_UPSERT_NODES = """
-UNWIND $rows AS row
-MERGE (n:KnowledgeNode {nodeId: row.nodeId})
-SET n.name        = row.name,
-    n.description = row.description,
-    n.groupId     = row.groupId
-SET n += row.properties
-WITH n, row
-CALL apoc.create.addLabels(n, row.labels) YIELD node
-RETURN count(node)
-"""
 
-_UPSERT_NODES_GENERIC = """
-UNWIND $rows AS row
-MERGE (n:KnowledgeNode {nodeId: row.nodeId})
-SET n.name        = row.name,
-    n.description = row.description,
-    n.groupId     = row.groupId
-SET n += row.properties
-"""
-
-# 关系：APOC 版（支持动态关系类型）
-_UPSERT_RELS_APOC = """
-UNWIND $rows AS row
-MATCH (src:KnowledgeNode {nodeId: row.src})
-MATCH (tgt:KnowledgeNode {nodeId: row.tgt})
-CALL apoc.merge.relationship(src, row.relType, {groupId: row.groupId}, row.properties, tgt)
-YIELD rel RETURN count(rel)
-"""
-
-# 关系：通用版（无 APOC；关系类型存为属性）
-_UPSERT_RELS_GENERIC = """
-UNWIND $rows AS row
-MATCH (src:KnowledgeNode {nodeId: row.src})
-MATCH (tgt:KnowledgeNode {nodeId: row.tgt})
-MERGE (src)-[r:RELATED {relType: row.relType, groupId: row.groupId}]->(tgt)
-SET r += row.properties
-"""
+def _build_meta() -> dict[str, Any]:
+    now = _utc_now_iso()
+    return {"created_at": now, "updated_at": now}
 
 # ── 工具类 ──────────────────────────────────────────────────────────────────
 
@@ -138,7 +104,8 @@ class ImportGraphTool(Tool):
         excel_text  = str(tool_parameters.get("excel_text") or "").strip()
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
-        group_id    = str(tool_parameters.get("group_id") or "").strip()
+        input_group_id = str(tool_parameters.get("group_id") or "").strip()
+        group_id    = input_group_id
         mapping     = self._resolve_mapping(tool_parameters.get("mapping"))
 
         if not group_id:
@@ -406,7 +373,7 @@ class ImportGraphTool(Tool):
         desc_fields = self._normalize_description_fields(node.get("description", node.get("definition")))
         if len(row) < 4:
             return False
-        if row[0].strip() != str(node["nodeId"]).strip():
+        if row[0].strip() != str(node["uid"]).strip():
             return False
         if row[1].strip() != str(node["name"]).strip():
             return False
@@ -420,7 +387,7 @@ class ImportGraphTool(Tool):
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
-        expected = [rel["src"], rel["relType"], rel["tgt"]]
+        expected = [rel["source_uid"], rel["rel_type"], rel["target_uid"]]
         return self._starts_with(row, expected)
 
     @staticmethod
@@ -474,7 +441,7 @@ class ImportGraphTool(Tool):
         blocks: list[list[list[str]]],
         mapping: dict[str, Any],
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        node_rows: list[NodePayload] = []
+        node_rows: list[dict[str, Any]] = []
         rel_rows: list[dict[str, Any]] = []
 
         node_map = mapping["node"]
@@ -500,14 +467,14 @@ class ImportGraphTool(Tool):
                     title_node_id = self._generate_title_node_id(table_index, title_seq)
                     title_seq += 1
                     node_rows.append(
-                        NodePayload(
-                            nodeId=title_node_id,
-                            name=title_name,
-                            labels=["Title"],
-                            description="",
-                            groupId="",
-                            properties={},
-                        )
+                        {
+                            "uid": title_node_id,
+                            "name": title_name,
+                            "labels": ["Title"],
+                            "group_id": "",
+                            "properties": {},
+                            "meta": _build_meta(),
+                        }
                     )
                     current_title_node_id = title_node_id
                     continue
@@ -523,7 +490,7 @@ class ImportGraphTool(Tool):
                     continue
 
                 if current_kind == "node":
-                    node_id = self._get_cell(row, current_index, node_map["nodeId"])
+                    node_id = self._get_cell(row, current_index, node_map["uid"])
                     if self._is_empty_like(node_id):
                         continue
 
@@ -535,12 +502,12 @@ class ImportGraphTool(Tool):
                         if self._is_empty_like(value):
                             continue
                         for label in self._split_labels_text(value):
-                            if label not in labels:
+                            if label and label not in labels:
                                 labels.append(label)
                     if not labels:
                         labels = ["Node"]
                     reserved = {
-                        node_map["nodeId"],
+                        node_map["uid"],
                         node_map["name"],
                     }
                     for field in desc_fields:
@@ -553,34 +520,38 @@ class ImportGraphTool(Tool):
                         configured=list(node_map.get("properties", [])),
                         reserved_fields=reserved,
                     )
-                    node_rows.append(
-                        NodePayload(
-                            nodeId=node_id,
-                            name=name,
-                            labels=labels,
-                            description=description,
-                            groupId="",
-                            properties=props,
-                        )
-                    )
+                    node_payload: dict[str, Any] = {
+                        "uid": node_id,
+                        "name": name,
+                        "labels": labels,
+                        "group_id": "",
+                        "properties": props,
+                        "meta": _build_meta(),
+                    }
+                    if description:
+                        node_payload["description"] = description
+                    node_rows.append(node_payload)
                     if current_title_node_id and current_title_node_id != node_id:
                         rel_rows.append(
                             {
-                                "SourceID": current_title_node_id,
-                                "RelationType": "包含",
-                                "TargetID": node_id,
-                                "description": "",
+                                "source_uid": current_title_node_id,
+                                "rel_type": "包含",
+                                "target_uid": node_id,
+                                "direction": "forward",
+                                "group_id": "",
+                                "properties": {},
+                                "meta": _build_meta(),
                             }
                         )
                     continue
 
                 if current_kind == "relation":
-                    src = self._get_cell(row, current_index, rel_map["src"])
-                    rel_type = self._get_cell(row, current_index, rel_map["relType"])
-                    tgt = self._get_cell(row, current_index, rel_map["tgt"])
+                    src = self._get_cell(row, current_index, rel_map["source_uid"])
+                    rel_type = self._get_cell(row, current_index, rel_map["rel_type"])
+                    tgt = self._get_cell(row, current_index, rel_map["target_uid"])
                     if self._is_empty_like(src) or self._is_empty_like(rel_type) or self._is_empty_like(tgt):
                         continue
-                    reserved = {rel_map["src"], rel_map["relType"], rel_map["tgt"]}
+                    reserved = {rel_map["source_uid"], rel_map["rel_type"], rel_map["target_uid"]}
                     for field in rel_desc_fields:
                         reserved.add(field)
                     props = self._collect_properties(
@@ -590,54 +561,52 @@ class ImportGraphTool(Tool):
                         reserved_fields=reserved,
                     )
                     description = self._extract_first_by_fields(row, current_index, rel_desc_fields)
-                    rel_rows.append(
-                        {
-                            "SourceID": src,
-                            "RelationType": rel_type,
-                            "TargetID": tgt,
-                            "description": description,
-                        }
-                    )
+                    rel_payload: dict[str, Any] = {
+                        "source_uid": src,
+                        "rel_type": rel_type,
+                        "target_uid": tgt,
+                        "direction": "forward",
+                        "group_id": "",
+                        "properties": props,
+                        "meta": _build_meta(),
+                    }
+                    if description:
+                        rel_payload["description"] = description
+                    rel_rows.append(rel_payload)
                     if current_title_node_id and current_title_node_id != src:
                         rel_rows.append(
                             {
-                                "SourceID": current_title_node_id,
-                                "RelationType": "包含",
-                                "TargetID": src,
-                                "description": "",
+                                "source_uid": current_title_node_id,
+                                "rel_type": "包含",
+                                "target_uid": src,
+                                "direction": "forward",
+                                "group_id": "",
+                                "properties": {},
+                                "meta": _build_meta(),
                             }
                         )
 
         if node_rows:
             nodes_df = (
                 pd.DataFrame(node_rows)
-                .drop_duplicates(subset="nodeId")
+                .drop_duplicates(subset="uid")
                 .reset_index(drop=True)
             )
         else:
-            nodes_df = pd.DataFrame(columns=["nodeId", "name", "labels", "description", "groupId", "properties"])
+            nodes_df = pd.DataFrame(columns=["uid", "name", "labels", "description", "group_id", "properties", "meta"])
 
         if rel_rows:
             rels_df = (
                 pd.DataFrame(rel_rows)
-                .drop_duplicates(subset=["SourceID", "RelationType", "TargetID"])
+                .drop_duplicates(subset=["source_uid", "rel_type", "target_uid"])
                 .reset_index(drop=True)
             )
         else:
-            rels_df = pd.DataFrame(columns=["SourceID", "RelationType", "TargetID", "description"])
+            rels_df = pd.DataFrame(columns=["source_uid", "rel_type", "target_uid", "description", "group_id", "properties", "meta"])
 
         return nodes_df, rels_df
 
     # ── 内部：写入 Neo4j ─────────────────────────────────────────────────
-
-    @staticmethod
-    def _has_apoc(session) -> bool:
-        try:
-            session.run("RETURN apoc.version()").single()
-            return True
-        except Exception:
-            return False
-
     def _write_to_neo4j(
         self,
         nodes_df: pd.DataFrame,
@@ -651,156 +620,133 @@ class ImportGraphTool(Tool):
         group_id: str,
     ) -> Generator[ToolInvokeMessage, None, dict[str, Any]]:
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🔌 正在连接 Neo4j...\n")
-        driver = GraphDatabase.driver(uri, auth=(user, pwd))
         skipped_rels = 0
 
         try:
-            with driver.session() as session:
-                # 可选：清空
-                if clear_first:
-                    logger.warning("执行清库操作！")
-                    yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "⚠️ 已启用 clear_before_import，先执行清库...\n")
-                    session.run("MATCH (n) DETACH DELETE n")
+            # 可选：清空
+            if clear_first:
+                logger.warning("执行清库操作！")
+                yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "⚠️ 已启用 clear_before_import，先执行清库...\n")
+                clear_graph(uri, user, pwd)
 
-                # 约束
-                yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🧱 正在校验/创建唯一约束...\n")
-                try:
-                    session.run(_CONSTRAINT_CYPHER)
-                except Exception as e:
-                    logger.warning("约束创建跳过: %s", e)
+            apoc_nodes, apoc_rels = get_apoc_capabilities(uri, user, pwd)
+            logger.info("APOC 可用性 | nodes=%s rels=%s", apoc_nodes, apoc_rels)
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                "🧪 APOC 可用性："
+                f"节点标签={'可用' if apoc_nodes else '不可用'}，"
+                f"关系合并={'可用' if apoc_rels else '不可用'}。\n"
+            )
 
-                apoc = self._has_apoc(session)
-                logger.info("APOC 可用: %s", apoc)
-                yield self.create_stream_variable_message(
-                    self._PROGRESS_VARIABLE,
-                    f"🧪 APOC 可用性：{'可用' if apoc else '不可用，使用通用关系写入'}。\n"
-                )
-
-                # ── 写节点 ───────────────────────────────────────────
-                node_rows: list[NodePayload] = []
-                for _, row in nodes_df.iterrows():
-                    row_data = row.to_dict()
-                    if "nodeId" in row_data:
-                        labels = normalize_labels(row_data.get("labels"))
-                        if not labels:
-                            labels = normalize_labels(row_data.get("node_type"))
-                        properties = row_data.get("properties")
-                        if isinstance(properties, dict):
-                            properties = normalize_properties(properties, field_name="node.properties")
-                        else:
-                            properties = {}
-                        node_rows.append(
-                            NodePayload(
-                                nodeId=clean_text(row_data.get("nodeId")),
-                                name=clean_text(row_data.get("name")),
-                                labels=labels or ["Node"],
-                                description=clean_text(
-                                    row_data.get("description")
-                                    or row_data.get("definition")
-                                    or row_data.get("说明")
-                                    or row_data.get("备注")
-                                    or row_data.get("简介")
-                                ),
-                                groupId=clean_text(group_id or row_data.get("groupId") or row_data.get("group_id")),
-                                properties=properties,
-                            )
-                        )
-                    else:
-                        node_rows.append(node_from_excel_row(row_data, group_id=group_id))
-
-                yield self.create_stream_variable_message(
-                    self._PROGRESS_VARIABLE,
-                    f"📦 开始写入节点，共 {len(node_rows)} 条，批大小 {batch_size}。\n"
-                )
-                for start in range(0, len(node_rows), batch_size):
-                    batch = node_rows[start: start + batch_size]
-                    try:
-                        if apoc:
-                            session.run(_UPSERT_NODES, rows=batch)
-                        else:
-                            session.run(_UPSERT_NODES_GENERIC, rows=batch)
-                    except Exception as e:
-                        logger.warning("节点批次写入失败，退回通用模式: %s", e)
-                        yield self.create_stream_variable_message(
-                            self._PROGRESS_VARIABLE,
-                            f"⚠️ 节点批次触发回退，改用通用模式：{e}\n"
-                        )
-                        session.run(_UPSERT_NODES_GENERIC, rows=batch)
-                    current = min(start + batch_size, len(node_rows))
-                    logger.info("节点写入 %d/%d", current, len(node_rows))
-                    yield self.create_stream_variable_message(
-                        self._PROGRESS_VARIABLE,
-                        f"📦 节点写入进度：{current}/{len(node_rows)}。\n"
+            # ── 组装节点（新结构） ────────────────────────────────
+            parsed_nodes: list[NodePayload] = []
+            for _, row in nodes_df.iterrows():
+                row_data = row.to_dict()
+                uid = clean_text(row_data.get("uid"))
+                if not uid:
+                    continue
+                labels = normalize_labels(row_data.get("labels"))
+                if not labels:
+                    labels = ["Node"]
+                properties = row_data.get("properties")
+                if isinstance(properties, dict):
+                    properties = normalize_properties(properties, field_name="node.properties")
+                else:
+                    properties = {}
+                meta = row_data.get("meta")
+                if isinstance(meta, dict):
+                    properties["meta"] = meta
+                parsed_nodes.append(
+                    NodePayload(
+                        uid=uid,
+                        name=clean_text(row_data.get("name")),
+                        labels=labels or ["Node"],
+                        description=clean_text(
+                            row_data.get("description")
+                            or row_data.get("definition")
+                            or row_data.get("说明")
+                            or row_data.get("备注")
+                            or row_data.get("简介")
+                        ),
+                        group_id=group_id,
+                        properties=properties,
+                        meta=_build_meta(),
                     )
-
-                # ── 写关系 ───────────────────────────────────────────
-                rel_cypher = _UPSERT_RELS_APOC if apoc else _UPSERT_RELS_GENERIC
-                rel_rows: list[RelationPayload] = []
-                known_ids  = {r["nodeId"] for r in node_rows}
-
-                for _, row in rels_df.iterrows():
-                    row_data = row.to_dict()
-                    src = clean_text(row_data.get("src") or row_data.get("SourceID"))
-                    tgt = clean_text(row_data.get("tgt") or row_data.get("TargetID"))
-                    if src not in known_ids or tgt not in known_ids:
-                        skipped_rels += 1
-                        logger.warning("跳过关系（节点缺失）: %s → %s", src, tgt)
-                        continue
-                    if "src" in row_data:
-                        rel_type = clean_text(row_data.get("relType") or row_data.get("RelationType"))
-                        if not rel_type:
-                            continue
-                        properties = row_data.get("properties")
-                        if isinstance(properties, dict):
-                            properties = normalize_properties(properties, field_name="relation.properties")
-                        else:
-                            properties = {}
-                        rel_rows.append(
-                            RelationPayload(
-                                src=src,
-                                tgt=tgt,
-                                relType=rel_type,
-                                description=clean_text(
-                                    row_data.get("description")
-                                    or row_data.get("说明")
-                                    or row_data.get("备注")
-                                    or row_data.get("简介")
-                                ),
-                                groupId=clean_text(group_id or row_data.get("groupId") or row_data.get("group_id")),
-                                properties=properties,
-                            )
-                        )
-                    else:
-                        rel_rows.append(relation_from_excel_row(row_data, group_id=group_id))
-
-                yield self.create_stream_variable_message(
-                    self._PROGRESS_VARIABLE,
-                    f"🔗 开始写入关系，共 {len(rel_rows)} 条，跳过 {skipped_rels} 条。\n"
                 )
-                for start in range(0, len(rel_rows), batch_size):
-                    batch = rel_rows[start: start + batch_size]
-                    try:
-                        session.run(rel_cypher, rows=batch)
-                    except Exception as e:
-                        logger.warning("关系批次失败，退回通用模式: %s", e)
-                        yield self.create_stream_variable_message(
-                            self._PROGRESS_VARIABLE,
-                            f"⚠️ 关系批次触发回退，改用通用模式：{e}\n"
-                        )
-                        session.run(_UPSERT_RELS_GENERIC, rows=batch)
-                    current = min(start + batch_size, len(rel_rows))
-                    logger.info("关系写入 %d/%d", current, len(rel_rows))
-                    yield self.create_stream_variable_message(
-                        self._PROGRESS_VARIABLE,
-                        f"🔗 关系写入进度：{current}/{len(rel_rows)}。\n"
-                    )
 
-        finally:
-            driver.close()
+            # ── 组装关系（新结构） ────────────────────────────────
+            parsed_relations: list[RelationPayload] = []
+            known_ids = {r["uid"] for r in parsed_nodes}
+            for _, row in rels_df.iterrows():
+                row_data = row.to_dict()
+                source_uid = clean_text(row_data.get("source_uid"))
+                target_uid = clean_text(row_data.get("target_uid"))
+                if source_uid not in known_ids or target_uid not in known_ids:
+                    skipped_rels += 1
+                    logger.warning("跳过关系（节点缺失）: %s → %s", source_uid, target_uid)
+                    continue
+                rel_type = clean_text(row_data.get("rel_type"))
+                if not rel_type:
+                    continue
+                properties = row_data.get("properties")
+                if isinstance(properties, dict):
+                    properties = normalize_properties(properties, field_name="relation.properties")
+                else:
+                    properties = {}
+                direction = clean_text(row_data.get("direction"))
+                if direction:
+                    properties["direction"] = direction
+                meta = row_data.get("meta")
+                if isinstance(meta, dict):
+                    properties["meta"] = meta
+                parsed_relations.append(
+                    RelationPayload(
+                        source_uid=source_uid,
+                        target_uid=target_uid,
+                        rel_type=rel_type,
+                        direction="forward",
+                        description=clean_text(
+                            row_data.get("description")
+                            or row_data.get("说明")
+                            or row_data.get("备注")
+                            or row_data.get("简介")
+                        ),
+                        group_id=group_id,
+                        properties=properties,
+                        meta=_build_meta(),
+                    )
+                )
+
+            node_rows: list[NodePayload] = parsed_nodes
+            rel_rows: list[RelationPayload] = parsed_relations
+
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                f"📦 开始写入节点，共 {len(node_rows)} 条，批大小 {batch_size}。\n"
+            )
+            nodes_count = write_nodes(uri, user, pwd, node_rows, batch_size=batch_size)
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                f"📦 节点写入完成：{nodes_count}/{len(node_rows)}。\n"
+            )
+
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                f"🔗 开始写入关系，共 {len(rel_rows)} 条，跳过 {skipped_rels} 条。\n"
+            )
+            rels_count = write_relations(uri, user, pwd, rel_rows, batch_size=batch_size)
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                f"🔗 关系写入完成：{rels_count}/{len(rel_rows)}。\n"
+            )
+        except Exception as exc:
+            logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败：{exc}\n")
+            raise
 
         # 统计
         node_type_stats: dict[str, int] = {}
-        for node in node_rows:
+        for node in parsed_nodes:
             labels = node.get("labels") or []
             for label in labels:
                 key = str(label).strip()
@@ -809,8 +755,8 @@ class ImportGraphTool(Tool):
                 node_type_stats[key] = node_type_stats.get(key, 0) + 1
 
         rel_type_stats: dict[str, int] = {}
-        for rel in rel_rows:
-            rel_type = str(rel.get("relType") or "").strip()
+        for rel in parsed_relations:
+            rel_type = str(rel.get("rel_type") or "").strip()
             if not rel_type:
                 continue
             rel_type_stats[rel_type] = rel_type_stats.get(rel_type, 0) + 1
@@ -821,8 +767,8 @@ class ImportGraphTool(Tool):
         )
 
         return {
-            "nodes_count":     len(node_rows),
-            "rels_count":      len(rel_rows),
+            "nodes_count":     nodes_count,
+            "rels_count":      rels_count,
             "skipped_rels":    skipped_rels,
             "node_type_stats": node_type_stats,
             "rel_type_stats":  rel_type_stats,

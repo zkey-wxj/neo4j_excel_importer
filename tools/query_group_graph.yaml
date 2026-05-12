@@ -1,0 +1,92 @@
+identity:
+  name: query_group_graph
+  author: wxj
+  label:
+    en_US: Query Group Graph
+    zh_Hans: 按分组查询图谱
+
+description:
+  human:
+    en_US: Query all nodes and relations under a group_id, optional graph image (PNG).
+    zh_Hans: 根据 group_id 查询该组下全部节点和关系，并可选返回图谱图片（PNG）。
+  llm: Query group graph by group_id. Optional generate_image returns local PNG image blob.
+
+parameters:
+  - name: group_id
+    type: string
+    required: true
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Group id used when importing graph data.
+      zh_Hans: 图谱导入时使用的分组 ID。
+    llm_description: Required group_id.
+    form: llm
+
+  - name: limit
+    type: number
+    required: false
+    default: 1000
+    label:
+      en_US: Result Limit
+      zh_Hans: 返回条数上限
+    human_description:
+      en_US: Max rows for nodes and relations each. Default 1000, max 3000.
+      zh_Hans: 节点和关系各自的最大返回条数。默认 1000，最大 3000。
+    llm_description: Limit for nodes and relations query.
+    form: form
+
+  - name: generate_image
+    type: boolean
+    required: false
+    default: false
+    label:
+      en_US: Generate Graph Image
+      zh_Hans: 是否生成图片
+    human_description:
+      en_US: If true, tool renders graph by open-source libs and returns PNG blob image.
+      zh_Hans: 为 true 时，使用开源库本地渲染图谱，并返回 PNG 图片。
+    llm_description: Whether to generate local PNG graph image.
+    form: llm
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    group_id:
+      type: string
+      description: Queried group id.
+    nodes_count:
+      type: integer
+      description: Node rows count.
+    rels_count:
+      type: integer
+      description: Relation rows count.
+    nodes:
+      type: array
+      description: Node rows.
+    relations:
+      type: array
+      description: Relation rows.
+    image_generated:
+      type: boolean
+      description: Whether PNG image is generated.
+    image_format:
+      type: string
+      description: Image format, png when image exists.
+
+extra:
+  python:
+    source: tools/query_group_graph.py

@@ -2,3 +2,5 @@ dify_plugin
 pandas>=2.0.0
 openpyxl>=3.1.0
 neo4j>=5.0.0
+networkx>=3.0.0
+matplotlib>=3.8.0

@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save node data to Neo4j in batch with JSON rows.
     zh_Hans: 使用 JSON 数组批量保存节点数据到 Neo4j。
-  llm: Save nodes in batch. JSON items must use nodeId/name/labels/description/groupId/properties.
+  llm: Save nodes in batch. JSON items use uid/name/labels/description/group_id/properties/meta.
 
 parameters:
   - name: nodes_json
@@ -21,13 +21,13 @@ parameters:
     human_description:
       en_US: JSON array of node objects. Fields must match import_graph write format.
       zh_Hans: 节点对象 JSON 数组，字段必须与 import_graph 写库格式一致。
-    llm_description: Array of node objects. Each item uses nodeId, name, labels, description, groupId, properties.
+    llm_description: Array of node objects. Each item uses uid, name, labels, description, group_id, properties, meta.
     schema:
       type: array
       items:
         type: object
         properties:
-          nodeId:
+          uid:
             type: string
           name:
             type: string
@@ -37,12 +37,23 @@ parameters:
               type: string
           description:
             type: string
-          groupId:
+          group_id:
             type: string
           properties:
             type: object
+          meta:
+            type: object
+            properties:
+              created_at:
+                type: string
+              updated_at:
+                type: string
+              source:
+                type: string
+              version:
+                type: integer
         required:
-          - nodeId
+          - uid
     form: llm
 
   - name: batch_size
@@ -65,8 +76,8 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional default group id for this batch. Used when an item has no groupId/group_id.
-      zh_Hans: 本批次写入的可选默认分组 ID；当某条节点未提供 groupId/group_id 时使用。
+      en_US: Optional default group id for this batch. Used when an item has no group_id.
+      zh_Hans: 本批次写入的可选默认分组 ID；当某条节点未提供 group_id 时使用。
     llm_description: Optional default group id for this batch write operation.
     form: llm
 

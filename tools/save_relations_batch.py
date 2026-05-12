@@ -6,8 +6,8 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from tools.graph_write_common import get_credentials, write_relations
-from tools.types import clean_text, normalize_relation
+from core.graph_write_common import get_credentials, write_relations
+from core.types import clean_text, normalize_relation
 
 
 class SaveRelationsBatchTool(Tool):
@@ -26,8 +26,8 @@ class SaveRelationsBatchTool(Tool):
             rows = [normalize_relation(item, index=i) for i, item in enumerate(relations_payload)]
             if group_id:
                 for row in rows:
-                    if not clean_text(row.get("groupId")):
-                        row["groupId"] = group_id
+                    if not clean_text(row.get("group_id")):
+                        row["group_id"] = group_id
             uri, user, pwd = get_credentials(self.runtime)
             count = write_relations(uri, user, pwd, rows, batch_size=batch_size)
         except Exception as exc:

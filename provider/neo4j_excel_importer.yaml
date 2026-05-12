@@ -41,6 +41,11 @@ credentials_for_provider:
 tools:
   - tools/import_graph.yaml
   - tools/neo4j_query.yaml
+  - tools/query_node_by_id.yaml
+  - tools/query_nodes_fuzzy.yaml
+  - tools/query_relations_by_node.yaml
+  - tools/query_relations_between_nodes.yaml
+  - tools/query_group_graph.yaml
   - tools/save_nodes_batch.yaml
   - tools/save_node_single.yaml
   - tools/save_relations_batch.yaml

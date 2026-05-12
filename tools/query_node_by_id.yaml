@@ -1,0 +1,91 @@
+identity:
+  name: query_node_by_id
+  author: wxj
+  label:
+    en_US: Query Node By ID
+    zh_Hans: 按 uid 查询节点
+
+description:
+  human:
+    en_US: Query one KnowledgeNode by uid with its relations and neighbor nodes.
+    zh_Hans: 根据 uid 查询节点本体，并返回其关系与相邻节点。
+  llm: Query center node by uid, plus relations and neighbors, with optional group_id.
+
+parameters:
+  - name: node_id
+    type: string
+    required: true
+    label:
+      en_US: Node ID
+      zh_Hans: 节点 ID
+    human_description:
+      en_US: Exact uid value in KnowledgeNode.
+      zh_Hans: KnowledgeNode 中的精确 uid 值。
+    llm_description: Exact uid value to query.
+    form: llm
+
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional group_id filter.
+      zh_Hans: 可选 group_id 过滤条件。
+    llm_description: Optional group_id filter.
+    form: llm
+
+  - name: generate_image
+    type: boolean
+    required: false
+    default: false
+    label:
+      en_US: Generate Graph Image
+      zh_Hans: 是否生成图片
+    human_description:
+      en_US: If true, render node-neighbor graph and return PNG image.
+      zh_Hans: 为 true 时，渲染该节点邻接子图并返回 PNG 图片。
+    llm_description: Whether to generate local PNG graph image.
+    form: llm
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    count:
+      type: integer
+      description: Number of related relation rows.
+    node:
+      type: object
+      description: Center node object.
+    relations:
+      type: array
+      description: Relation list with neighbor info.
+    neighbors:
+      type: array
+      description: Neighbor node list (deduplicated).
+    image_generated:
+      type: boolean
+      description: Whether PNG image is generated.
+    image_format:
+      type: string
+      description: Image format, png when image exists.
+    summary:
+      type: string
+      description: Human-readable summary.
+
+extra:
+  python:
+    source: tools/query_node_by_id.py

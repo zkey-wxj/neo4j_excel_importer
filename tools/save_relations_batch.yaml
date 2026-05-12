@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save relation data to Neo4j in batch with JSON rows.
     zh_Hans: 使用 JSON 数组批量保存关系数据到 Neo4j。
-  llm: Save relations in batch. JSON items must use src/tgt/relType/description/groupId/properties.
+  llm: Save relations in batch. JSON items use source_uid/target_uid/rel_type/direction/description/group_id/properties/meta.
 
 parameters:
   - name: relations_json
@@ -21,37 +21,52 @@ parameters:
     human_description:
       en_US: >
         Array of relation objects.
-        Each item required: src, tgt, relType.
-        Optional: description, groupId, properties.
+        Each item required: source_uid, target_uid, rel_type.
+        Optional: direction, description, group_id, properties, meta.
       zh_Hans: >
         关系对象数组。
-        每项必填：src、tgt、relType。
-        可选：description、groupId、properties。
+        每项必填：source_uid、target_uid、rel_type。
+        可选：direction、description、group_id、properties、meta。
     llm_description: >
       Array item fields:
-      src(string, required), tgt(string, required), relType(string, required),
-      description(string, optional), groupId(string, optional), properties(object, optional).
+      source_uid(string, required), target_uid(string, required), rel_type(string, required),
+      direction(forward|bidirectional, optional), description(string, optional),
+      group_id(string, optional), properties(object, optional), meta(object, optional).
     schema:
       type: array
       items:
         type: object
         properties:
-          src:
+          source_uid:
             type: string
-          tgt:
+          target_uid:
             type: string
-          relType:
+          rel_type:
             type: string
+          direction:
+            type: string
+            enum: [forward, bidirectional]
           description:
             type: string
-          groupId:
+          group_id:
             type: string
           properties:
             type: object
+          meta:
+            type: object
+            properties:
+              created_at:
+                type: string
+              updated_at:
+                type: string
+              source:
+                type: string
+              version:
+                type: integer
         required:
-          - src
-          - tgt
-          - relType
+          - source_uid
+          - target_uid
+          - rel_type
     form: llm
 
   - name: batch_size
@@ -74,8 +89,8 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional default group id for this batch. Used when an item has no groupId/group_id.
-      zh_Hans: 本批次写入的可选默认分组 ID；当某条关系未提供 groupId/group_id 时使用。
+      en_US: Optional default group id for this batch. Used when an item has no group_id.
+      zh_Hans: 本批次写入的可选默认分组 ID；当某条关系未提供 group_id 时使用。
     llm_description: Optional default group id for this batch write operation.
     form: llm
 

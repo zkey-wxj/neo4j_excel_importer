@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,25 +18,37 @@ except Exception:  # pragma: no cover
 # 测试脚本内置映射（不读取 YAML）
 DEFAULT_MAPPING: dict[str, Any] = {
     "node": {
-        "nodeId": "NodeID",
+        "uid": "NodeID",
         "name": "name",
         "labels": ["node_type", "keywords"],
-        "description": ["description", "definition", "说明", "备注", "简介"],
-        "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"],
+        "description": ["definition", "description", "说明", "备注", "简介"],
+        "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
     "relation": {
-        "src": "SourceID",
-        "relType": "RelationType",
-        "tgt": "TargetID",
+        "source_uid": "SourceID",
+        "rel_type": "RelationType",
+        "target_uid": "TargetID",
         "description": ["description", "说明", "备注", "简介"],
-        "properties": ["*"],
+        "properties": [],
     },
-    "groupId": "group_id",
+    "group_id": "group_id",
 }
 
 TITLE_LABEL = "Title"
 CONTAINS_REL = "包含"
 SPLIT_PATTERN = re.compile(r"[;,，；]+")
+
+
+def _iso_utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _build_meta() -> dict[str, Any]:
+    now = _iso_utc_now()
+    return {
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def _norm_header(value: Any) -> str:
@@ -102,21 +115,21 @@ class Recognizer:
         self.node_map = self.mapping.get("node", {})
         self.rel_map = self.mapping.get("relation", {})
 
-        self.node_id_col = self.node_map.get("nodeId", "NodeID")
+        self.node_id_col = self.node_map.get("uid", "NodeID")
         self.node_name_col = self.node_map.get("name", "name")
-        self.node_labels_cols = _normalize_labels(self.node_map.get("labels", []))
+        self.node_labels_cols = _normalize_labels(self.node_map.get("labels", self.node_map.get("primary_label", "node_type")))
         self.node_desc_cols = _normalize_labels(
             self.node_map.get("description", self.node_map.get("definition", "description"))
         )
         self.node_prop_cols = self.node_map.get("properties", ["*"])
 
-        self.rel_src_col = self.rel_map.get("src", "SourceID")
-        self.rel_type_col = self.rel_map.get("relType", "RelationType")
-        self.rel_tgt_col = self.rel_map.get("tgt", "TargetID")
+        self.rel_src_col = self.rel_map.get("source_uid", "SourceID")
+        self.rel_type_col = self.rel_map.get("rel_type", "RelationType")
+        self.rel_tgt_col = self.rel_map.get("target_uid", "TargetID")
         self.rel_desc_cols = _normalize_labels(self.rel_map.get("description", ["description", "说明", "备注", "简介"]))
         self.rel_prop_cols = self.rel_map.get("properties", ["*"])
 
-        self.group_id_col = self.mapping.get("groupId", "group_id")
+        self.group_id_col = self.mapping.get("group_id", "group_id")
 
     def parse_markdown(self, content: str) -> dict[str, Any]:
         rows = self._parse_markdown_rows(content)
@@ -215,14 +228,16 @@ class Recognizer:
                 node = self._build_node(row_dict)
                 if node:
                     self._upsert_node(node)
-                    if current_title_node_id and current_title_node_id != node["nodeId"]:
+                    if current_title_node_id and current_title_node_id != node["uid"]:
                         self._upsert_relation(
                             {
-                                "src": current_title_node_id,
-                                "relType": CONTAINS_REL,
-                                "tgt": node["nodeId"],
-                                "groupId": node.get("groupId", ""),
+                                "source_uid": current_title_node_id,
+                                "rel_type": CONTAINS_REL,
+                                "target_uid": node["uid"],
+                                "direction": "forward",
+                                "group_id": node.get("group_id", ""),
                                 "properties": {},
+                                "meta": _build_meta(),
                             }
                         )
                     continue
@@ -330,18 +345,20 @@ class Recognizer:
         if not node_id:
             node_id = f"auto_{uuid.uuid4().hex[:12]}"
 
-        labels: list[str] = []
+        label_values: list[str] = []
         for field in self.node_labels_cols:
             raw = self._extract_by_header(data, field)
             if raw:
-                labels.extend(_split_label_values(raw))
+                label_values.extend(_split_label_values(raw))
 
         dedup_labels: list[str] = []
         label_seen: set[str] = set()
-        for item in labels:
+        for item in label_values:
             if item and item not in label_seen:
                 label_seen.add(item)
                 dedup_labels.append(item)
+        if not dedup_labels:
+            dedup_labels = ["Node"]
 
         description = self._extract_first_by_headers(data, self.node_desc_cols)
         group_id = self._extract_by_header(data, self.group_id_col)
@@ -358,14 +375,17 @@ class Recognizer:
 
         props = self._collect_properties(data, self.node_prop_cols, reserved)
 
-        return {
-            "nodeId": node_id,
+        node: dict[str, Any] = {
+            "uid": node_id,
             "name": name,
             "labels": dedup_labels,
-            "description": description,
-            "groupId": group_id,
+            "group_id": group_id,
             "properties": props,
+            "meta": _build_meta(),
         }
+        if description:
+            node["description"] = description
+        return node
 
     def _build_relation(self, data: dict[str, str]) -> dict[str, Any] | None:
         src = self._extract_by_header(data, self.rel_src_col)
@@ -387,14 +407,18 @@ class Recognizer:
             reserved.add(_norm_header(field))
         props = self._collect_properties(data, self.rel_prop_cols, reserved)
 
-        return {
-            "src": src,
-            "relType": rel_type,
-            "tgt": tgt,
-            "description": description,
-            "groupId": group_id,
+        relation: dict[str, Any] = {
+            "source_uid": src,
+            "target_uid": tgt,
+            "rel_type": rel_type,
+            "direction": "forward",
+            "group_id": group_id,
             "properties": props,
+            "meta": _build_meta(),
         }
+        if description:
+            relation["description"] = description
+        return relation
 
     def _ensure_title_node(self, title: str) -> str:
         existing = self._find_title_node_id(title)
@@ -404,24 +428,25 @@ class Recognizer:
         node_id = f"title_{uuid.uuid4().hex[:12]}"
         self._upsert_node(
             {
-                "nodeId": node_id,
+                "uid": node_id,
                 "name": title,
                 "labels": [TITLE_LABEL],
-                "description": "",
-                "groupId": "",
+                "group_id": "",
                 "properties": {},
+                "meta": _build_meta(),
             }
         )
         return node_id
 
     def _find_title_node_id(self, title: str) -> str | None:
         for node_id, node in self.nodes.items():
-            if node.get("name") == title and TITLE_LABEL in (node.get("labels") or []):
+            labels = node.get("labels") or []
+            if node.get("name") == title and TITLE_LABEL in labels:
                 return node_id
         return None
 
     def _upsert_node(self, node: dict[str, Any]) -> None:
-        node_id = node["nodeId"]
+        node_id = node["uid"]
         existing = self.nodes.get(node_id)
         if not existing:
             self.nodes[node_id] = node
@@ -431,17 +456,16 @@ class Recognizer:
             existing["name"] = node["name"]
         if node.get("description") and not existing.get("description"):
             existing["description"] = node["description"]
-        if node.get("groupId") and not existing.get("groupId"):
-            existing["groupId"] = node["groupId"]
-
-        labels = (existing.get("labels") or []) + (node.get("labels") or [])
+        if node.get("group_id") and not existing.get("group_id"):
+            existing["group_id"] = node["group_id"]
+        merged_labels = (existing.get("labels") or []) + (node.get("labels") or [])
         dedup_labels: list[str] = []
         seen: set[str] = set()
-        for item in labels:
+        for item in merged_labels:
             if item and item not in seen:
                 seen.add(item)
                 dedup_labels.append(item)
-        existing["labels"] = dedup_labels
+        existing["labels"] = dedup_labels or ["Node"]
 
         props = existing.get("properties") or {}
         for k, v in (node.get("properties") or {}).items():
@@ -450,14 +474,18 @@ class Recognizer:
         existing["properties"] = props
 
     def _upsert_relation(self, relation: dict[str, Any]) -> None:
-        key = (relation["src"], relation["relType"], relation["tgt"])
+        key = (relation["source_uid"], relation["rel_type"], relation["target_uid"])
         existing = self.relations.get(key)
         if not existing:
             self.relations[key] = relation
             return
 
-        if relation.get("groupId") and not existing.get("groupId"):
-            existing["groupId"] = relation["groupId"]
+        if relation.get("group_id") and not existing.get("group_id"):
+            existing["group_id"] = relation["group_id"]
+        if relation.get("description") and not existing.get("description"):
+            existing["description"] = relation["description"]
+        if relation.get("direction") and not existing.get("direction"):
+            existing["direction"] = relation["direction"]
 
         props = existing.get("properties") or {}
         for k, v in (relation.get("properties") or {}).items():

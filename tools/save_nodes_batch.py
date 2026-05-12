@@ -6,8 +6,8 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from tools.graph_write_common import get_credentials, write_nodes
-from tools.types import clean_text, normalize_node
+from core.graph_write_common import get_credentials, write_nodes
+from core.types import clean_text, normalize_node
 
 
 class SaveNodesBatchTool(Tool):
@@ -26,8 +26,8 @@ class SaveNodesBatchTool(Tool):
             rows = [normalize_node(item, index=i) for i, item in enumerate(nodes_payload)]
             if group_id:
                 for row in rows:
-                    if not clean_text(row.get("groupId")):
-                        row["groupId"] = group_id
+                    if not clean_text(row.get("group_id")):
+                        row["group_id"] = group_id
             uri, user, pwd = get_credentials(self.runtime)
             count = write_nodes(uri, user, pwd, rows, batch_size=batch_size)
         except Exception as exc:

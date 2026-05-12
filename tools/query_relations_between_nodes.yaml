@@ -1,0 +1,103 @@
+identity:
+  name: query_relations_between_nodes
+  author: wxj
+  label:
+    en_US: Query Relations Between Nodes
+    zh_Hans: 查询两节点间关系
+
+description:
+  human:
+    en_US: Query directed relations from source_uid node to target_uid node.
+    zh_Hans: 查询从源节点到目标节点的有向关系。
+  llm: Query directed relations by source_uid/target_uid with optional relation type/group_id/limit.
+
+parameters:
+  - name: source_uid
+    type: string
+    required: true
+    label:
+      en_US: Source Node ID
+      zh_Hans: 源节点 ID
+    human_description:
+      en_US: Source uid.
+      zh_Hans: 源节点 uid。
+    llm_description: Source uid.
+    form: llm
+
+  - name: target_uid
+    type: string
+    required: true
+    label:
+      en_US: Target Node ID
+      zh_Hans: 目标节点 ID
+    human_description:
+      en_US: Target uid.
+      zh_Hans: 目标节点 uid。
+    llm_description: Target uid.
+    form: llm
+
+  - name: relation_type
+    type: string
+    required: false
+    label:
+      en_US: Relation Type
+      zh_Hans: 关系类型
+    human_description:
+      en_US: Optional relation type filter. Supports actual type(r) or r.rel_type.
+      zh_Hans: 可选关系类型过滤，支持匹配 type(r) 或 r.rel_type。
+    llm_description: Optional relation type filter.
+    form: llm
+
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional group_id filter on both sides.
+      zh_Hans: 可选 group_id 过滤（同时作用于两端节点）。
+    llm_description: Optional group_id filter.
+    form: llm
+
+  - name: limit
+    type: number
+    required: false
+    default: 20
+    label:
+      en_US: Result Limit
+      zh_Hans: 返回条数上限
+    human_description:
+      en_US: Max rows to return, default 20, max 100.
+      zh_Hans: 最大返回行数，默认 20，最大 100。
+    llm_description: Result limit, default 20, max 100.
+    form: form
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    count:
+      type: integer
+      description: Matched row count.
+    results:
+      type: array
+      description: Query result rows.
+    summary:
+      type: string
+      description: Human-readable summary.
+
+extra:
+  python:
+    source: tools/query_relations_between_nodes.py

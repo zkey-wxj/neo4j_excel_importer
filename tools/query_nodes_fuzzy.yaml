@@ -1,0 +1,79 @@
+identity:
+  name: query_nodes_fuzzy
+  author: wxj
+  label:
+    en_US: Fuzzy Query Nodes
+    zh_Hans: 模糊查询节点
+
+description:
+  human:
+    en_US: Fuzzy query KnowledgeNode by keyword in uid/name/description.
+    zh_Hans: 按关键字在 uid/name/description 中进行模糊查询。
+  llm: Fuzzy query KnowledgeNode by keyword with optional group_id and limit.
+
+parameters:
+  - name: keyword
+    type: string
+    required: true
+    label:
+      en_US: Keyword
+      zh_Hans: 关键词
+    human_description:
+      en_US: Search keyword for uid, name, and description.
+      zh_Hans: 用于搜索 uid、name、description 的关键词。
+    llm_description: Keyword used for fuzzy matching.
+    form: llm
+
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional group_id filter.
+      zh_Hans: 可选 group_id 过滤条件。
+    llm_description: Optional group_id filter.
+    form: llm
+
+  - name: limit
+    type: number
+    required: false
+    default: 20
+    label:
+      en_US: Result Limit
+      zh_Hans: 返回条数上限
+    human_description:
+      en_US: Max rows to return, default 20, max 100.
+      zh_Hans: 最大返回行数，默认 20，最大 100。
+    llm_description: Result limit, default 20, max 100.
+    form: form
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    count:
+      type: integer
+      description: Matched row count.
+    results:
+      type: array
+      description: Query result rows.
+    summary:
+      type: string
+      description: Human-readable summary.
+
+extra:
+  python:
+    source: tools/query_nodes_fuzzy.py

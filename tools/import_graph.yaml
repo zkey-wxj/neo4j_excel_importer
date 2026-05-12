@@ -114,52 +114,49 @@ parameters:
         JSON object for explicit field mapping. If omitted, the following default mapping is used:
         {
           "node": {
-            "nodeId": "NodeID",
+            "uid": "NodeID",
             "name": "name",
-            "labels": ["node_type"],
+            "labels": ["node_type", "keywords"],
             "description": ["description", "definition", "说明", "备注", "简介"],
-            "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"]
+            "properties": ["level", "grade_range", "keywords", "teaching_tip"]
           },
           "relation": {
-            "src": "SourceID",
-            "relType": "RelationType",
-            "tgt": "TargetID",
+            "source_uid": "SourceID",
+            "rel_type": "RelationType",
+            "target_uid": "TargetID",
             "description": ["description", "说明", "备注", "简介"],
-            "properties": ["说明", "description", "*"]
-          },
-          "groupId": "group_id"
+            "properties": []
+          }
         }
       zh_Hans: >
         字段映射 JSON 对象。不传时使用以下默认映射：
         {
           "node": {
-            "nodeId": "NodeID",
+            "uid": "NodeID",
             "name": "name",
-            "labels": ["node_type"],
+            "labels": ["node_type", "keywords"],
             "description": ["description", "definition", "说明", "备注", "简介"],
-            "properties": ["level", "grade_range", "keywords", "teaching_tip", "*"]
+            "properties": ["level", "grade_range", "keywords", "teaching_tip"]
           },
           "relation": {
-            "src": "SourceID",
-            "relType": "RelationType",
-            "tgt": "TargetID",
+            "source_uid": "SourceID",
+            "rel_type": "RelationType",
+            "target_uid": "TargetID",
             "description": ["description", "说明", "备注", "简介"],
-            "properties": ["说明", "description", "*"]
-          },
-          "groupId": "group_id"
+            "properties": []
+          }
         }
     llm_description: >
       Optional mapping JSON object for node/relation fields:
-      node.nodeId, node.name, node.labels, node.description, node.properties[],
-      relation.src, relation.relType, relation.tgt, relation.description, relation.properties[],
-      groupId.
+      node.uid, node.name, node.labels, node.description, node.properties[],
+      relation.source_uid, relation.rel_type, relation.target_uid, relation.description, relation.properties[].
     schema:
       type: object
       properties:
         node:
           type: object
           properties:
-            nodeId:
+            uid:
               type: string
             name:
               type: string
@@ -180,11 +177,11 @@ parameters:
         relation:
           type: object
           properties:
-            src:
+            source_uid:
               type: string
-            relType:
+            rel_type:
               type: string
-            tgt:
+            target_uid:
               type: string
             description:
               oneOf:
@@ -196,8 +193,6 @@ parameters:
               type: array
               items:
                 type: string
-        groupId:
-          type: string
     form: llm
 
 output_schema:
