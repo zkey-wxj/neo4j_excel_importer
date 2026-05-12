@@ -26,7 +26,6 @@
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `excel_url` | string | — | `.xlsx` 文件的公开 HTTPS URL |
-| `excel_file` | file | — | 直接上传 `.xlsx` 文件（与 URL 二选一） |
 | `batch_size` | number | `500` | 每次 Neo4j 事务写入的行数 |
 | `clear_before_import` | boolean | `false` | 导入前删除数据库中所有节点和关系（⚠️ 危险） |
 

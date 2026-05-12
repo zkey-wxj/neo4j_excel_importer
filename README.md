@@ -26,7 +26,6 @@ Section heading rows and blank rows are skipped automatically.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `excel_url` | string | — | Public HTTPS URL of the `.xlsx` file |
-| `excel_file` | file | — | Uploaded `.xlsx` file (alternative to URL) |
 | `batch_size` | number | `500` | Rows per Neo4j transaction |
 | `clear_before_import` | boolean | `false` | Delete all nodes/relationships before importing |
 

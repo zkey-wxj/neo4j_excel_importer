@@ -135,7 +135,6 @@ class ImportGraphTool(Tool):
 
         # ── 1. 参数读取 ──────────────────────────────────────────────────
         excel_url   = str(tool_parameters.get("excel_url") or "").strip()
-        excel_files = tool_parameters.get("excel_file")          # dify Files 对象或 File 对象
         excel_text  = str(tool_parameters.get("excel_text") or "").strip()
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
@@ -159,8 +158,8 @@ class ImportGraphTool(Tool):
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🧩 group_id: {group_id}\n")
 
         # ── 2. 参数校验 ──────────────────────────────────────────────────
-        if not excel_text and not excel_url and not self._has_uploaded_files(excel_files):
-            yield self.create_text_message("❌ 请提供 excel_text、excel_url 或上传 excel_file，三者不能同时为空。")
+        if not excel_text and not excel_url:
+            yield self.create_text_message("❌ 请提供 excel_text 或 excel_url，二者不能同时为空。")
             return
 
         # ── 3. 读取并解析图谱 ────────────────────────────────────────────
@@ -177,7 +176,7 @@ class ImportGraphTool(Tool):
             yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "📥 开始读取 Excel 文件...\n")
             yield self.create_text_message("⏳ 正在读取 Excel 文件…")
             try:
-                excel_bytes = self._load_excel_bytes(excel_url, excel_files)
+                excel_bytes = self._load_excel_bytes(excel_url)
             except Exception as exc:
                 logger.error("读取 Excel 失败: %s", exc)
                 yield self.create_text_message(f"❌ 读取 Excel 失败：{exc}")
@@ -235,54 +234,13 @@ class ImportGraphTool(Tool):
 
     # ── 内部：加载 Excel 字节 ────────────────────────────────────────────
 
-    def _load_excel_bytes(self, excel_url: str, excel_files: Any) -> bytes:
-        if self._has_uploaded_files(excel_files):
-            selected_file = self._pick_first_xlsx_file(excel_files)
-            if selected_file is None:
-                if not excel_url:
-                    raise ValueError("上传文件中未找到 .xlsx 文件，且未提供 excel_url。")
-            else:
-                # Dify File 对象：优先用 .blob，回退 .url
-                if hasattr(selected_file, "blob") and selected_file.blob:
-                    return selected_file.blob
-                if hasattr(selected_file, "url") and selected_file.url:
-                    excel_url = selected_file.url
-                else:
-                    if not excel_url:
-                        raise ValueError("选中的 .xlsx 文件既没有 blob 也没有 url，且未提供 excel_url。")
-
+    def _load_excel_bytes(self, excel_url: str) -> bytes:
         if excel_url:
             import urllib.request
             with urllib.request.urlopen(excel_url, timeout=60) as resp:
                 return resp.read()
 
         raise ValueError("无法获取 Excel 数据。")
-
-    @staticmethod
-    def _pick_first_xlsx_file(excel_files: Any) -> Any | None:
-        if isinstance(excel_files, list):
-            candidates = excel_files
-        else:
-            candidates = [excel_files]
-
-        for file_obj in candidates:
-            filename = str(
-                getattr(file_obj, "filename", None)
-                or getattr(file_obj, "name", None)
-                or ""
-            ).strip().lower()
-            if filename.endswith(".xlsx"):
-                return file_obj
-
-        return None
-
-    @staticmethod
-    def _has_uploaded_files(excel_files: Any) -> bool:
-        if excel_files is None:
-            return False
-        if isinstance(excel_files, list):
-            return len(excel_files) > 0
-        return True
 
     # ── 内部：解析 Markdown 表格 ────────────────────────────────────────
 
