@@ -653,9 +653,6 @@ class ImportGraphTool(Tool):
                     properties = normalize_properties(properties, field_name="node.properties")
                 else:
                     properties = {}
-                meta = row_data.get("meta")
-                if isinstance(meta, dict):
-                    properties["meta"] = meta
                 parsed_nodes.append(
                     NodePayload(
                         uid=uid,
@@ -693,12 +690,6 @@ class ImportGraphTool(Tool):
                     properties = normalize_properties(properties, field_name="relation.properties")
                 else:
                     properties = {}
-                direction = clean_text(row_data.get("direction"))
-                if direction:
-                    properties["direction"] = direction
-                meta = row_data.get("meta")
-                if isinstance(meta, dict):
-                    properties["meta"] = meta
                 parsed_relations.append(
                     RelationPayload(
                         source_uid=source_uid,
@@ -741,7 +732,7 @@ class ImportGraphTool(Tool):
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
-            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败：{exc}\n")
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败\n")
             raise
 
         # 统计
