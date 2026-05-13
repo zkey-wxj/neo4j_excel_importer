@@ -185,7 +185,7 @@ class ImportGraphTool(Tool):
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
-            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败：{exc}\n")
+            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败\n")
             yield self.create_text_message(f"❌ 写入 Neo4j 失败：{exc}")
             return
 
@@ -702,9 +702,14 @@ class ImportGraphTool(Tool):
                     node_indexes.append(index)
                     node_texts.append(embedding_text)
 
+                processed_count = 0
                 for start in range(0, len(node_texts), batch_size):
                     text_batch = node_texts[start: start + batch_size]
                     index_batch = node_indexes[start: start + batch_size]
+                    yield self.create_stream_variable_message(
+                        self._PROGRESS_VARIABLE,
+                        f"🧠 向量生成，当前批 {len(text_batch)} 条。\n",
+                    )
                     vectors = generate_embeddings(
                         self.session,
                         model_config=embedding_model,
@@ -714,6 +719,11 @@ class ImportGraphTool(Tool):
                         raise ValueError("embedding 返回数量与节点数量不一致。")
                     for local_index, node_index in enumerate(index_batch):
                         parsed_nodes[node_index]["embedding"] = vectors[local_index]
+                    processed_count += len(index_batch)
+                    yield self.create_stream_variable_message(
+                        self._PROGRESS_VARIABLE,
+                        f"🧠 向量生成，累计 {processed_count}/{len(node_texts)} 条。\n",
+                    )
                 yield self.create_stream_variable_message(
                     self._PROGRESS_VARIABLE,
                     "🧠 节点向量生成完成。\n",
@@ -780,7 +790,6 @@ class ImportGraphTool(Tool):
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
-            yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"❌ 写入失败\n")
             raise
 
         # 统计

@@ -1,4 +1,4 @@
-version: 0.0.10
+version: 0.0.11
 type: "plugin"
 author: "wxj"
 name: "neo4j_excel_importer"
@@ -23,7 +23,7 @@ plugins:
   tools:
     - "provider/neo4j_excel_importer.yaml"
 meta:
-  version: 0.0.10
+  version: 0.0.11
   arch:
     - "amd64"
     - "arm64"
