@@ -208,6 +208,19 @@ parameters:
     llm_description: Optional text-embedding model selector for node embeddings.
     form: form
 
+  - name: embedding_batch_size
+    type: number
+    required: false
+    default: 50
+    label:
+      en_US: Embedding Batch Size
+      zh_Hans: 向量批次大小
+    human_description:
+      en_US: Batch size used only for text-embedding requests. If omitted, falls back to `batch_size`.
+      zh_Hans: 仅用于向量请求的批次大小；不传时回退使用 `batch_size`。
+    llm_description: Optional batch size for embedding requests only.
+    form: form
+
 output_schema:
   type: object
   properties:

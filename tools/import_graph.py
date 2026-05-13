@@ -106,7 +106,10 @@ class ImportGraphTool(Tool):
         # ── 1. 参数读取 ──────────────────────────────────────────────────
         excel_url   = str(tool_parameters.get("excel_url") or "").strip()
         excel_text  = str(tool_parameters.get("excel_text") or "").strip()
-        batch_size  = int(tool_parameters.get("batch_size") or 500)
+        batch_size  = max(1, int(tool_parameters.get("batch_size") or 500))
+        embedding_batch_size = int(tool_parameters.get("embedding_batch_size") or 50)
+        if embedding_batch_size <= 0:
+            embedding_batch_size = 50
         clear_first = bool(tool_parameters.get("clear_before_import", False))
         input_group_id = str(tool_parameters.get("group_id") or "").strip()
         embedding_model = tool_parameters.get("embedding_model")
@@ -123,8 +126,8 @@ class ImportGraphTool(Tool):
         neo4j_pwd  = str(credentials.get("neo4j_password", "")).strip()
 
         logger.info(
-            "ImportGraphTool invoked | uri=%s user=%s batch=%d clear=%s group_id=%s",
-            neo4j_uri, neo4j_user, batch_size, clear_first, group_id,
+            "ImportGraphTool invoked | uri=%s user=%s batch=%d embedding_batch=%d clear=%s group_id=%s",
+            neo4j_uri, neo4j_user, batch_size, embedding_batch_size, clear_first, group_id,
         )
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🚀 开始导入图谱任务...\n")
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🧩 group_id: {group_id}\n")
@@ -182,6 +185,7 @@ class ImportGraphTool(Tool):
                 nodes_df, rels_df, neo4j_uri, neo4j_user, neo4j_pwd,
                 batch_size=batch_size, clear_first=clear_first, group_id=group_id,
                 embedding_model=embedding_model,
+                embedding_batch_size=embedding_batch_size,
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
@@ -632,6 +636,7 @@ class ImportGraphTool(Tool):
         pwd: str,
         *,
         batch_size: int = 500,
+        embedding_batch_size: int = 50,
         clear_first: bool = False,
         group_id: str,
         embedding_model: Any = None,
@@ -691,7 +696,7 @@ class ImportGraphTool(Tool):
             if embedding_model:
                 yield self.create_stream_variable_message(
                     self._PROGRESS_VARIABLE,
-                    "🧠 开始生成节点向量...\n",
+                    f"🧠 开始生成节点向量...\n",
                 )
                 node_indexes: list[int] = []
                 node_texts: list[str] = []
@@ -703,12 +708,14 @@ class ImportGraphTool(Tool):
                     node_texts.append(embedding_text)
 
                 processed_count = 0
-                for start in range(0, len(node_texts), batch_size):
-                    text_batch = node_texts[start: start + batch_size]
-                    index_batch = node_indexes[start: start + batch_size]
+                total_batches = (len(node_texts) + embedding_batch_size - 1) // embedding_batch_size
+                for start in range(0, len(node_texts), embedding_batch_size):
+                    text_batch = node_texts[start: start + embedding_batch_size]
+                    index_batch = node_indexes[start: start + embedding_batch_size]
+                    batch_no = (start // embedding_batch_size) + 1
                     yield self.create_stream_variable_message(
                         self._PROGRESS_VARIABLE,
-                        f"🧠 向量生成，当前批 {len(text_batch)} 条。\n",
+                        f"🧠 向量批次 {batch_no}/{total_batches}，当前批 {len(text_batch)} 条。\n",
                     )
                     vectors = generate_embeddings(
                         self.session,
