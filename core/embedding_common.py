@@ -26,22 +26,22 @@ def build_node_embedding_text(node: NodePayload) -> str:
     properties = node.get("properties") or {}
 
     if uid:
-        parts.append(f"uid: {uid}")
+        parts.append(uid)
     if name:
-        parts.append(f"name: {name}")
+        parts.append(name)
     if description:
-        parts.append(f"description: {description}")
+        parts.append(description)
     if labels:
-        parts.append("labels: " + ", ".join(str(item).strip() for item in labels if str(item).strip()))
+        parts.append(", ".join(str(item).strip() for item in labels if str(item).strip()))
     if isinstance(properties, Mapping) and properties:
         for key in sorted(properties.keys()):
             key_text = clean_text(key)
             value_text = clean_text(properties.get(key))
             if not key_text or not value_text:
                 continue
-            parts.append(f"{key_text}: {value_text}")
+            parts.append(value_text)
 
-    return "\n".join(part for part in parts if part).strip()
+    return "；".join(part for part in parts if part).strip()
 
 
 def generate_embeddings(
