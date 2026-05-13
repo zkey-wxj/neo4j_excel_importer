@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import time
 from typing import Any
 from dify_plugin.core.runtime import Session
 from dify_plugin.entities.model.text_embedding import (
@@ -56,7 +57,8 @@ def generate_embeddings(
         return []
 
     normalized_model_config = _to_text_embedding_model_config(model_config)
-    result = session.model.text_embedding.invoke(
+    result = _invoke_text_embedding_with_retry(
+        session=session,
         model_config=normalized_model_config,
         texts=texts,
     )
@@ -77,6 +79,55 @@ def generate_embeddings(
             normalized_vector.append(float(value))
         normalized.append(normalized_vector)
     return normalized
+
+
+def _invoke_text_embedding_with_retry(
+    *,
+    session: Session,
+    model_config: TextEmbeddingModelConfig,
+    texts: list[str],
+    max_attempts: int = 3,
+    initial_delay_seconds: float = 1.0,
+) -> TextEmbeddingResult:
+    """
+    调用 embedding 模型并对临时性失败做有限重试，避免偶发 5xx 直接中断导入。
+    """
+    delay_seconds = initial_delay_seconds
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return session.model.text_embedding.invoke(
+                model_config=model_config,
+                texts=texts,
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt >= max_attempts or not _is_retryable_embedding_error(exc):
+                raise
+            time.sleep(delay_seconds)
+            delay_seconds *= 2
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("text_embedding 调用失败，且未捕获具体异常。")
+
+
+def _is_retryable_embedding_error(exc: Exception) -> bool:
+    """
+    判断 embedding 失败是否属于可重试的临时错误。
+    """
+    message = str(exc).lower()
+    retryable_markers = (
+        "500",
+        "502",
+        "503",
+        "504",
+        "request failed",
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "connection reset",
+    )
+    return any(marker in message for marker in retryable_markers)
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:

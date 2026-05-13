@@ -708,15 +708,9 @@ class ImportGraphTool(Tool):
                     node_texts.append(embedding_text)
 
                 processed_count = 0
-                total_batches = (len(node_texts) + embedding_batch_size - 1) // embedding_batch_size
                 for start in range(0, len(node_texts), embedding_batch_size):
                     text_batch = node_texts[start: start + embedding_batch_size]
                     index_batch = node_indexes[start: start + embedding_batch_size]
-                    batch_no = (start // embedding_batch_size) + 1
-                    yield self.create_stream_variable_message(
-                        self._PROGRESS_VARIABLE,
-                        f"🧠 向量批次 {batch_no}/{total_batches}，当前批 {len(text_batch)} 条。\n",
-                    )
                     vectors = generate_embeddings(
                         self.session,
                         model_config=embedding_model,
@@ -729,7 +723,7 @@ class ImportGraphTool(Tool):
                     processed_count += len(index_batch)
                     yield self.create_stream_variable_message(
                         self._PROGRESS_VARIABLE,
-                        f"🧠 向量生成，累计 {processed_count}/{len(node_texts)} 条。\n",
+                        f"🧠 向量已生成 {processed_count}/{len(node_texts)} 条。\n",
                     )
                 yield self.create_stream_variable_message(
                     self._PROGRESS_VARIABLE,
@@ -778,7 +772,7 @@ class ImportGraphTool(Tool):
 
             yield self.create_stream_variable_message(
                 self._PROGRESS_VARIABLE,
-                f"📦 开始写入节点，共 {len(node_rows)} 条，批大小 {batch_size}。\n"
+                f"📦 开始写入节点，共 {len(node_rows)} 条。\n"
             )
             nodes_count = write_nodes(uri, user, pwd, node_rows, batch_size=batch_size)
             yield self.create_stream_variable_message(
