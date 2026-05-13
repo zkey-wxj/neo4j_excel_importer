@@ -6,6 +6,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
+from core.embedding_common import build_node_embedding_text, generate_embeddings, has_embedding_model
 from core.graph_write_common import get_credentials, write_nodes
 from core.types import clean_text, normalize_node
 
@@ -13,6 +14,7 @@ from core.types import clean_text, normalize_node
 class SaveNodesBatchTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         nodes_payload = tool_parameters.get("nodes_json")
+        embedding_model = tool_parameters.get("embedding_model")
         batch_size = int(tool_parameters.get("batch_size") or 500)
         group_id = clean_text(tool_parameters.get("group_id"))
         if nodes_payload is None:
@@ -28,6 +30,25 @@ class SaveNodesBatchTool(Tool):
                 for row in rows:
                     if not clean_text(row.get("group_id")):
                         row["group_id"] = group_id
+            if has_embedding_model(embedding_model):
+                candidate_indexes: list[int] = []
+                candidate_texts: list[str] = []
+                for index, row in enumerate(rows):
+                    embedding_text = build_node_embedding_text(row)
+                    if not embedding_text:
+                        continue
+                    candidate_indexes.append(index)
+                    candidate_texts.append(embedding_text)
+                if candidate_texts:
+                    vectors = generate_embeddings(
+                        self.session,
+                        model_config=embedding_model,
+                        texts=candidate_texts,
+                    )
+                    if len(vectors) != len(candidate_indexes):
+                        raise ValueError("embedding 返回数量与输入节点数量不一致。")
+                    for vector_index, row_index in enumerate(candidate_indexes):
+                        rows[row_index]["embedding"] = vectors[vector_index]
             uri, user, pwd = get_credentials(self.runtime)
             count = write_nodes(uri, user, pwd, rows, batch_size=batch_size)
         except Exception as exc:

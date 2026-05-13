@@ -13,6 +13,9 @@ icon: "icon.svg"
 resource:
   memory: 268435456   # 256 MB —— pandas + openpyxl + neo4j driver
   permission:
+    model:
+      enabled: true
+      text_embedding: true
     storage:
       enabled: true
       size: 1048576

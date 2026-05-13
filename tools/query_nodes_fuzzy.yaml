@@ -61,6 +61,19 @@ parameters:
     llm_description: Optional Neo4j database name.
     form: form
 
+  - name: embedding_model
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Embedding Model
+      zh_Hans: 向量模型
+    human_description:
+      en_US: Optional Dify text-embedding model. When provided, vector retrieval is attempted before text fallback.
+      zh_Hans: 可选 Dify text-embedding 模型。提供后会优先尝试向量检索，失败时回退文本检索。
+    llm_description: Optional text-embedding model selector for vector retrieval.
+    form: form
+
 output_schema:
   type: object
   properties:

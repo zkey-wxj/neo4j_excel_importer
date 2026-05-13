@@ -21,6 +21,7 @@ class NodePayload(TypedDict):
     description: NotRequired[str]
     group_id: str
     properties: dict[str, Any]
+    embedding: NotRequired[list[float]]  # 向量数据
     meta: GraphMeta
 
 
@@ -47,7 +48,9 @@ def ensure_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
         try:
             parsed = json.loads(value)
         except Exception as exc:
-            raise ValueError(f"{field_name} 必须是对象，字符串无法解析为 JSON：{exc}") from exc
+            raise ValueError(
+                f"{field_name} 必须是对象，字符串无法解析为 JSON：{exc}"
+            ) from exc
         if isinstance(parsed, Mapping):
             return parsed
     raise ValueError(f"{field_name} 必须是 JSON 对象。")
@@ -66,7 +69,12 @@ def sanitize_rel_type(text: str) -> str:
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def normalize_labels(value: Any) -> list[str]:
@@ -115,6 +123,37 @@ def normalize_property_value(value: Any) -> Any:
                 normalized_list.append(clean_text(item))
         return normalized_list
     return clean_text(value)
+
+
+def normalize_embedding(
+    value: Any,
+    *,
+    field_name: str,
+) -> list[float]:
+    if value in (None, ""):
+        return []
+
+    candidate = value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            candidate = json.loads(text)
+        except Exception as exc:
+            raise ValueError(f"{field_name} 不是合法向量 JSON：{exc}") from exc
+
+    if not isinstance(candidate, list):
+        raise ValueError(f"{field_name} 必须是 number 数组。")
+    if not candidate:
+        return []
+
+    result: list[float] = []
+    for index, item in enumerate(candidate):
+        if not isinstance(item, (int, float)):
+            raise ValueError(f"{field_name}[{index}] 必须是数字。")
+        result.append(float(item))
+    return result
 
 
 def normalize_properties(
@@ -203,6 +242,10 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
         payload.get("properties"),
         field_name=f"nodes_json[{index}].properties",
     )
+    embedding = normalize_embedding(
+        payload.get("embedding"),
+        field_name=f"nodes_json[{index}].embedding",
+    )
     meta = normalize_meta(payload.get("meta"), field_name=f"nodes_json[{index}].meta")
 
     node: NodePayload = {
@@ -215,6 +258,8 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
     }
     if description:
         node["description"] = description
+    if embedding:
+        node["embedding"] = embedding
     return node
 
 
@@ -233,7 +278,9 @@ def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
 
     direction = clean_text(payload.get("direction")) or "forward"
     if direction not in {"forward", "bidirectional"}:
-        raise ValueError(f"relations_json[{index}].direction 非法，必须是 forward 或 bidirectional。")
+        raise ValueError(
+            f"relations_json[{index}].direction 非法，必须是 forward 或 bidirectional。"
+        )
 
     group_id = clean_text(payload.get("group_id"))
     description = clean_text(payload.get("description"))
@@ -241,7 +288,9 @@ def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
         payload.get("properties"),
         field_name=f"relations_json[{index}].properties",
     )
-    meta = normalize_meta(payload.get("meta"), field_name=f"relations_json[{index}].meta")
+    meta = normalize_meta(
+        payload.get("meta"), field_name=f"relations_json[{index}].meta"
+    )
 
     relation: RelationPayload = {
         "source_uid": source_uid,

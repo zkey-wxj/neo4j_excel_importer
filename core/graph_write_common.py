@@ -12,6 +12,7 @@ CONSTRAINT_CYPHER = (
     "CREATE CONSTRAINT IF NOT EXISTS "
     "FOR (n:KnowledgeNode) REQUIRE n.uid IS UNIQUE"
 )
+DEFAULT_VECTOR_INDEX_NAME = "knowledge_node_embedding_idx"
 
 UPSERT_NODES = """
 UNWIND $rows AS row
@@ -19,6 +20,9 @@ MERGE (n:KnowledgeNode {uid: row.uid})
 SET n.name        = row.name,
     n.description = row.description,
     n.group_id    = row.group_id
+FOREACH (_ IN CASE WHEN row.embedding IS NULL THEN [] ELSE [1] END |
+  SET n.embedding = row.embedding
+)
 SET n += row.props
 WITH n, row
 CALL apoc.create.addLabels(n, row.labels) YIELD node
@@ -31,6 +35,9 @@ MERGE (n:KnowledgeNode {uid: row.uid})
 SET n.name        = row.name,
     n.description = row.description,
     n.group_id    = row.group_id
+FOREACH (_ IN CASE WHEN row.embedding IS NULL THEN [] ELSE [1] END |
+  SET n.embedding = row.embedding
+)
 SET n += row.props
 """
 
@@ -124,12 +131,20 @@ def node_payload_to_cypher_row(payload: NodePayload) -> dict[str, Any]:
         target=props,
         reserved_keys=_NODE_RESERVED_PROP_KEYS,
     )
+    embedding = payload.get("embedding")
+    embedding_value: list[float] | None = None
+    if isinstance(embedding, list) and embedding:
+        embedding_value = [float(item) for item in embedding if isinstance(item, (int, float))]
+        if not embedding_value:
+            embedding_value = None
+
     return {
         "uid": clean_text(payload.get("uid")),
         "name": clean_text(payload.get("name")),
         "description": clean_text(payload.get("description")),
         "group_id": clean_text(payload.get("group_id")),
         "labels": payload.get("labels") or ["Node"],
+        "embedding": embedding_value,
         "props": props,
     }
 
@@ -236,10 +251,17 @@ def write_nodes(
     batch_size: int,
 ) -> int:
     cypher_rows = [node_payload_to_cypher_row(row) for row in rows]
+    detected_dimensions = _detect_embedding_dimensions(cypher_rows)
     driver = GraphDatabase.driver(uri, auth=(user, pwd))
     try:
         with driver.session() as session:
             session.run(CONSTRAINT_CYPHER)
+            if detected_dimensions > 0:
+                _ensure_vector_index(
+                    session,
+                    index_name=DEFAULT_VECTOR_INDEX_NAME,
+                    dimensions=detected_dimensions,
+                )
             apoc = has_apoc_add_labels(session)
             for start in range(0, len(cypher_rows), batch_size):
                 batch = cypher_rows[start: start + batch_size]
@@ -253,6 +275,38 @@ def write_nodes(
     finally:
         driver.close()
     return len(rows)
+
+
+def _detect_embedding_dimensions(rows: list[dict[str, Any]]) -> int:
+    for row in rows:
+        embedding = row.get("embedding")
+        if isinstance(embedding, list) and embedding:
+            return len(embedding)
+    return 0
+
+
+def _ensure_vector_index(
+    session: Any,
+    *,
+    index_name: str,
+    dimensions: int,
+) -> None:
+    if dimensions <= 0:
+        return
+
+    query = f"""
+CREATE VECTOR INDEX `{index_name}` IF NOT EXISTS
+FOR (n:KnowledgeNode) ON (n.embedding)
+OPTIONS {{indexConfig: {{
+  `vector.dimensions`: {dimensions},
+  `vector.similarity_function`: 'cosine'
+}}}}
+"""
+    try:
+        session.run(query)
+    except Exception:
+        # 向量索引创建失败不应阻断节点写入；查询阶段会自动走文本回退
+        return
 
 
 def write_relations(

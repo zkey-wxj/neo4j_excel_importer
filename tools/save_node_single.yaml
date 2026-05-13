@@ -66,6 +66,19 @@ parameters:
     llm_description: Optional default group id for this write operation.
     form: llm
 
+  - name: embedding_model
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Embedding Model
+      zh_Hans: 向量模型
+    human_description:
+      en_US: Optional Dify text-embedding model for generating node embedding.
+      zh_Hans: 可选 Dify text-embedding 模型，用于生成节点向量。
+    llm_description: Optional text-embedding model selector.
+    form: form
+
 output_schema:
   type: object
   properties:

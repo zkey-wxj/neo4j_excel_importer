@@ -34,6 +34,11 @@ import pandas as pd
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
+from core.embedding_common import (
+    build_node_embedding_text,
+    generate_embeddings,
+    has_embedding_model,
+)
 from core.graph_write_common import (
     clear_graph,
     get_apoc_capabilities,
@@ -105,6 +110,7 @@ class ImportGraphTool(Tool):
         batch_size  = int(tool_parameters.get("batch_size") or 500)
         clear_first = bool(tool_parameters.get("clear_before_import", False))
         input_group_id = str(tool_parameters.get("group_id") or "").strip()
+        embedding_model = tool_parameters.get("embedding_model")
         group_id    = input_group_id
         mapping     = self._resolve_mapping(tool_parameters.get("mapping"))
 
@@ -166,6 +172,7 @@ class ImportGraphTool(Tool):
             stats = yield from self._write_to_neo4j(
                 nodes_df, rels_df, neo4j_uri, neo4j_user, neo4j_pwd,
                 batch_size=batch_size, clear_first=clear_first, group_id=group_id,
+                embedding_model=embedding_model,
             )
         except Exception as exc:
             logger.error("写入 Neo4j 失败: %s", exc, exc_info=True)
@@ -618,6 +625,7 @@ class ImportGraphTool(Tool):
         batch_size: int = 500,
         clear_first: bool = False,
         group_id: str,
+        embedding_model: Any = None,
     ) -> Generator[ToolInvokeMessage, None, dict[str, Any]]:
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🔌 正在连接 Neo4j...\n")
         skipped_rels = 0
@@ -669,6 +677,37 @@ class ImportGraphTool(Tool):
                         properties=properties,
                         meta=_build_meta(),
                     )
+                )
+
+            if has_embedding_model(embedding_model):
+                yield self.create_stream_variable_message(
+                    self._PROGRESS_VARIABLE,
+                    "🧠 开始生成节点向量...\n",
+                )
+                node_indexes: list[int] = []
+                node_texts: list[str] = []
+                for index, node in enumerate(parsed_nodes):
+                    embedding_text = build_node_embedding_text(node)
+                    if not embedding_text:
+                        continue
+                    node_indexes.append(index)
+                    node_texts.append(embedding_text)
+
+                for start in range(0, len(node_texts), batch_size):
+                    text_batch = node_texts[start: start + batch_size]
+                    index_batch = node_indexes[start: start + batch_size]
+                    vectors = generate_embeddings(
+                        self.session,
+                        model_config=embedding_model,
+                        texts=text_batch,
+                    )
+                    if len(vectors) != len(index_batch):
+                        raise ValueError("embedding 返回数量与节点数量不一致。")
+                    for local_index, node_index in enumerate(index_batch):
+                        parsed_nodes[node_index]["embedding"] = vectors[local_index]
+                yield self.create_stream_variable_message(
+                    self._PROGRESS_VARIABLE,
+                    "🧠 节点向量生成完成。\n",
                 )
 
             # ── 组装关系（新结构） ────────────────────────────────
