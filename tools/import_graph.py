@@ -37,7 +37,6 @@ from dify_plugin.config.logger_format import plugin_logger_handler
 from core.embedding_common import (
     build_node_embedding_text,
     generate_embeddings,
-    has_embedding_model,
 )
 from core.graph_write_common import (
     clear_graph,
@@ -129,6 +128,16 @@ class ImportGraphTool(Tool):
         )
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, "🚀 开始导入图谱任务...\n")
         yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🧩 group_id: {group_id}\n")
+        if embedding_model:
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                "🧠 向量开关：已启用\n",
+            )
+        else:
+            yield self.create_stream_variable_message(
+                self._PROGRESS_VARIABLE,
+                "🧠 向量开关：未启用\n",
+            )
 
         # ── 2. 参数校验 ──────────────────────────────────────────────────
         if not excel_text and not excel_url:
@@ -183,7 +192,7 @@ class ImportGraphTool(Tool):
         # ── 6. 构建结果 ──────────────────────────────────────────────────
         summary = self._build_summary(stats)
         logger.info("导入完成 | %s", summary)
-        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🎉 Neo4j 写入完成\n\n{summary}")
+        yield self.create_stream_variable_message(self._PROGRESS_VARIABLE, f"🎉 Neo4j 写入完成")
         self._save_group_id_to_session(group_id)
 
         # 工作流变量输出
@@ -679,7 +688,7 @@ class ImportGraphTool(Tool):
                     )
                 )
 
-            if has_embedding_model(embedding_model):
+            if embedding_model:
                 yield self.create_stream_variable_message(
                     self._PROGRESS_VARIABLE,
                     "🧠 开始生成节点向量...\n",
