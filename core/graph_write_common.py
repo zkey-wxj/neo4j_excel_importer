@@ -189,11 +189,32 @@ def get_credentials(runtime: Any) -> tuple[str, str, str]:
     return uri, user, pwd
 
 
-def clear_graph(uri: str, user: str, pwd: str) -> None:
+def clear_graph(uri: str, user: str, pwd: str, group_id: str = "") -> None:
+    """清理图数据：传 group_id 时按组清理，否则清空全图。"""
     driver = GraphDatabase.driver(uri, auth=(user, pwd))
     try:
         with driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
+            normalized_group_id = clean_text(group_id)
+            if normalized_group_id:
+                # 先删该组关系，再删该组节点，避免跨组节点被误删。
+                session.run(
+                    """
+                    MATCH ()-[r]-()
+                    WHERE r.group_id = $group_id
+                    DELETE r
+                    """,
+                    group_id=normalized_group_id,
+                )
+                session.run(
+                    """
+                    MATCH (n:KnowledgeNode)
+                    WHERE n.group_id = $group_id
+                    DETACH DELETE n
+                    """,
+                    group_id=normalized_group_id,
+                )
+            else:
+                session.run("MATCH (n) DETACH DELETE n")
     finally:
         driver.close()
 
