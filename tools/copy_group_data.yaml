@@ -9,7 +9,7 @@ description:
   human:
     en_US: Copy all nodes and relations from one group_id to another group_id.
     zh_Hans: 将一个 group_id 下的节点和关系复制到另一个 group_id。
-  llm: Copy graph data from source_group_id to target_group_id, with uid_prefix to avoid uid collision.
+  llm: Copy graph data from source_group_id to target_group_id. When uid conflicts, merge by uid+name or auto rename and rewrite relations.
 
 parameters:
   - name: source_group_id
@@ -34,18 +34,6 @@ parameters:
       en_US: Target group id that receives copied data.
       zh_Hans: 接收复制数据的目标分组 ID。
     llm_description: Required target group id.
-    form: llm
-
-  - name: uid_prefix
-    type: string
-    required: false
-    label:
-      en_US: UID Prefix
-      zh_Hans: UID 前缀
-    human_description:
-      en_US: Optional prefix for copied node uid. Default is {target_group_id}
-      zh_Hans: 复制节点 uid 的可选前缀，默认使用 {target_group_id}
-    llm_description: Optional uid prefix for copied nodes to prevent uid uniqueness conflicts.
     form: llm
 
   - name: batch_size
@@ -82,15 +70,21 @@ output_schema:
     target_group_id:
       type: string
       description: Target group id.
-    uid_prefix:
-      type: string
-      description: Uid prefix used for copied nodes.
     nodes_count:
       type: integer
       description: Number of copied nodes.
     rels_count:
       type: integer
       description: Number of copied relations.
+    merged_nodes_count:
+      type: integer
+      description: Number of nodes merged because uid and name both matched.
+    renamed_nodes_count:
+      type: integer
+      description: Number of nodes renamed because uid matched but name differed.
+    direct_insert_nodes_count:
+      type: integer
+      description: Number of nodes inserted directly with original uid.
     summary:
       type: string
       description: Human-readable copy summary.
