@@ -27,13 +27,13 @@ parameters:
   - name: limit
     type: number
     required: false
-    default: 1000
+    default: 100
     label:
       en_US: Result Limit
       zh_Hans: 返回条数上限
     human_description:
-      en_US: Max rows for nodes and relations each. Default 1000, max 3000.
-      zh_Hans: 节点和关系各自的最大返回条数。默认 1000，最大 3000。
+      en_US: Max rows for nodes and relations each. Default 100, max 3000.
+      zh_Hans: 节点和关系各自的最大返回条数。默认 100，最大 3000。
     llm_description: Limit for nodes and relations query.
     form: form
 
@@ -70,10 +70,22 @@ output_schema:
       description: Queried group id.
     nodes_count:
       type: integer
-      description: Node rows count.
+      description: Returned node rows count.
     rels_count:
       type: integer
-      description: Relation rows count.
+      description: Returned relation rows count.
+    nodes_total:
+      type: integer
+      description: Total node count under group_id.
+    rels_total:
+      type: integer
+      description: Total relation count under group_id.
+    nodes_truncated:
+      type: boolean
+      description: Whether node rows are truncated by safe limit.
+    relations_truncated:
+      type: boolean
+      description: Whether relation rows are truncated by safe limit.
     nodes:
       type: array
       description: Node rows.
@@ -88,7 +100,10 @@ output_schema:
       description: Image format, png when image exists.
     request:
       type: object
-      description: Request echo including group_id/database/limit/generate_image.
+      description: Request echo including group_id/database/limit_requested/limit_applied/generate_image.
+    summary:
+      type: string
+      description: Human-readable summary.
 
 extra:
   python:
