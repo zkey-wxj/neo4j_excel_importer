@@ -46,6 +46,7 @@ tools:
   - tools/query_relations_by_node.yaml
   - tools/query_relations_between_nodes.yaml
   - tools/query_group_graph.yaml
+  - tools/copy_group_data.yaml
   - tools/save_nodes_batch.yaml
   - tools/save_node_single.yaml
   - tools/save_relations_batch.yaml

@@ -75,6 +75,13 @@
   <script>
     const ROOT_PATH = __ROOT_PATH_JSON__;
     const INITIAL_GROUP_ID = __INITIAL_GROUP_ID_JSON__;
+    const BASE_PATH = (() => {
+      const pathname = window.location.pathname || "";
+      const marker = "/group-graph";
+      const idx = pathname.indexOf(marker);
+      if (idx >= 0) return pathname.slice(0, idx);
+      return (ROOT_PATH || "").replace(/\/+$/, "");
+    })();
     const statusEl = document.getElementById("status");
     const canvas = document.getElementById("graph");
     const ctx = canvas.getContext("2d");
@@ -160,7 +167,7 @@
     }
 
     function buildUrl(path) {
-      const base = (ROOT_PATH || "").replace(/\/+$/, "");
+      const base = (BASE_PATH || "").replace(/\/+$/, "");
       const target = path.startsWith("/") ? path : `/${path}`;
       return `${base}${target}`;
     }

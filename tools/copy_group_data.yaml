@@ -1,0 +1,100 @@
+identity:
+  name: copy_group_data
+  author: wxj
+  label:
+    en_US: Copy Group Data
+    zh_Hans: 复制分组数据
+
+description:
+  human:
+    en_US: Copy all nodes and relations from one group_id to another group_id.
+    zh_Hans: 将一个 group_id 下的节点和关系复制到另一个 group_id。
+  llm: Copy graph data from source_group_id to target_group_id, with uid_prefix to avoid uid collision.
+
+parameters:
+  - name: source_group_id
+    type: string
+    required: true
+    label:
+      en_US: Source Group ID
+      zh_Hans: 源分组 ID
+    human_description:
+      en_US: Source group id to be copied.
+      zh_Hans: 需要被复制的数据分组 ID。
+    llm_description: Required source group id.
+    form: llm
+
+  - name: target_group_id
+    type: string
+    required: true
+    label:
+      en_US: Target Group ID
+      zh_Hans: 目标分组 ID
+    human_description:
+      en_US: Target group id that receives copied data.
+      zh_Hans: 接收复制数据的目标分组 ID。
+    llm_description: Required target group id.
+    form: llm
+
+  - name: uid_prefix
+    type: string
+    required: false
+    label:
+      en_US: UID Prefix
+      zh_Hans: UID 前缀
+    human_description:
+      en_US: Optional prefix for copied node uid. Default is {target_group_id}:: .
+      zh_Hans: 复制节点 uid 的可选前缀，默认使用 {target_group_id}::。
+    llm_description: Optional uid prefix for copied nodes to prevent uid uniqueness conflicts.
+    form: llm
+
+  - name: batch_size
+    type: number
+    required: false
+    default: 500
+    label:
+      en_US: Batch Size
+      zh_Hans: 批次大小
+    human_description:
+      en_US: Number of rows per Neo4j transaction.
+      zh_Hans: 每次 Neo4j 事务写入的行数。
+    llm_description: Batch size for node and relation writes.
+    form: form
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name for read query.
+      zh_Hans: 读取源数据时使用的可选 Neo4j 数据库名。
+    llm_description: Optional Neo4j database for source query.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    source_group_id:
+      type: string
+      description: Source group id.
+    target_group_id:
+      type: string
+      description: Target group id.
+    uid_prefix:
+      type: string
+      description: Uid prefix used for copied nodes.
+    nodes_count:
+      type: integer
+      description: Number of copied nodes.
+    rels_count:
+      type: integer
+      description: Number of copied relations.
+    summary:
+      type: string
+      description: Human-readable copy summary.
+
+extra:
+  python:
+    source: tools/copy_group_data.py

@@ -1,13 +1,13 @@
-version: 0.0.18
+version: 0.0.19
 type: "plugin"
 author: "wxj"
 name: "neo4j_excel_importer"
 label:
-  en_US: "Neo4j Excel Graph Importer"
-  zh_Hans: "Neo4j Excel 图谱导入器"
+  en_US: "Neo4j Graph Import, Query & Editor"
+  zh_Hans: "Neo4j 图谱导入、查询与编辑器"
 description:
-  en_US: "Import structured Excel knowledge-graph data into Neo4j."
-  zh_Hans: "将结构化 Excel 知识图谱数据导入 Neo4j。"
+  en_US: "Import Excel knowledge graphs into Neo4j, query nodes and relations, and manage group graph data through endpoints."
+  zh_Hans: "将 Excel 知识图谱导入 Neo4j，支持节点关系查询，并通过端点管理分组图谱数据。"
 created_at: "2026-05-11T00:00:00Z"
 icon: "icon.svg"
 resource:
@@ -27,7 +27,7 @@ plugins:
   endpoints:
     - "provider/neo4j_graph_endpoint.yaml"
 meta:
-  version: 0.0.18
+  version: 0.0.19
   arch:
     - "amd64"
     - "arm64"
