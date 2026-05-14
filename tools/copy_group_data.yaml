@@ -43,8 +43,8 @@ parameters:
       en_US: UID Prefix
       zh_Hans: UID 前缀
     human_description:
-      en_US: Optional prefix for copied node uid. Default is {target_group_id}:: .
-      zh_Hans: 复制节点 uid 的可选前缀，默认使用 {target_group_id}::。
+      en_US: Optional prefix for copied node uid. Default is {target_group_id}
+      zh_Hans: 复制节点 uid 的可选前缀，默认使用 {target_group_id}
     llm_description: Optional uid prefix for copied nodes to prevent uid uniqueness conflicts.
     form: llm
 
