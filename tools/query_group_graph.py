@@ -94,7 +94,7 @@ LIMIT $limit
             return
 
         try:
-            requested_limit = parse_limit(tool_parameters.get("limit"), default=1000, max_value=3000)
+            requested_limit = parse_limit(tool_parameters.get("limit"), default=100, max_value=3000)
             detail_limit = min(requested_limit, self._SAFE_DETAIL_LIMIT)
             generate_image = parse_bool(
                 tool_parameters.get("generate_image"),
