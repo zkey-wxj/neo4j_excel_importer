@@ -157,6 +157,28 @@ def as_mapping(value: Any) -> Mapping[str, Any]:
     return {}
 
 
+def strip_embedding_fields(value: Any) -> Any:
+    """递归移除响应中的 embedding 大字段，减少返回体积。"""
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            field_name = clean_text(key).lower()
+            if field_name in {"embedding", "embedding_vector", "vector"}:
+                continue
+            result[str(key)] = strip_embedding_fields(item)
+        return result
+    if isinstance(value, list):
+        return [strip_embedding_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return [strip_embedding_fields(item) for item in value]
+    if hasattr(value, "items"):
+        try:
+            return strip_embedding_fields(dict(value.items()))
+        except Exception:
+            return value
+    return value
+
+
 def node_display_name(node_obj: Mapping[str, Any]) -> str:
     name = clean_text(node_obj.get("name"))
     node_id = clean_text(node_obj.get("uid"))

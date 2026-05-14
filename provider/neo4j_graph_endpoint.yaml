@@ -1,0 +1,44 @@
+settings:
+  - name: neo4j_uri
+    type: text-input
+    required: true
+    label:
+      en_US: Neo4j URI
+      zh_Hans: Neo4j 连接地址
+    placeholder:
+      en_US: "bolt://localhost:7687"
+      zh_Hans: "bolt://localhost:7687"
+  - name: neo4j_user
+    type: text-input
+    required: true
+    label:
+      en_US: Neo4j Username
+      zh_Hans: Neo4j 用户名
+    placeholder:
+      en_US: "neo4j"
+      zh_Hans: "neo4j"
+  - name: neo4j_password
+    type: secret-input
+    required: true
+    label:
+      en_US: Neo4j Password
+      zh_Hans: Neo4j 密码
+  - name: neo4j_database
+    type: text-input
+    required: false
+    label:
+      en_US: Neo4j Database
+      zh_Hans: Neo4j 数据库名称
+    placeholder:
+      en_US: "neo4j"
+      zh_Hans: "neo4j"
+
+endpoints:
+  - endpoints/group_graph_page.yaml
+  - endpoints/group_graph_graph_get.yaml
+  - endpoints/group_graph_node_create.yaml
+  - endpoints/group_graph_node_update.yaml
+  - endpoints/group_graph_node_delete.yaml
+  - endpoints/group_graph_relation_create.yaml
+  - endpoints/group_graph_relation_update.yaml
+  - endpoints/group_graph_relation_delete.yaml

@@ -6,7 +6,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from core.graph_query_common import normalize_group_id, parse_limit, run_read_query
+from core.graph_query_common import normalize_group_id, parse_limit, run_read_query, strip_embedding_fields
 from core.types import clean_text
 
 
@@ -53,10 +53,11 @@ LIMIT $limit
             yield self.create_text_message(f"❌ 查询失败：{exc}")
             return
 
+        sanitized_rows = strip_embedding_fields(rows)
         summary = f"关系查询完成，node_id={node_id}，命中 {len(rows)} 条。"
         payload = {
             "count": len(rows),
-            "results": rows,
+            "results": sanitized_rows,
             "summary": summary,
             "request": {
                 "node_id": node_id,
@@ -67,7 +68,7 @@ LIMIT $limit
             },
         }
         yield self.create_variable_message("count", len(rows))
-        yield self.create_variable_message("results", rows)
+        yield self.create_variable_message("results", sanitized_rows)
         yield self.create_variable_message("summary", summary)
         yield self.create_json_message(payload)
         yield self.create_text_message(f"✅ {summary}")

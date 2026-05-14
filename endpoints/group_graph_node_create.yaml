@@ -1,0 +1,5 @@
+path: "/group-graph/api/node"
+method: "POST"
+extra:
+  python:
+    source: "endpoints/group_graph_endpoint.py"

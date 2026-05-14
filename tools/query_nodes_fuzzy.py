@@ -8,7 +8,7 @@ from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
 
 from core.embedding_common import generate_embeddings, has_embedding_model
-from core.graph_query_common import normalize_group_id, parse_limit, run_cypher_query
+from core.graph_query_common import normalize_group_id, parse_limit, run_cypher_query, strip_embedding_fields
 from core.types import clean_text
 import logging
 
@@ -80,10 +80,11 @@ LIMIT $limit
             yield self.create_text_message(f"❌ 查询失败：{exc}")
             return
 
+        sanitized_rows = strip_embedding_fields(rows)
         summary = f"模糊查询完成，关键字“{keyword}”，命中 {len(rows)} 条。"
         payload = {
             "count": len(rows),
-            "results": rows,
+            "results": sanitized_rows,
             "summary": summary,
             "query_mode": query_mode,
             "request": {
@@ -94,7 +95,7 @@ LIMIT $limit
             },
         }
         yield self.create_variable_message("count", len(rows))
-        yield self.create_variable_message("results", rows)
+        yield self.create_variable_message("results", sanitized_rows)
         yield self.create_variable_message("summary", summary)
         yield self.create_variable_message("query_mode", query_mode)
         yield self.create_json_message(payload)

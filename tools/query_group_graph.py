@@ -13,6 +13,7 @@ from core.graph_query_common import (
     parse_limit,
     relation_display_name,
     run_read_query,
+    strip_embedding_fields,
 )
 from core.types import clean_text
 
@@ -138,6 +139,8 @@ LIMIT $limit
 
         nodes_payload = [self._serialize_node(row.get("n")) for row in nodes_rows]
         rels_payload = [self._serialize_relation_row(row) for row in rels_rows]
+        nodes_payload = strip_embedding_fields(nodes_payload)
+        rels_payload = strip_embedding_fields(rels_payload)
 
         image_png = b""
         if generate_image:

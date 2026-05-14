@@ -6,7 +6,14 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from core.graph_query_common import as_mapping, build_node_graph_png, normalize_group_id, parse_bool, run_read_query
+from core.graph_query_common import (
+    as_mapping,
+    build_node_graph_png,
+    normalize_group_id,
+    parse_bool,
+    run_read_query,
+    strip_embedding_fields,
+)
 from core.types import clean_text
 
 
@@ -114,11 +121,14 @@ LIMIT $limit
             except Exception as exc:
                 yield self.create_text_message(f"⚠️ 图片生成失败：{exc}")
 
+        sanitized_center_node = strip_embedding_fields(center_node)
+        sanitized_relations = strip_embedding_fields(relations)
+        sanitized_neighbors = strip_embedding_fields(neighbors)
         payload = {
             "count": len(relations),
-            "node": center_node,
-            "relations": relations,
-            "neighbors": neighbors,
+            "node": sanitized_center_node,
+            "relations": sanitized_relations,
+            "neighbors": sanitized_neighbors,
             "image_generated": bool(image_png),
             "image_format": "png" if image_png else "",
             "request": {
