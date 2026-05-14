@@ -6,7 +6,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from core.graph_query_common import as_mapping, build_node_graph_png, normalize_group_id, run_read_query
+from core.graph_query_common import as_mapping, build_node_graph_png, normalize_group_id, parse_bool, run_read_query
 from core.types import clean_text
 
 
@@ -33,12 +33,16 @@ LIMIT $limit
         node_id = clean_text(tool_parameters.get("node_id"))
         database = clean_text(tool_parameters.get("database"))
         group_id = normalize_group_id(tool_parameters.get("group_id"))
-        generate_image = bool(tool_parameters.get("generate_image", False))
         if not node_id:
             yield self.create_text_message("❌ node_id 不能为空。")
             return
 
         try:
+            generate_image = parse_bool(
+                tool_parameters.get("generate_image"),
+                default=False,
+                field_name="generate_image",
+            )
             node_rows = run_read_query(
                 self.runtime,
                 query=self._NODE_QUERY,
@@ -56,6 +60,13 @@ LIMIT $limit
                     "image_generated": False,
                     "image_format": "",
                     "summary": summary,
+                    "request": {
+                        "node_id": node_id,
+                        "group_id": group_id,
+                        "database": database,
+                        "limit": 100,
+                        "generate_image": generate_image,
+                    },
                 }
                 yield self.create_variable_message("count", 0)
                 yield self.create_variable_message("results", payload)
@@ -104,15 +115,22 @@ LIMIT $limit
                 yield self.create_text_message(f"⚠️ 图片生成失败：{exc}")
 
         payload = {
-            "count": len(graph_rows),
+            "count": len(relations),
             "node": center_node,
             "relations": relations,
             "neighbors": neighbors,
             "image_generated": bool(image_png),
             "image_format": "png" if image_png else "",
+            "request": {
+                "node_id": node_id,
+                "group_id": group_id,
+                "database": database,
+                "limit": limit,
+                "generate_image": generate_image,
+            },
         }
         summary = f"按 node_id 查询完成，节点 1 条，关系 {len(relations)} 条，相邻节点 {len(neighbors)} 条。"
-        yield self.create_variable_message("count", len(graph_rows))
+        yield self.create_variable_message("count", len(relations))
         yield self.create_variable_message("results", payload)
         yield self.create_variable_message("summary", summary)
         yield self.create_json_message({**payload, "summary": summary})

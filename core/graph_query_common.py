@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 from io import BytesIO
 from typing import Any, Mapping
 
@@ -32,6 +33,57 @@ def parse_limit(value: Any, *, default: int = 20, max_value: int = 200) -> int:
     return min(parsed, max_value)
 
 
+def parse_bool(value: Any, *, default: bool = False, field_name: str = "value") -> bool:
+    """解析布尔参数，支持 bool/int/常见字符串。"""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    text = clean_text(value).lower()
+    if text in {"", "null", "none"}:
+        return default
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(f"{field_name} 必须是布尔值。")
+
+
+def parse_json_object(value: Any, *, field_name: str) -> dict[str, Any]:
+    """将工具参数解析为 JSON 对象，支持 dict 与 JSON 字符串。"""
+    if value in (None, ""):
+        return {}
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception as exc:
+            raise ValueError(f"{field_name} 不是合法 JSON：{exc}") from exc
+        if not isinstance(parsed, Mapping):
+            raise ValueError(f"{field_name} 必须是 JSON 对象。")
+        return dict(parsed)
+    raise ValueError(f"{field_name} 必须是 JSON 对象或 JSON 字符串。")
+
+
+def _validate_query_type(
+    session: Any,
+    *,
+    query: str,
+    parameters: dict[str, Any],
+    allow_write: bool,
+) -> str:
+    explain_result = session.run(f"EXPLAIN {query}", parameters)
+    query_type_raw = explain_result.consume().query_type
+    query_type = clean_text(query_type_raw).lower()
+    if not allow_write and query_type not in READ_QUERY_TYPES:
+        raise ValueError(f"仅允许只读查询，当前 query_type={query_type or 'unknown'}。")
+    return query_type or "unknown"
+
+
 def run_read_query(
     runtime: Any,
     *,
@@ -40,7 +92,30 @@ def run_read_query(
     database: str = "",
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    return run_cypher_query(
+        runtime,
+        query=query,
+        parameters=parameters,
+        database=database,
+        limit=limit,
+        allow_write=False,
+    )
+
+
+def run_cypher_query(
+    runtime: Any,
+    *,
+    query: str,
+    parameters: dict[str, Any] | None = None,
+    database: str = "",
+    limit: int = 100,
+    allow_write: bool = False,
+) -> list[dict[str, Any]]:
+    if not clean_text(query):
+        raise ValueError("query 不能为空。")
+
     uri, user, pwd = get_credentials(runtime)
+    safe_parameters = parameters or {}
     driver = GraphDatabase.driver(
         uri,
         auth=(user, pwd),
@@ -55,11 +130,13 @@ def run_read_query(
             session_kwargs["database"] = database_name
 
         with driver.session(**session_kwargs) as session:
-            explain_result = session.run(f"EXPLAIN {query}", parameters or {})
-            query_type = explain_result.consume().query_type
-            if query_type not in READ_QUERY_TYPES:
-                raise ValueError(f"仅允许只读查询，当前 query_type={query_type}。")
-            result = session.run(query, parameters or {})
+            _validate_query_type(
+                session,
+                query=query,
+                parameters=safe_parameters,
+                allow_write=allow_write,
+            )
+            result = session.run(query, safe_parameters)
             return [record.data() for record in itertools.islice(result, limit)]
     finally:
         driver.close()

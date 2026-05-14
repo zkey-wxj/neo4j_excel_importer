@@ -86,6 +86,9 @@ output_schema:
     image_format:
       type: string
       description: Image format, png when image exists.
+    request:
+      type: object
+      description: Request echo including group_id/database/limit/generate_image.
 
 extra:
   python:

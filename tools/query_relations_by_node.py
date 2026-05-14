@@ -54,8 +54,20 @@ LIMIT $limit
             return
 
         summary = f"关系查询完成，node_id={node_id}，命中 {len(rows)} 条。"
+        payload = {
+            "count": len(rows),
+            "results": rows,
+            "summary": summary,
+            "request": {
+                "node_id": node_id,
+                "relation_type": relation_type,
+                "group_id": group_id,
+                "database": database,
+                "limit": limit,
+            },
+        }
         yield self.create_variable_message("count", len(rows))
         yield self.create_variable_message("results", rows)
         yield self.create_variable_message("summary", summary)
-        yield self.create_json_message({"count": len(rows), "results": rows, "summary": summary})
+        yield self.create_json_message(payload)
         yield self.create_text_message(f"✅ {summary}")

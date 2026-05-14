@@ -6,7 +6,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from core.graph_query_common import build_group_graph_png, parse_limit, run_read_query
+from core.graph_query_common import build_group_graph_png, parse_bool, parse_limit, run_read_query
 from core.types import clean_text
 
 
@@ -43,7 +43,11 @@ LIMIT $limit
 
         try:
             limit = parse_limit(tool_parameters.get("limit"), default=1000, max_value=3000)
-            generate_image = bool(tool_parameters.get("generate_image", False))
+            generate_image = parse_bool(
+                tool_parameters.get("generate_image"),
+                default=False,
+                field_name="generate_image",
+            )
             nodes_rows = run_read_query(
                 self.runtime,
                 query=self._NODES_QUERY,
@@ -82,6 +86,12 @@ LIMIT $limit
             "relations": rels_rows,
             "image_generated": bool(image_png),
             "image_format": "png" if image_png else "",
+            "request": {
+                "group_id": group_id,
+                "database": database,
+                "limit": limit,
+                "generate_image": generate_image,
+            },
         }
         summary = f"group_id={group_id} 查询完成，节点 {len(nodes_rows)} 条，关系 {len(rels_rows)} 条。"
 

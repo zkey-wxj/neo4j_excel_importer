@@ -109,3 +109,18 @@ parameters:
 extra:
   python:
     source: tools/neo4j_query.py
+output_schema:
+  type: object
+  properties:
+    count:
+      type: integer
+      description: Returned record count.
+    results:
+      type: array
+      description: Query result rows.
+    summary:
+      type: string
+      description: Human-readable summary.
+    request:
+      type: object
+      description: Request echo including database/max_records/allow_write_queries/parameters.

@@ -85,6 +85,9 @@ output_schema:
     summary:
       type: string
       description: Human-readable summary.
+    request:
+      type: object
+      description: Request echo including node_id/group_id/database/limit/generate_image.
 
 extra:
   python:
