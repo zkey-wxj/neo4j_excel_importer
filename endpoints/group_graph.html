@@ -7,27 +7,32 @@
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     :root { --bg:#f5f7fb;--card:#fff;--line:#d8deea;--text:#23314a;--muted:#5f6f8e;--accent:#2463eb;--danger:#d93025;--ok:#188038; }
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%}
+    body{overflow:hidden}
     body{margin:0;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:radial-gradient(circle at top right,#e9f0ff 0%,var(--bg) 50%)}
-    .container{max-width:1320px;margin:0 auto;padding:16px;display:grid;gap:12px;grid-template-columns:360px 1fr}
+    .container{width:100%;height:100dvh;display:grid;grid-template-columns:360px minmax(0,1fr);gap:12px;padding:12px;overflow:hidden}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(30,50,93,.05);padding:12px}
+    .panel-left{height:100%;min-height:0;overflow:auto}
+    .panel-graph{min-width:0;height:100%;min-height:0}
     .title{margin:0 0 10px;font-size:16px;font-weight:700}.row{display:grid;gap:8px;grid-template-columns:1fr;margin-bottom:8px}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}label{font-size:12px;color:var(--muted)}
     input,textarea,button{border:1px solid var(--line);border-radius:8px;font-size:13px;padding:8px;box-sizing:border-box;width:100%;background:#fff;color:var(--text)}
     textarea{min-height:64px;resize:vertical;font-family:Consolas,Monaco,monospace}button{cursor:pointer;font-weight:600}
     .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-danger{background:#fff1f0;color:var(--danger);border-color:#f4b2ae}
     .btn-ok{background:#ebf7ef;color:var(--ok);border-color:#9fd3ad}.status{font-size:12px;margin-top:8px;min-height:18px;color:var(--muted)}
-    #graph{height:720px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#fff 0%,#f8faff 100%)}
+    #graph{width:100%;height:100%;display:block;background:linear-gradient(180deg,#fff 0%,#f8faff 100%)}
     .legend{margin-top:8px;font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff}
     .kv-list{display:grid;gap:6px}
     .kv-row{display:grid;grid-template-columns:1fr 1fr 72px;gap:6px}
     .kv-btn{padding:6px}
-    @media (max-width:980px){.container{grid-template-columns:1fr}#graph{height:520px}}
+    @media (max-width:980px){html,body{height:auto;overflow:auto}.container{grid-template-columns:1fr;height:auto;overflow:visible}.panel-left{height:auto}.panel-graph{height:520px}}
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="card">
+    <div class="card panel-left">
       <h2 class="title">Group Graph 操作面板</h2>
       <div class="row grid2">
         <div><label>group_id</label><input id="groupId" placeholder="例如: product_demo" /></div>
@@ -62,18 +67,21 @@
       <div id="status" class="status">等待操作...</div>
     </div>
 
-    <div class="card">
-      <h2 class="title">D3.js 知识图谱</h2>
-      <svg id="graph"></svg>
-      <div class="legend"><span class="chip">节点: 可拖拽</span><span class="chip">单击节点: 自动填充节点表单</span><span class="chip">单击关系文本: 自动填充关系表单</span></div>
+    <div class="panel-graph">
+      <canvas id="graph"></canvas>
     </div>
   </div>
 
   <script>
     const ROOT_PATH = __ROOT_PATH_JSON__;
-    const statusEl = document.getElementById("status"), svg = d3.select("#graph");
-    const width = () => document.getElementById("graph").clientWidth, height = () => document.getElementById("graph").clientHeight;
+    const INITIAL_GROUP_ID = __INITIAL_GROUP_ID_JSON__;
+    const statusEl = document.getElementById("status");
+    const canvas = document.getElementById("graph");
+    const ctx = canvas.getContext("2d");
     let current = { nodes: [], relations: [] };
+    let graphState = { nodes: [], edges: [], simulation: null };
+    let dragNode = null;
+    let drawPending = false;
 
     function setStatus(msg, isError = false) { statusEl.textContent = msg; statusEl.style.color = isError ? "#d93025" : "#5f6f8e"; }
     function clean(v) { return (v || "").trim(); }
@@ -176,35 +184,198 @@
       } catch (e) { setStatus(`加载失败: ${e.message}`, true); }
     }
 
+    function graphSize() {
+      return {
+        width: Math.max(1, canvas.clientWidth),
+        height: Math.max(1, canvas.clientHeight),
+      };
+    }
+
+    function resizeCanvas() {
+      const { width: w, height: h } = graphSize();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(w * ratio);
+      canvas.height = Math.floor(h * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (graphState.simulation) {
+        graphState.simulation.force("center", d3.forceCenter(w / 2, h / 2));
+        graphState.simulation.alpha(0.2).restart();
+      }
+      requestDraw();
+    }
+
+    function requestDraw() {
+      if (drawPending) return;
+      drawPending = true;
+      requestAnimationFrame(() => {
+        drawPending = false;
+        drawGraph();
+      });
+    }
+
+    function drawGraph() {
+      const { width: w, height: h } = graphSize();
+      ctx.clearRect(0, 0, w, h);
+      if (!graphState.nodes.length) return;
+
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "#8ea0bf";
+      graphState.edges.forEach((e) => {
+        ctx.beginPath();
+        ctx.moveTo(e.source.x || 0, e.source.y || 0);
+        ctx.lineTo(e.target.x || 0, e.target.y || 0);
+        ctx.stroke();
+        drawArrow(e.source, e.target);
+      });
+
+      ctx.font = "11px Segoe UI";
+      ctx.fillStyle = "#5f6f8e";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      graphState.edges.forEach((e) => {
+        const mx = ((e.source.x || 0) + (e.target.x || 0)) / 2;
+        const my = ((e.source.y || 0) + (e.target.y || 0)) / 2;
+        ctx.fillText((e.rel_type || "RELATED").slice(0, 24), mx, my);
+      });
+
+      graphState.nodes.forEach((n) => {
+        ctx.beginPath();
+        ctx.fillStyle = "#dce8ff";
+        ctx.strokeStyle = "#2b5fd9";
+        ctx.lineWidth = 1.5;
+        ctx.arc(n.x || 0, n.y || 0, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#1d2f52";
+        ctx.font = "11px Segoe UI";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText((n.name || n.uid || "").slice(0, 10), n.x || 0, n.y || 0);
+      });
+    }
+
+    function drawArrow(source, target) {
+      const sx = source.x || 0, sy = source.y || 0;
+      const tx = target.x || 0, ty = target.y || 0;
+      const dx = tx - sx, dy = ty - sy;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const ax = tx - ux * 24, ay = ty - uy * 24;
+      const leftX = ax - ux * 8 - uy * 4;
+      const leftY = ay - uy * 8 + ux * 4;
+      const rightX = ax - ux * 8 + uy * 4;
+      const rightY = ay - uy * 8 - ux * 4;
+      ctx.beginPath();
+      ctx.fillStyle = "#6e7f9d";
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function pointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function findNodeAt(x, y) {
+      for (let i = graphState.nodes.length - 1; i >= 0; i -= 1) {
+        const n = graphState.nodes[i];
+        const dx = (n.x || 0) - x;
+        const dy = (n.y || 0) - y;
+        if ((dx * dx + dy * dy) <= 24 * 24) return n;
+      }
+      return null;
+    }
+
+    function findEdgeAt(x, y) {
+      let hit = null;
+      let best = 14;
+      graphState.edges.forEach((e) => {
+        const mx = ((e.source.x || 0) + (e.target.x || 0)) / 2;
+        const my = ((e.source.y || 0) + (e.target.y || 0)) / 2;
+        const d = Math.hypot(mx - x, my - y);
+        if (d < best) {
+          best = d;
+          hit = e;
+        }
+      });
+      return hit;
+    }
+
+    function bindCanvasEvents() {
+      canvas.addEventListener("click", (event) => {
+        const p = pointerPosition(event);
+        const node = findNodeAt(p.x, p.y);
+        if (node) {
+          document.getElementById("nodeUid").value = node.uid || "";
+          document.getElementById("nodeName").value = node.name || "";
+          document.getElementById("nodeLabels").value = (node.labels || []).join(",");
+          document.getElementById("nodeDesc").value = node.description || "";
+          renderNodeProps(node.properties || {});
+          renderNodeMeta(node.meta || {});
+          return;
+        }
+        const edge = findEdgeAt(p.x, p.y);
+        if (edge) {
+          document.getElementById("relId").value = edge.id || "";
+          document.getElementById("relSource").value = edge.source_uid || "";
+          document.getElementById("relTarget").value = edge.target_uid || "";
+          document.getElementById("relType").value = edge.rel_type || "";
+          document.getElementById("relDesc").value = edge.description || "";
+          document.getElementById("relProps").value = JSON.stringify(edge.properties || {}, null, 2);
+        }
+      });
+
+      canvas.addEventListener("mousedown", (event) => {
+        const p = pointerPosition(event);
+        const node = findNodeAt(p.x, p.y);
+        if (!node || !graphState.simulation) return;
+        dragNode = node;
+        dragNode.fx = p.x;
+        dragNode.fy = p.y;
+        graphState.simulation.alphaTarget(0.3).restart();
+      });
+
+      window.addEventListener("mousemove", (event) => {
+        if (!dragNode) return;
+        const p = pointerPosition(event);
+        dragNode.fx = p.x;
+        dragNode.fy = p.y;
+        requestDraw();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!dragNode) return;
+        if (graphState.simulation) graphState.simulation.alphaTarget(0);
+        dragNode.fx = null;
+        dragNode.fy = null;
+        dragNode = null;
+      });
+    }
+
     function renderGraph(nodes, relations) {
-      svg.selectAll("*").remove(); const w = width(), h = height(); svg.attr("viewBox", `0 0 ${w} ${h}`);
-      const nodeMap = new Map(nodes.map(n => [n.uid, { ...n }]));
-      const edges = relations.filter(r => nodeMap.has(r.source_uid) && nodeMap.has(r.target_uid)).map(r => ({ ...r, source: nodeMap.get(r.source_uid), target: nodeMap.get(r.target_uid) }));
-      const simulation = d3.forceSimulation([...nodeMap.values()]).force("link", d3.forceLink(edges).id(d => d.uid).distance(120)).force("charge", d3.forceManyBody().strength(-340)).force("center", d3.forceCenter(w / 2, h / 2)).force("collision", d3.forceCollide().radius(34));
+      const { width: w, height: h } = graphSize();
+      if (graphState.simulation) graphState.simulation.stop();
 
-      svg.append("defs").append("marker").attr("id", "arrow").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#6e7f9d");
-      const link = svg.append("g").selectAll("line").data(edges).join("line").attr("stroke", "#8ea0bf").attr("stroke-width", 1.2).attr("marker-end", "url(#arrow)");
-      const linkLabel = svg.append("g").selectAll("text").data(edges).join("text").attr("font-size", 11).attr("fill", "#5f6f8e").style("cursor", "pointer").text(d => d.rel_type || "RELATED").on("click", (_, d) => {
-        document.getElementById("relId").value = d.id || "";
-        document.getElementById("relSource").value = d.source_uid || "";
-        document.getElementById("relTarget").value = d.target_uid || "";
-        document.getElementById("relType").value = d.rel_type || "";
-        document.getElementById("relDesc").value = d.description || "";
-        document.getElementById("relProps").value = JSON.stringify(d.properties || {}, null, 2);
-      });
+      const nodeMap = new Map(nodes.map((n) => [n.uid, { ...n }]));
+      const graphNodes = [...nodeMap.values()];
+      const edges = relations
+        .filter((r) => nodeMap.has(r.source_uid) && nodeMap.has(r.target_uid))
+        .map((r) => ({ ...r, source: nodeMap.get(r.source_uid), target: nodeMap.get(r.target_uid) }));
 
-      const node = svg.append("g").selectAll("g").data([...nodeMap.values()]).join("g").call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended)).on("click", (_, d) => { document.getElementById("nodeUid").value = d.uid || ""; document.getElementById("nodeName").value = d.name || ""; document.getElementById("nodeLabels").value = (d.labels || []).join(","); document.getElementById("nodeDesc").value = d.description || ""; renderNodeProps(d.properties || {}); renderNodeMeta(d.meta || {}); });
-      node.append("circle").attr("r", 22).attr("fill", "#dce8ff").attr("stroke", "#2b5fd9").attr("stroke-width", 1.5);
-      node.append("text").attr("text-anchor", "middle").attr("dy", 4).attr("font-size", 11).attr("fill", "#1d2f52").text(d => (d.name || d.uid || "").slice(0, 10));
+      graphState = { nodes: graphNodes, edges, simulation: null };
+      graphState.simulation = d3
+        .forceSimulation(graphNodes)
+        .force("link", d3.forceLink(edges).id((d) => d.uid).distance(120))
+        .force("charge", d3.forceManyBody().strength(-340))
+        .force("center", d3.forceCenter(w / 2, h / 2))
+        .force("collision", d3.forceCollide().radius(34))
+        .on("tick", requestDraw);
 
-      simulation.on("tick", () => {
-        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
-        linkLabel.attr("x", d => (d.source.x + d.target.x) / 2).attr("y", d => (d.source.y + d.target.y) / 2);
-        node.attr("transform", d => `translate(${d.x},${d.y})`);
-      });
-      function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
-      function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
-      function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+      requestDraw();
     }
 
     function nodePayload() {
@@ -250,9 +421,15 @@
         await mutate("/group-graph/api/relation", "DELETE", { relation_id: payload.relation_id });
       } catch (e) { setStatus(e.message, true); }
     });
+    if (INITIAL_GROUP_ID) {
+      document.getElementById("groupId").value = INITIAL_GROUP_ID;
+      loadGraph();
+    }
     renderNodeProps({});
     renderNodeMeta({});
-    window.addEventListener("resize", () => { if (current && current.nodes) renderGraph(current.nodes, current.relations || []); });
+    bindCanvasEvents();
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
   </script>
 </body>
 </html>
