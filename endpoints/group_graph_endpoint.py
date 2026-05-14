@@ -29,7 +29,7 @@ class GroupGraphEndpoint(Endpoint):
 
         try:
             if path == "/group-graph" and method == "GET":
-                return self._render_html()
+                return self._render_html(r)
 
             store = GroupGraphStore(settings)
             if path == "/group-graph/api/graph" and method == "GET":
@@ -54,9 +54,11 @@ class GroupGraphEndpoint(Endpoint):
 
         return self._json_response({"error": f"Unsupported route: {method} {path}"}, 404)
 
-    def _render_html(self) -> Response:
-        """渲染 D3 页面。"""
+    def _render_html(self, r: Request) -> Response:
+        """渲染 D3 页面，并注入 root_path。"""
         html = Path(__file__).with_name("group_graph.html").read_text(encoding="utf-8")
+        root_path_json = json.dumps(self._clean(r.root_path))
+        html = html.replace("__ROOT_PATH_JSON__", root_path_json)
         return Response(html, status=200, content_type="text/html; charset=utf-8")
 
     def _query_graph(self, r: Request, store: GroupGraphStore) -> Response:
