@@ -37,6 +37,10 @@ class RelationPayload(TypedDict):
     meta: GraphMeta
 
 
+NODE_PAYLOAD_FIELDS = frozenset(NodePayload.__annotations__.keys())
+RELATION_PAYLOAD_FIELDS = frozenset(RelationPayload.__annotations__.keys())
+
+
 def clean_text(value: Any) -> str:
     return str(value or "").strip()
 

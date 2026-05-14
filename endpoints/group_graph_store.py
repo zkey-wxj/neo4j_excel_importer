@@ -5,9 +5,15 @@ from typing import Any
 
 from neo4j import GraphDatabase
 
+from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
+from core.types import NODE_PAYLOAD_FIELDS, RELATION_PAYLOAD_FIELDS
+
 
 class GroupGraphStore:
     """封装 group 图谱的 Neo4j 读写逻辑。"""
+
+    _NODE_RESERVED_PROP_KEYS = set(NODE_PAYLOAD_FIELDS)
+    _REL_RESERVED_PROP_KEYS = set(RELATION_PAYLOAD_FIELDS)
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
@@ -30,8 +36,12 @@ LIMIT $limit
 MERGE (n:KnowledgeNode {uid: $uid, group_id: $group_id})
 SET n.name = $name,
     n.description = $description,
-    n.properties = $properties,
     n.labels = $labels
+REMOVE n.properties, n.meta
+SET n += $props
+FOREACH (_ IN CASE WHEN $embedding IS NULL THEN [] ELSE [1] END |
+  SET n.embedding = $embedding
+)
 RETURN elementId(n) AS node_id
 """
 
@@ -46,10 +56,9 @@ MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
 MATCH (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 CREATE (src)-[r:RELATED {
   rel_type: $rel_type,
-  group_id: $group_id,
-  description: $description,
-  properties: $properties
+  group_id: $group_id
 }]->(tgt)
+SET r += $props
 RETURN elementId(r) AS relation_id
 """
 
@@ -57,9 +66,19 @@ RETURN elementId(r) AS relation_id
 MATCH ()-[r:RELATED]->()
 WHERE elementId(r) = $relation_id
 SET r.rel_type = $rel_type,
-    r.description = $description,
-    r.properties = $properties
+    r.group_id = $group_id,
+    r.description = $description
+REMOVE r.properties, r.meta
+SET r += $props
 RETURN elementId(r) AS relation_id
+"""
+
+    _GET_REL_BY_ID = """
+MATCH (src:KnowledgeNode)-[r:RELATED]->(tgt:KnowledgeNode)
+WHERE elementId(r) = $relation_id
+RETURN r, src.uid AS source_uid, tgt.uid AS target_uid,
+       coalesce(r.group_id, src.group_id, tgt.group_id, '') AS inferred_group_id
+LIMIT 1
 """
 
     _DELETE_REL_BY_ID = """
@@ -151,31 +170,107 @@ RETURN count(*) AS deleted
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
 
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        row = node_payload_to_cypher_row(
+            {
+                "uid": self._clean(payload.get("uid")),
+                "name": self._clean(payload.get("name")) or self._clean(payload.get("uid")),
+                "labels": self._str_list(payload.get("labels")) or ["Node"],
+                "description": self._clean(payload.get("description")),
+                "group_id": self._clean(payload.get("group_id")),
+                "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
+                "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
+            }
+        )
         return {
-            "group_id": self._clean(payload.get("group_id")),
-            "uid": self._clean(payload.get("uid")),
-            "name": self._clean(payload.get("name")) or self._clean(payload.get("uid")),
-            "description": self._clean(payload.get("description")),
-            "labels": self._str_list(payload.get("labels")) or ["Node"],
-            "properties": payload.get("properties") if isinstance(payload.get("properties"), dict) else {},
+            "group_id": row["group_id"],
+            "uid": row["uid"],
+            "name": row["name"],
+            "description": row["description"],
+            "labels": row["labels"],
+            "props": row["props"],
+            "embedding": row["embedding"],
         }
 
     def _relation_create_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        row = relation_payload_to_cypher_row(
+            {
+                "source_uid": self._clean(payload.get("source_uid")),
+                "target_uid": self._clean(payload.get("target_uid")),
+                "rel_type": self._clean(payload.get("rel_type")) or "RELATED",
+                "direction": "forward",
+                "group_id": self._clean(payload.get("group_id")),
+                "description": self._clean(payload.get("description")),
+                "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
+                "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
+            }
+        )
         return {
-            "group_id": self._clean(payload.get("group_id")),
-            "source_uid": self._clean(payload.get("source_uid")),
-            "target_uid": self._clean(payload.get("target_uid")),
-            "rel_type": self._clean(payload.get("rel_type")),
-            "description": self._clean(payload.get("description")),
-            "properties": payload.get("properties") if isinstance(payload.get("properties"), dict) else {},
+            "source_uid": row["source_uid"],
+            "target_uid": row["target_uid"],
+            "rel_type": row["rel_type"],
+            "group_id": row["group_id"],
+            "props": row["props"],
         }
 
     def _relation_update_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        relation_id = self._clean(payload.get("relation_id"))
+        if not relation_id:
+            raise ValueError("relation_id 不能为空")
+
+        snapshot_rows = self._run(self._GET_REL_BY_ID, {"relation_id": relation_id})
+        snapshot = snapshot_rows[0] if snapshot_rows else {}
+        if not snapshot:
+            raise ValueError("未找到可更新关系")
+
+        relation_map = self._mapping(snapshot.get("r"))
+        existing_raw_props = self._extract_relation_properties(relation_map)
+        existing_meta, existing_props = self._split_meta_from_props(existing_raw_props)
+
+        input_props = payload.get("properties")
+        merged_props = dict(input_props) if isinstance(input_props, Mapping) else dict(existing_props)
+
+        input_meta = payload.get("meta")
+        merged_meta = dict(input_meta) if isinstance(input_meta, Mapping) else dict(existing_meta)
+
+        rel_type = self._clean(payload.get("rel_type")) or self._clean(relation_map.get("rel_type")) or "RELATED"
+        group_id = (
+            self._clean(payload.get("group_id"))
+            or self._clean(relation_map.get("group_id"))
+            or self._clean(snapshot.get("inferred_group_id"))
+        )
+        description = (
+            self._clean(payload.get("description"))
+            if "description" in payload
+            else self._clean(relation_map.get("description"))
+        )
+        direction = (
+            self._clean(payload.get("direction"))
+            if "direction" in payload
+            else self._clean(relation_map.get("direction"))
+        )
+        weight = payload.get("weight") if "weight" in payload else relation_map.get("weight")
+        if not isinstance(weight, (int, float)):
+            weight = None
+
+        row = relation_payload_to_cypher_row(
+            {
+                "source_uid": self._clean(snapshot.get("source_uid")),
+                "target_uid": self._clean(snapshot.get("target_uid")),
+                "rel_type": rel_type,
+                "direction": direction or "forward",
+                "group_id": group_id,
+                "description": description,
+                "weight": weight,
+                "properties": merged_props,
+                "meta": merged_meta,
+            }
+        )
         return {
-            "relation_id": self._clean(payload.get("relation_id")),
-            "rel_type": self._clean(payload.get("rel_type")) or "RELATED",
-            "description": self._clean(payload.get("description")),
-            "properties": payload.get("properties") if isinstance(payload.get("properties"), dict) else {},
+            "relation_id": relation_id,
+            "rel_type": row["rel_type"],
+            "group_id": row["group_id"],
+            "description": row["props"].get("description", ""),
+            "props": row["props"],
         }
 
     def _run(self, query: str, parameters: dict[str, Any], write: bool = False) -> list[dict[str, Any]]:
@@ -201,13 +296,16 @@ RETURN count(*) AS deleted
         if not uid:
             return None
         labels = self._str_list(data.get("labels"))
+        properties = self._extract_node_properties(data)
+        meta = self._extract_node_meta(properties)
         return {
             "uid": uid,
             "name": self._clean(data.get("name")) or uid,
             "group_id": self._clean(data.get("group_id")),
             "description": self._clean(data.get("description")),
             "labels": labels,
-            "properties": data.get("properties") if isinstance(data.get("properties"), dict) else {},
+            "properties": properties,
+            "meta": meta,
         }
 
     def _serialize_relation(
@@ -230,8 +328,74 @@ RETURN count(*) AS deleted
             "rel_type": rel_type or "RELATED",
             "group_id": self._clean(data.get("group_id")),
             "description": self._clean(data.get("description")),
-            "properties": data.get("properties") if isinstance(data.get("properties"), dict) else {},
+            "properties": self._extract_relation_properties(data),
         }
+
+    def _extract_node_properties(self, node_map: Mapping[str, Any]) -> dict[str, Any]:
+        props: dict[str, Any] = {}
+
+        legacy_properties = node_map.get("properties")
+        if isinstance(legacy_properties, Mapping):
+            for key, value in legacy_properties.items():
+                normalized_key = self._clean(key)
+                if normalized_key and value not in (None, ""):
+                    props[normalized_key] = value
+
+        for key, value in node_map.items():
+            normalized_key = self._clean(key)
+            if not normalized_key or normalized_key in self._NODE_RESERVED_PROP_KEYS:
+                continue
+            if value in (None, ""):
+                continue
+            props[normalized_key] = value
+
+        return props
+
+    def _extract_node_meta(self, props: dict[str, Any]) -> dict[str, Any]:
+        meta: dict[str, Any] = {}
+        for key in list(props.keys()):
+            normalized_key = self._clean(key)
+            if not normalized_key.startswith("meta_"):
+                continue
+            meta_key = self._clean(normalized_key[5:])
+            value = props.pop(key, None)
+            if not meta_key or value in (None, ""):
+                continue
+            meta[meta_key] = value
+        return meta
+
+    def _extract_relation_properties(self, rel_map: Mapping[str, Any]) -> dict[str, Any]:
+        props: dict[str, Any] = {}
+
+        legacy_properties = rel_map.get("properties")
+        if isinstance(legacy_properties, Mapping):
+            for key, value in legacy_properties.items():
+                normalized_key = self._clean(key)
+                if normalized_key and value not in (None, ""):
+                    props[normalized_key] = value
+
+        for key, value in rel_map.items():
+            normalized_key = self._clean(key)
+            if not normalized_key or normalized_key in self._REL_RESERVED_PROP_KEYS:
+                continue
+            if value in (None, ""):
+                continue
+            props[normalized_key] = value
+
+        return props
+
+    def _split_meta_from_props(self, props: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        meta: dict[str, Any] = {}
+        clean_props = dict(props)
+        for key in list(clean_props.keys()):
+            normalized_key = self._clean(key)
+            if not normalized_key.startswith("meta_"):
+                continue
+            meta_key = self._clean(normalized_key[5:])
+            value = clean_props.pop(key, None)
+            if meta_key and value not in (None, ""):
+                meta[meta_key] = value
+        return meta, clean_props
 
     def _mapping(self, value: Any) -> Mapping[str, Any]:
         if isinstance(value, Mapping):

@@ -32,6 +32,16 @@ settings:
     placeholder:
       en_US: "neo4j"
       zh_Hans: "neo4j"
+  - name: embedding_model
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Embedding Model
+      zh_Hans: 向量模型
+    help:
+      en_US: Optional text-embedding model for auto-generating node vectors during endpoint create/update.
+      zh_Hans: 可选 text-embedding 模型，用于 Endpoint 节点新增/更新时自动生成向量。
 
 endpoints:
   - endpoints/group_graph_page.yaml
