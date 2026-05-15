@@ -15,21 +15,36 @@ class GroupGraphStore:
     _NODE_RESERVED_PROP_KEYS = set(NODE_PAYLOAD_FIELDS)
     _REL_RESERVED_PROP_KEYS = set(RELATION_PAYLOAD_FIELDS)
 
+    _COUNT_NODES_QUERY = """
+MATCH (n:KnowledgeNode)
+WHERE coalesce(n.group_id, '') = $group_id
+RETURN count(n) AS total
+"""
+
+    _COUNT_RELS_QUERY = """
+MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
+WHERE coalesce(r.group_id, '') = $group_id
+   OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
+RETURN count(r) AS total
+"""
+
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
 WHERE coalesce(n.group_id, '') = $group_id
 RETURN n
 ORDER BY coalesce(n.name, n.uid) ASC
-LIMIT $limit
+SKIP $offset
+LIMIT $page_size
 """
 
     _RELS_QUERY = """
-MATCH (src:KnowledgeNode)-[r:RELATED]->(tgt:KnowledgeNode)
+MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE coalesce(r.group_id, '') = $group_id
    OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
 RETURN src, r, tgt
-ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, '')
-LIMIT $limit
+ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, type(r), '')
+SKIP $offset
+LIMIT $page_size
 """
 
     _UPSERT_NODE = """
@@ -97,10 +112,22 @@ RETURN count(*) AS deleted
         if not self.uri or not self.user or not self.password:
             raise ValueError("Endpoint settings 缺少 neo4j_uri/neo4j_user/neo4j_password")
 
-    def query_graph(self, group_id: str, limit: int) -> dict[str, Any]:
-        """查询 group_id 下的图谱节点与关系。"""
-        node_rows = self._run(self._NODES_QUERY, {"group_id": group_id, "limit": limit})
-        rel_rows = self._run(self._RELS_QUERY, {"group_id": group_id, "limit": limit})
+    def query_graph(self, group_id: str, page: int, page_size: int) -> dict[str, Any]:
+        """分页查询 group_id 下的图谱节点与关系。"""
+        offset = max(0, (page - 1) * page_size)
+        node_count_rows = self._run(self._COUNT_NODES_QUERY, {"group_id": group_id})
+        rel_count_rows = self._run(self._COUNT_RELS_QUERY, {"group_id": group_id})
+        nodes_total = int((node_count_rows[0] if node_count_rows else {}).get("total", 0) or 0)
+        relations_total = int((rel_count_rows[0] if rel_count_rows else {}).get("total", 0) or 0)
+
+        node_rows = self._run(
+            self._NODES_QUERY,
+            {"group_id": group_id, "offset": offset, "page_size": page_size},
+        )
+        rel_rows = self._run(
+            self._RELS_QUERY,
+            {"group_id": group_id, "offset": offset, "page_size": page_size},
+        )
 
         nodes: dict[str, dict[str, Any]] = {}
         rels: list[dict[str, Any]] = []
@@ -113,21 +140,23 @@ RETURN count(*) AS deleted
         for row in rel_rows:
             src = self._serialize_node(row.get("src"))
             tgt = self._serialize_node(row.get("tgt"))
-            if src:
-                nodes[src["uid"]] = src
-            if tgt:
-                nodes[tgt["uid"]] = tgt
             rel = self._serialize_relation(row.get("r"), src, tgt)
             if rel:
                 rels.append(rel)
 
         return {
             "group_id": group_id,
+            "page": page,
+            "page_size": page_size,
+            "offset": offset,
             "nodes": list(nodes.values()),
             "relations": rels,
+            "nodes_total": nodes_total,
+            "relations_total": relations_total,
             "nodes_count": len(nodes),
             "relations_count": len(rels),
-            "limit_applied": limit,
+            "nodes_has_more": (offset + len(nodes)) < nodes_total,
+            "relations_has_more": (offset + len(rels)) < relations_total,
         }
 
     def create_node(self, payload: Mapping[str, Any]) -> str:

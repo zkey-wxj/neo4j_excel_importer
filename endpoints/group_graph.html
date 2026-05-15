@@ -1,442 +1,1143 @@
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html lang="zh">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Group Graph 管理台</title>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <style>
-    :root { --bg:#f5f7fb;--card:#fff;--line:#d8deea;--text:#23314a;--muted:#5f6f8e;--accent:#2463eb;--danger:#d93025;--ok:#188038; }
-    *{box-sizing:border-box}
-    html,body{width:100%;height:100%}
-    body{overflow:hidden}
-    body{margin:0;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:radial-gradient(circle at top right,#e9f0ff 0%,var(--bg) 50%)}
-    .container{width:100%;height:100dvh;display:grid;grid-template-columns:360px minmax(0,1fr);gap:12px;padding:12px;overflow:hidden}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(30,50,93,.05);padding:12px}
-    .panel-left{height:100%;min-height:0;overflow:auto}
-    .panel-graph{min-width:0;height:100%;min-height:0}
-    .title{margin:0 0 10px;font-size:16px;font-weight:700}.row{display:grid;gap:8px;grid-template-columns:1fr;margin-bottom:8px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}label{font-size:12px;color:var(--muted)}
-    input,textarea,button{border:1px solid var(--line);border-radius:8px;font-size:13px;padding:8px;box-sizing:border-box;width:100%;background:#fff;color:var(--text)}
-    textarea{min-height:64px;resize:vertical;font-family:Consolas,Monaco,monospace}button{cursor:pointer;font-weight:600}
-    .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-danger{background:#fff1f0;color:var(--danger);border-color:#f4b2ae}
-    .btn-ok{background:#ebf7ef;color:var(--ok);border-color:#9fd3ad}.status{font-size:12px;margin-top:8px;min-height:18px;color:var(--muted)}
-    #graph{width:100%;height:100%;display:block;background:linear-gradient(180deg,#fff 0%,#f8faff 100%)}
-    .legend{margin-top:8px;font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
-    .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff}
-    .kv-list{display:grid;gap:6px}
-    .kv-row{display:grid;grid-template-columns:1fr 1fr 72px;gap:6px}
-    .kv-btn{padding:6px}
-    @media (max-width:980px){html,body{height:auto;overflow:auto}.container{grid-template-columns:1fr;height:auto;overflow:visible}.panel-left{height:auto}.panel-graph{height:520px}}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D3 Graph — Neural Map</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #f0f2f7;
+    --surface:  #ffffff;
+    --surface2: #f5f7fb;
+    --border:   rgba(80,100,160,0.14);
+    --border2:  rgba(80,100,160,0.22);
+    --text:     #1a1d2e;
+    --muted:    #7a82a0;
+    --faint:    #b0b8d0;
+
+    --cyan:     #0ea5c8;
+    --blue:     #3b6ef5;
+    --purple:   #7c54e8;
+    --amber:    #d97706;
+    --rose:     #e8445a;
+    --green:    #0fa96b;
+  }
+
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg);
+    font-family: 'Syne', sans-serif;
+    color: var(--text);
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: radial-gradient(circle, rgba(100,120,200,0.12) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  #app { position: relative; width: 100vw; height: 100vh; }
+
+  #graph-svg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    cursor: grab;
+  }
+  #graph-svg:active { cursor: grabbing; }
+
+  .link { fill: none; transition: stroke-opacity 0.25s, stroke-width 0.25s; }
+  .link.dimmed     { stroke-opacity: 0.06 !important; }
+  .link.highlighted { stroke-width: 2.5px !important; stroke-opacity: 1 !important; }
+  .link.dimmed-arrow { marker-end: url(#arr-end-dimmed); }
+  .link.highlighted-arrow { marker-end: url(#arr-end); }
+
+  .edge-label-group { pointer-events: auto; cursor: pointer; }
+  .edge-label-bg  { fill: var(--surface); stroke: var(--border2); stroke-width: 0.8; }
+  .edge-label-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 400; letter-spacing: 0.03em;
+    dominant-baseline: middle; text-anchor: middle;
+    fill: var(--muted);
+    pointer-events: none;
+  }
+  .edge-label-group.dimmed   { opacity: 0.05; }
+  .edge-label-group.highlighted .edge-label-text { font-weight: 600; }
+  .edge-label-group.highlighted .edge-label-bg   { stroke: var(--border2); }
+
+  .node-group { cursor: pointer; }
+  .node-ring { fill: none; animation: pulse-ring 2.6s ease-out infinite; }
+  .node-group.dimmed  { opacity: 0.13; }
+  .node-group.selected .node-circle { filter: drop-shadow(0 0 6px currentColor); }
+
+  .node-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    dominant-baseline: middle; text-anchor: middle;
+    pointer-events: none;
+  }
+
+  @keyframes pulse-ring {
+    0%   { r: 14px; opacity: 0.45; }
+    65%  { r: 28px; opacity: 0; }
+    100% { r: 28px; opacity: 0; }
+  }
+
+  #stats {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 1px; z-index: 10;
+    background: var(--border); border-radius: 10px; overflow: hidden;
+    font-family: 'JetBrains Mono', monospace;
+    box-shadow: 0 1px 4px rgba(80,100,160,0.1);
+  }
+  .stat-cell { background: var(--surface); padding: 8px 16px; text-align: center; }
+  .stat-cell .n { font-size: 15px; font-weight: 600; color: var(--blue); }
+  .stat-cell .l { font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+  #controls {
+    position: absolute; bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 6px; z-index: 10;
+  }
+  .ctrl-btn {
+    width: 34px; height: 34px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--muted);
+    font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(80,100,160,0.08);
+  }
+  .ctrl-btn:hover {
+    background: var(--surface2); border-color: var(--blue);
+    color: var(--blue); box-shadow: 0 2px 8px rgba(59,110,245,0.15);
+  }
+
+  #legend {
+    position: absolute; bottom: 28px; right: 28px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 12px; padding: 14px 18px; z-index: 10;
+    box-shadow: 0 2px 8px rgba(80,100,160,0.08);
+  }
+  #legend h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.1em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px; color: var(--text); margin-bottom: 6px;
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  #info-panel {
+    position: absolute; top: 26px; right: 28px; width: 238px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 14px; padding: 20px; z-index: 10;
+    opacity: 0; pointer-events: none;
+    transform: translateX(12px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    box-shadow: 0 4px 18px rgba(80,100,160,0.1);
+  }
+  #info-panel.visible { opacity: 1; pointer-events: auto; transform: translateX(0); }
+  #info-panel .p-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 7px;
+  }
+  #info-panel .p-name {
+    font-size: 20px; font-weight: 700; line-height: 1.15;
+    margin-bottom: 14px; color: var(--text);
+  }
+  #info-panel .p-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  }
+  #info-panel .p-row:last-child { border-bottom: none; }
+  #info-panel .p-key { color: var(--muted); }
+  #info-panel .p-val { font-weight: 600; color: var(--text); }
+  #info-panel .close-btn {
+    position: absolute; top: 13px; right: 13px;
+    background: none; border: none; color: var(--faint);
+    font-size: 17px; cursor: pointer; font-family: 'Syne', sans-serif;
+    line-height: 1; padding: 2px 5px; border-radius: 4px;
+  }
+  #info-panel .close-btn:hover { color: var(--text); background: var(--surface2); }
+
+  #tooltip {
+    position: absolute; z-index: 20;
+    background: var(--text); color: var(--surface);
+    border-radius: 6px; padding: 5px 11px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    pointer-events: none; opacity: 0; transition: opacity 0.12s; white-space: nowrap;
+  }
+
+  #status {
+    position: absolute;
+    left: 50%;
+    bottom: 78px;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.72);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    z-index: 11;
+  }
+
+  #ops-panel {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    width: 340px;
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    z-index: 12;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(80,100,160,0.14);
+    padding: 10px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ops-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    background: #fff;
+    margin-bottom: 8px;
+  }
+
+  .ops-title {
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .ops-grid {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ops-row { display: grid; gap: 4px; }
+
+  .ops-row label {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ops-row input,
+  .ops-row textarea {
+    width: 100%;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 6px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+    font-size: 11px;
+  }
+
+  .ops-row textarea {
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .kv-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .kv-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .kv-del {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    background: #fff;
+    color: #a33;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .kv-del:hover {
+    border-color: #e29a9a;
+    background: #fff5f5;
+  }
+
+  .ops-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .ops-btn {
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 6px;
+    font: inherit;
+    font-size: 11px;
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .ops-btn:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: var(--surface2);
+  }
+
+  .ops-btn.primary {
+    background: #eef4ff;
+    border-color: #c8d8ff;
+    color: #2454cf;
+  }
+
+  @media (max-width: 1100px) {
+    #ops-panel {
+      width: 300px;
+      top: 10px;
+      left: 10px;
+      max-height: calc(100vh - 20px);
+    }
+    #legend { right: 10px; bottom: 10px; }
+    #controls { left: 50%; bottom: 10px; transform: translateX(-50%); }
+    #status { bottom: 58px; }
+  }
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="card panel-left">
-      <h2 class="title">Group Graph 操作面板</h2>
-      <div class="row grid2">
-        <div><label>group_id</label><input id="groupId" placeholder="例如: product_demo" /></div>
-        <div><label>limit</label><input id="limit" type="number" value="500" min="1" max="5000" /></div>
-      </div>
-      <div class="row"><button id="btnLoad" class="btn-primary">加载图谱</button></div>
+<div id="app">
+  <div id="stats">
+    <div class="stat-cell"><div class="n" id="s-nodes">0</div><div class="l">节点</div></div>
+    <div class="stat-cell"><div class="n" id="s-links">0</div><div class="l">关系</div></div>
+    <div class="stat-cell"><div class="n" id="s-zoom">1.00×</div><div class="l">缩放</div></div>
+  </div>
 
-      <div class="row">
-        <label>节点操作</label>
-        <input id="nodeUid" placeholder="uid" /><input id="nodeName" placeholder="name" />
-        <input id="nodeLabels" placeholder="labels 逗号分隔，如 Person,Company" />
-        <textarea id="nodeDesc" placeholder="description"></textarea>
-        <label>节点属性（键值对）</label>
-        <div id="nodePropsList" class="kv-list"></div>
-        <button id="btnNodePropAdd" type="button">新增属性</button>
-        <label>节点 Meta（键值对）</label>
-        <div id="nodeMetaList" class="kv-list"></div>
-        <button id="btnNodeMetaAdd" type="button">新增 Meta</button>
-      </div>
-      <div class="row grid2"><button id="btnNodeCreate" class="btn-ok">新增节点</button><button id="btnNodeUpdate">更新节点</button></div>
-      <div class="row"><button id="btnNodeDelete" class="btn-danger">删除节点</button></div>
+  <svg id="graph-svg">
+    <defs>
+      <filter id="f-soft" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="3" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <marker id="arr-end" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#b0b8d0"/>
+      </marker>
+      <marker id="arr-end-dimmed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#d9deec" fill-opacity="0.25"/>
+      </marker>
+    </defs>
+    <g id="graph-root"></g>
+  </svg>
 
-      <div class="row">
-        <label>关系操作</label>
-        <input id="relId" placeholder="relation_id（点击图中关系标签自动填充）" />
-        <input id="relSource" placeholder="source_uid" /><input id="relTarget" placeholder="target_uid" />
-        <input id="relType" placeholder="rel_type" /><textarea id="relDesc" placeholder="description"></textarea>
-        <textarea id="relProps" placeholder='properties JSON，例如 {"weight": 0.6}'></textarea>
+  <div id="controls">
+    <button class="ctrl-btn" id="btn-zoom-in">+</button>
+    <button class="ctrl-btn" id="btn-zoom-out">−</button>
+    <button class="ctrl-btn" id="btn-reset" style="font-size:13px">⟳</button>
+    <button class="ctrl-btn" id="btn-shuffle" style="font-size:12px">⇄</button>
+  </div>
+
+  <div id="legend">
+    <h3>节点类型</h3>
+    <div class="legend-item"><div class="legend-dot" style="background:#0ea5c8"></div>Core</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7c54e8"></div>Module</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0fa96b"></div>Service</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>Data</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e8445a"></div>Agent</div>
+  </div>
+
+  <div id="info-panel">
+    <button class="close-btn" id="panel-close">×</button>
+    <div class="p-type" id="p-type"></div>
+    <div class="p-name" id="p-name"></div>
+    <div class="p-row"><span class="p-key">关联数</span><span class="p-val" id="p-conn"></span></div>
+    <div class="p-row"><span class="p-key">权重</span><span class="p-val" id="p-weight"></span></div>
+    <div class="p-row"><span class="p-key">编号</span><span class="p-val" id="p-id"></span></div>
+    <div class="p-row"><span class="p-key">状态</span><span class="p-val" style="color:#0fa96b">● 活跃</span></div>
+  </div>
+
+  <div id="ops-panel">
+    <div class="ops-card">
+      <div class="ops-title">图谱加载</div>
+      <div class="ops-grid">
+        <div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo"></div>
+        <div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300"></div>
       </div>
-      <div class="row grid2"><button id="btnRelCreate" class="btn-ok">新增关系</button><button id="btnRelUpdate">更新关系</button></div>
-      <div class="row"><button id="btnRelDelete" class="btn-danger">删除关系</button></div>
-      <div id="status" class="status">等待操作...</div>
+      <div class="ops-actions" style="grid-template-columns:1fr;">
+        <button class="ops-btn primary" id="btnLoad">加载图谱</button>
+      </div>
     </div>
 
-    <div class="panel-graph">
-      <canvas id="graph"></canvas>
+    <div class="ops-card">
+      <div class="ops-title">节点操作</div>
+      <div class="ops-grid">
+        <div class="ops-row"><label>节点ID（uid）</label><input id="nodeUid" placeholder="节点唯一ID"></div>
+        <div class="ops-row"><label>名称（name）</label><input id="nodeName" placeholder="节点名称"></div>
+      </div>
+      <div class="ops-row" style="margin-top:6px;"><label>标签（labels，逗号分隔）</label><input id="nodeLabels" placeholder="例如：Core,Service"></div>
+      <div class="ops-row" style="margin-top:6px;"><label>描述（description）</label><input id="nodeDesc" placeholder="节点描述"></div>
+      <div class="ops-row" style="margin-top:6px;">
+        <label>属性（properties）</label>
+        <div id="nodePropsList" class="kv-list"></div>
+      </div>
+      <div class="ops-row" style="margin-top:6px;">
+        <button class="ops-btn" type="button" id="btnNodePropAdd">+ 添加属性</button>
+      </div>
+      <div class="ops-row" style="margin-top:6px;">
+        <label>元信息（meta）</label>
+        <div id="nodeMetaList" class="kv-list"></div>
+      </div>
+      <div class="ops-row" style="margin-top:6px;">
+        <button class="ops-btn" type="button" id="btnNodeMetaAdd">+ 添加元信息</button>
+      </div>
+      <div class="ops-actions">
+        <button class="ops-btn primary" id="btnNodeCreate">新增</button>
+        <button class="ops-btn" id="btnNodeUpdate">更新</button>
+        <button class="ops-btn" id="btnNodeDelete">删除</button>
+      </div>
+    </div>
+
+    <div class="ops-card" style="margin-bottom:0;">
+      <div class="ops-title">关系操作</div>
+      <div class="ops-grid">
+        <div class="ops-row"><label>关系ID（relation_id）</label><input id="relId" placeholder="点击图中的关系自动填充"></div>
+        <div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED"></div>
+      </div>
+      <div class="ops-grid" style="margin-top:6px;">
+        <div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid"></div>
+        <div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid"></div>
+      </div>
+      <div class="ops-row" style="margin-top:6px;"><label>描述（description）</label><input id="relDesc" placeholder="关系描述"></div>
+      <div class="ops-row" style="margin-top:6px;">
+        <label>属性（properties）</label>
+        <div id="relPropsList" class="kv-list"></div>
+      </div>
+      <div class="ops-row" style="margin-top:6px;">
+        <button class="ops-btn" type="button" id="btnRelPropAdd">+ 添加关系属性</button>
+      </div>
+      <div class="ops-actions">
+        <button class="ops-btn primary" id="btnRelCreate">新增</button>
+        <button class="ops-btn" id="btnRelUpdate">更新</button>
+        <button class="ops-btn" id="btnRelDelete">删除</button>
+      </div>
     </div>
   </div>
 
-  <script>
-    const ROOT_PATH = __ROOT_PATH_JSON__;
-    const INITIAL_GROUP_ID = __INITIAL_GROUP_ID_JSON__;
-    const BASE_PATH = (() => {
-      const pathname = window.location.pathname || "";
-      const marker = "/group-graph";
-      const idx = pathname.indexOf(marker);
-      if (idx >= 0) return pathname.slice(0, idx);
-      return (ROOT_PATH || "").replace(/\/+$/, "");
-    })();
-    const statusEl = document.getElementById("status");
-    const canvas = document.getElementById("graph");
-    const ctx = canvas.getContext("2d");
-    let current = { nodes: [], relations: [] };
-    let graphState = { nodes: [], edges: [], simulation: null };
-    let dragNode = null;
-    let drawPending = false;
+  <div id="tooltip"></div>
+  <div id="status"></div>
+</div>
 
-    function setStatus(msg, isError = false) { statusEl.textContent = msg; statusEl.style.color = isError ? "#d93025" : "#5f6f8e"; }
-    function clean(v) { return (v || "").trim(); }
-    function createNodePropRow(key = "", value = "") {
-      const row = document.createElement("div");
-      row.className = "kv-row";
-      row.innerHTML = `
-        <input class="node-prop-key" placeholder="属性名" value="${escapeHtml(key)}" />
-        <input class="node-prop-value" placeholder="属性值" value="${escapeHtml(value)}" />
-        <button type="button" class="kv-btn btn-danger">删除</button>
-      `;
-      row.querySelector("button").addEventListener("click", () => row.remove());
-      return row;
+<script>
+let ROOT_PATH = "";
+let INITIAL_GROUP_ID = "";
+const RENDER_DEMO_DATA = false;
+try {
+  ROOT_PATH = __ROOT_PATH_JSON__;
+  INITIAL_GROUP_ID = __INITIAL_GROUP_ID_JSON__;
+} catch (_e) {
+  ROOT_PATH = "";
+  INITIAL_GROUP_ID = "";
+}
+
+const TYPE_META = {
+  Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
+  Module: { color: "#7c54e8", bg: "rgba(124,84,232,0.10)", r: 13 },
+  Service: { color: "#0fa96b", bg: "rgba(15,169,107,0.10)", r: 11 },
+  Data: { color: "#d97706", bg: "rgba(217,119,6,0.10)", r: 10 },
+  Agent: { color: "#e8445a", bg: "rgba(232,68,90,0.10)", r: 9 },
+};
+
+const DEMO_NODES = [
+  { id: 1, label: "Orchestrator", type: "Core", weight: 98 },
+  { id: 2, label: "Planner", type: "Core", weight: 91 },
+  { id: 3, label: "Memory", type: "Core", weight: 87 },
+  { id: 4, label: "Retriever", type: "Module", weight: 75 },
+  { id: 5, label: "Embedder", type: "Module", weight: 72 },
+  { id: 6, label: "Reasoner", type: "Module", weight: 78 },
+  { id: 7, label: "VectorDB", type: "Data", weight: 65 },
+  { id: 8, label: "Cache", type: "Data", weight: 60 },
+  { id: 9, label: "DocStore", type: "Data", weight: 62 },
+  { id: 10, label: "API Gateway", type: "Service", weight: 83 },
+  { id: 11, label: "Auth", type: "Service", weight: 70 },
+  { id: 12, label: "Logger", type: "Service", weight: 55 },
+  { id: 13, label: "Executor", type: "Agent", weight: 80 },
+  { id: 14, label: "Validator", type: "Agent", weight: 68 },
+  { id: 15, label: "Critic", type: "Agent", weight: 73 },
+  { id: 16, label: "Scheduler", type: "Module", weight: 66 },
+  { id: 17, label: "EventBus", type: "Service", weight: 71 },
+  { id: 18, label: "Metrics", type: "Data", weight: 57 },
+];
+
+const DEMO_LINKS = [
+  [1, 2, "dispatches"], [1, 3, "reads"], [1, 10, "routes"], [1, 13, "spawns"],
+  [2, 4, "queries"], [2, 6, "invokes"], [2, 16, "schedules"],
+  [3, 7, "indexes"], [3, 8, "caches"],
+  [4, 7, "fetches"], [4, 5, "embeds"], [5, 7, "stores"],
+  [6, 15, "reviews"], [6, 14, "checks"],
+  [10, 11, "verifies"], [10, 12, "logs"], [10, 17, "publishes"],
+  [13, 14, "submits"], [13, 15, "drafts"],
+  [16, 17, "triggers"],
+  [17, 12, "reports"], [17, 18, "tracks"],
+  [8, 9, "persists"], [11, 3, "syncs"], [12, 18, "writes"],
+  [14, 6, "refines"], [15, 2, "retries"], [9, 7, "mirrors"],
+];
+
+function apiBase() {
+  return (ROOT_PATH || "").replace(/\/+$/, "");
+}
+
+function apiUrl(path) {
+  return apiBase() + path;
+}
+
+function clean(v) {
+  return String(v || "").trim();
+}
+
+function shouldRenderDemo() {
+  return RENDER_DEMO_DATA;
+}
+
+function createKvRow(key = "", value = "") {
+  const row = document.createElement("div");
+  row.className = "kv-row";
+  const keyInput = document.createElement("input");
+  keyInput.placeholder = "key";
+  keyInput.value = key;
+  const valueInput = document.createElement("input");
+  valueInput.placeholder = "value";
+  valueInput.value = value;
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "kv-del";
+  delBtn.textContent = "×";
+  delBtn.addEventListener("click", () => row.remove());
+  row.appendChild(keyInput);
+  row.appendChild(valueInput);
+  row.appendChild(delBtn);
+  return row;
+}
+
+function renderKv(listId, obj = {}) {
+  const list = document.getElementById(listId);
+  list.innerHTML = "";
+  const entries = Object.entries(obj || {});
+  if (!entries.length) {
+    list.appendChild(createKvRow("", ""));
+    return;
+  }
+  entries.forEach(([k, v]) => {
+    list.appendChild(createKvRow(String(k), v == null ? "" : String(v)));
+  });
+}
+
+function collectKv(listId) {
+  const rows = Array.from(document.querySelectorAll(`#${listId} .kv-row`));
+  const out = {};
+  rows.forEach((row) => {
+    const inputs = row.querySelectorAll("input");
+    const key = clean(inputs[0]?.value);
+    const val = clean(inputs[1]?.value);
+    if (!key) return;
+    out[key] = val;
+  });
+  return out;
+}
+
+function parseType(labels = [], uid = "") {
+  const all = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
+  if (all.includes("core")) return "Core";
+  if (all.includes("module")) return "Module";
+  if (all.includes("service")) return "Service";
+  if (all.includes("data")) return "Data";
+  if (all.includes("agent")) return "Agent";
+  const s = clean(uid).toLowerCase();
+  if (s.includes("core")) return "Core";
+  if (s.includes("service")) return "Service";
+  if (s.includes("module")) return "Module";
+  if (s.includes("data")) return "Data";
+  return "Agent";
+}
+
+function typeDisplayName(type) {
+  const map = {
+    Core: "核心",
+    Module: "模块",
+    Service: "服务",
+    Data: "数据",
+    Agent: "智能体",
+  };
+  return map[type] || type || "";
+}
+
+function parseWeight(node) {
+  const candidates = [node.weight, node.properties?.weight, node.properties?.score, node.meta?.score];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(1, Math.min(100, Math.round(n)));
+  }
+  return 50;
+}
+
+function nodeLabel(node) {
+  const name = clean(node.name);
+  if (name) return name;
+  return clean(node.uid) || "Node";
+}
+
+function relationLabel(rel) {
+  return clean(rel.rel_type) || "RELATED";
+}
+
+function relationKey(rel, index) {
+  const rid = clean(rel.relation_id);
+  if (rid) return rid;
+  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
+}
+
+async function request(pathOrUrl, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : apiUrl(pathOrUrl);
+  const init = { method, headers: { Accept: "application/json" } };
+  if (options.body !== undefined) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = options.body;
+  }
+
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (_e) {
+      throw new Error(`接口返回非 JSON: ${text.slice(0, 120)}`);
     }
+  }
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
 
-    function escapeHtml(text) {
-      return String(text || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;");
-    }
+function setStatus(text, isError = false) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.style.color = isError ? "#c53030" : "var(--muted)";
+}
 
-    function renderNodeProps(properties = {}) {
-      const list = document.getElementById("nodePropsList");
-      list.innerHTML = "";
-      const entries = Object.entries(properties || {});
-      if (!entries.length) {
-        list.appendChild(createNodePropRow("", ""));
-        return;
-      }
-      entries.forEach(([k, v]) => list.appendChild(createNodePropRow(k, v)));
-    }
+function mapGraphData(nodesRaw, relsRaw) {
+  const mappedNodes = (nodesRaw || []).map((n, idx) => {
+    const type = parseType(n.labels, n.uid);
+    const meta = TYPE_META[type] || TYPE_META.Agent;
+    return {
+      id: idx + 1,
+      uid: clean(n.uid),
+      label: nodeLabel(n),
+      type,
+      weight: parseWeight(n),
+      color: meta.color,
+      bg: meta.bg,
+      r: meta.r,
+      raw: n,
+    };
+  });
 
-    function renderNodeMeta(meta = {}) {
-      const list = document.getElementById("nodeMetaList");
-      list.innerHTML = "";
-      const entries = Object.entries(meta || {});
-      if (!entries.length) {
-        list.appendChild(createNodePropRow("", ""));
-        return;
-      }
-      entries.forEach(([k, v]) => list.appendChild(createNodePropRow(k, v)));
-    }
-
-    function collectNodeProps() {
-      const rows = Array.from(document.querySelectorAll("#nodePropsList .kv-row"));
-      const props = {};
-      rows.forEach((row) => {
-        const key = clean(row.querySelector(".node-prop-key")?.value);
-        const value = clean(row.querySelector(".node-prop-value")?.value);
-        if (key) props[key] = value;
-      });
-      return props;
-    }
-
-    function collectNodeMeta() {
-      const rows = Array.from(document.querySelectorAll("#nodeMetaList .kv-row"));
-      const meta = {};
-      rows.forEach((row) => {
-        const key = clean(row.querySelector(".node-prop-key")?.value);
-        const value = clean(row.querySelector(".node-prop-value")?.value);
-        if (!key) return;
-        if (key === "version") {
-          const parsed = Number(value);
-          if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
-            meta[key] = Math.trunc(parsed);
-            return;
-          }
-        }
-        meta[key] = value;
-      });
-      return meta;
-    }
-
-    function readProps(text) {
-      const raw = clean(text); if (!raw) return {};
-      try { const obj = JSON.parse(raw); if (obj && typeof obj === "object" && !Array.isArray(obj)) return obj; } catch (_) {}
-      throw new Error("properties 必须是合法 JSON 对象");
-    }
-
-    function buildUrl(path) {
-      const base = (BASE_PATH || "").replace(/\/+$/, "");
-      const target = path.startsWith("/") ? path : `/${path}`;
-      return `${base}${target}`;
-    }
-
-    async function request(path, options = {}) {
-      const res = await fetch(buildUrl(path), { headers: { "Content-Type": "application/json" }, ...options });
-      const text = await res.text(); let data = {};
-      try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text }; }
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      return data;
-    }
-
-    async function loadGraph() {
-      const groupId = clean(document.getElementById("groupId").value), limit = clean(document.getElementById("limit").value) || "500";
-      if (!groupId) return setStatus("group_id 不能为空", true);
-      setStatus("加载中...");
-      try {
-        const data = await request(`/group-graph/api/graph?group_id=${encodeURIComponent(groupId)}&limit=${encodeURIComponent(limit)}`);
-        current = data; renderGraph(data.nodes || [], data.relations || []);
-        setStatus(`加载成功: 节点 ${data.nodes_count || 0}，关系 ${data.relations_count || 0}`);
-      } catch (e) { setStatus(`加载失败: ${e.message}`, true); }
-    }
-
-    function graphSize() {
-      return {
-        width: Math.max(1, canvas.clientWidth),
-        height: Math.max(1, canvas.clientHeight),
-      };
-    }
-
-    function resizeCanvas() {
-      const { width: w, height: h } = graphSize();
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(w * ratio);
-      canvas.height = Math.floor(h * ratio);
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      if (graphState.simulation) {
-        graphState.simulation.force("center", d3.forceCenter(w / 2, h / 2));
-        graphState.simulation.alpha(0.2).restart();
-      }
-      requestDraw();
-    }
-
-    function requestDraw() {
-      if (drawPending) return;
-      drawPending = true;
-      requestAnimationFrame(() => {
-        drawPending = false;
-        drawGraph();
-      });
-    }
-
-    function drawGraph() {
-      const { width: w, height: h } = graphSize();
-      ctx.clearRect(0, 0, w, h);
-      if (!graphState.nodes.length) return;
-
-      ctx.lineWidth = 1.2;
-      ctx.strokeStyle = "#8ea0bf";
-      graphState.edges.forEach((e) => {
-        ctx.beginPath();
-        ctx.moveTo(e.source.x || 0, e.source.y || 0);
-        ctx.lineTo(e.target.x || 0, e.target.y || 0);
-        ctx.stroke();
-        drawArrow(e.source, e.target);
-      });
-
-      ctx.font = "11px Segoe UI";
-      ctx.fillStyle = "#5f6f8e";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      graphState.edges.forEach((e) => {
-        const mx = ((e.source.x || 0) + (e.target.x || 0)) / 2;
-        const my = ((e.source.y || 0) + (e.target.y || 0)) / 2;
-        ctx.fillText((e.rel_type || "RELATED").slice(0, 24), mx, my);
-      });
-
-      graphState.nodes.forEach((n) => {
-        ctx.beginPath();
-        ctx.fillStyle = "#dce8ff";
-        ctx.strokeStyle = "#2b5fd9";
-        ctx.lineWidth = 1.5;
-        ctx.arc(n.x || 0, n.y || 0, 22, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = "#1d2f52";
-        ctx.font = "11px Segoe UI";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText((n.name || n.uid || "").slice(0, 10), n.x || 0, n.y || 0);
-      });
-    }
-
-    function drawArrow(source, target) {
-      const sx = source.x || 0, sy = source.y || 0;
-      const tx = target.x || 0, ty = target.y || 0;
-      const dx = tx - sx, dy = ty - sy;
-      const len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len, uy = dy / len;
-      const ax = tx - ux * 24, ay = ty - uy * 24;
-      const leftX = ax - ux * 8 - uy * 4;
-      const leftY = ay - uy * 8 + ux * 4;
-      const rightX = ax - ux * 8 + uy * 4;
-      const rightY = ay - uy * 8 - ux * 4;
-      ctx.beginPath();
-      ctx.fillStyle = "#6e7f9d";
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(leftX, leftY);
-      ctx.lineTo(rightX, rightY);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    function pointerPosition(event) {
-      const rect = canvas.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    }
-
-    function findNodeAt(x, y) {
-      for (let i = graphState.nodes.length - 1; i >= 0; i -= 1) {
-        const n = graphState.nodes[i];
-        const dx = (n.x || 0) - x;
-        const dy = (n.y || 0) - y;
-        if ((dx * dx + dy * dy) <= 24 * 24) return n;
-      }
-      return null;
-    }
-
-    function findEdgeAt(x, y) {
-      let hit = null;
-      let best = 14;
-      graphState.edges.forEach((e) => {
-        const mx = ((e.source.x || 0) + (e.target.x || 0)) / 2;
-        const my = ((e.source.y || 0) + (e.target.y || 0)) / 2;
-        const d = Math.hypot(mx - x, my - y);
-        if (d < best) {
-          best = d;
-          hit = e;
-        }
-      });
-      return hit;
-    }
-
-    function bindCanvasEvents() {
-      canvas.addEventListener("click", (event) => {
-        const p = pointerPosition(event);
-        const node = findNodeAt(p.x, p.y);
-        if (node) {
-          document.getElementById("nodeUid").value = node.uid || "";
-          document.getElementById("nodeName").value = node.name || "";
-          document.getElementById("nodeLabels").value = (node.labels || []).join(",");
-          document.getElementById("nodeDesc").value = node.description || "";
-          renderNodeProps(node.properties || {});
-          renderNodeMeta(node.meta || {});
-          return;
-        }
-        const edge = findEdgeAt(p.x, p.y);
-        if (edge) {
-          document.getElementById("relId").value = edge.id || "";
-          document.getElementById("relSource").value = edge.source_uid || "";
-          document.getElementById("relTarget").value = edge.target_uid || "";
-          document.getElementById("relType").value = edge.rel_type || "";
-          document.getElementById("relDesc").value = edge.description || "";
-          document.getElementById("relProps").value = JSON.stringify(edge.properties || {}, null, 2);
-        }
-      });
-
-      canvas.addEventListener("mousedown", (event) => {
-        const p = pointerPosition(event);
-        const node = findNodeAt(p.x, p.y);
-        if (!node || !graphState.simulation) return;
-        dragNode = node;
-        dragNode.fx = p.x;
-        dragNode.fy = p.y;
-        graphState.simulation.alphaTarget(0.3).restart();
-      });
-
-      window.addEventListener("mousemove", (event) => {
-        if (!dragNode) return;
-        const p = pointerPosition(event);
-        dragNode.fx = p.x;
-        dragNode.fy = p.y;
-        requestDraw();
-      });
-
-      window.addEventListener("mouseup", () => {
-        if (!dragNode) return;
-        if (graphState.simulation) graphState.simulation.alphaTarget(0);
-        dragNode.fx = null;
-        dragNode.fy = null;
-        dragNode = null;
-      });
-    }
-
-    function renderGraph(nodes, relations) {
-      const { width: w, height: h } = graphSize();
-      if (graphState.simulation) graphState.simulation.stop();
-
-      const nodeMap = new Map(nodes.map((n) => [n.uid, { ...n }]));
-      const graphNodes = [...nodeMap.values()];
-      const edges = relations
-        .filter((r) => nodeMap.has(r.source_uid) && nodeMap.has(r.target_uid))
-        .map((r) => ({ ...r, source: nodeMap.get(r.source_uid), target: nodeMap.get(r.target_uid) }));
-
-      graphState = { nodes: graphNodes, edges, simulation: null };
-      graphState.simulation = d3
-        .forceSimulation(graphNodes)
-        .force("link", d3.forceLink(edges).id((d) => d.uid).distance(120))
-        .force("charge", d3.forceManyBody().strength(-340))
-        .force("center", d3.forceCenter(w / 2, h / 2))
-        .force("collision", d3.forceCollide().radius(34))
-        .on("tick", requestDraw);
-
-      requestDraw();
-    }
-
-    function nodePayload() {
-      const group_id = clean(document.getElementById("groupId").value), uid = clean(document.getElementById("nodeUid").value);
-      if (!group_id || !uid) throw new Error("group_id 和 uid 不能为空");
-      return { group_id, uid, name: clean(document.getElementById("nodeName").value), labels: document.getElementById("nodeLabels").value.split(",").map(s => s.trim()).filter(Boolean), description: clean(document.getElementById("nodeDesc").value), properties: collectNodeProps(), meta: collectNodeMeta() };
-    }
-    function relPayload() {
-      const relation_id = clean(document.getElementById("relId").value);
-      const group_id = clean(document.getElementById("groupId").value), source_uid = clean(document.getElementById("relSource").value), target_uid = clean(document.getElementById("relTarget").value), rel_type = clean(document.getElementById("relType").value);
-      if (!group_id || !source_uid || !target_uid || !rel_type) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
-      return { relation_id, group_id, source_uid, target_uid, rel_type, description: clean(document.getElementById("relDesc").value), properties: readProps(document.getElementById("relProps").value) };
-    }
-
-    async function mutate(url, method, payload) {
-      setStatus("执行中...");
-      try { await request(url, { method, body: JSON.stringify(payload) }); setStatus("操作成功，正在刷新图谱..."); await loadGraph(); }
-      catch (e) { setStatus(`操作失败: ${e.message}`, true); }
-    }
-
-    document.getElementById("btnLoad").addEventListener("click", loadGraph);
-    document.getElementById("btnNodePropAdd").addEventListener("click", () => {
-      document.getElementById("nodePropsList").appendChild(createNodePropRow("", ""));
+  const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
+  const mappedLinks = [];
+  (relsRaw || []).forEach((r, i) => {
+    const s = idMap.get(clean(r.source_uid));
+    const t = idMap.get(clean(r.target_uid));
+    if (!s || !t) return;
+    mappedLinks.push({
+      source: s,
+      target: t,
+      relation: relationLabel(r),
+      _key: relationKey(r, i),
+      raw: r,
     });
-    document.getElementById("btnNodeMetaAdd").addEventListener("click", () => {
-      document.getElementById("nodeMetaList").appendChild(createNodePropRow("", ""));
-    });
-    document.getElementById("btnNodeCreate").addEventListener("click", async () => { try { await mutate("/group-graph/api/node", "POST", nodePayload()); } catch (e) { setStatus(e.message, true); } });
-    document.getElementById("btnNodeUpdate").addEventListener("click", async () => { try { await mutate("/group-graph/api/node", "PUT", nodePayload()); } catch (e) { setStatus(e.message, true); } });
-    document.getElementById("btnNodeDelete").addEventListener("click", async () => { try { const p = nodePayload(); await mutate("/group-graph/api/node", "DELETE", { group_id: p.group_id, uid: p.uid }); } catch (e) { setStatus(e.message, true); } });
-    document.getElementById("btnRelCreate").addEventListener("click", async () => { try { await mutate("/group-graph/api/relation", "POST", relPayload()); } catch (e) { setStatus(e.message, true); } });
-    document.getElementById("btnRelUpdate").addEventListener("click", async () => {
-      try {
-        const payload = relPayload();
-        if (!payload.relation_id) throw new Error("更新关系时 relation_id 不能为空，请先点击图中的关系标签");
-        await mutate("/group-graph/api/relation", "PUT", payload);
-      } catch (e) { setStatus(e.message, true); }
-    });
-    document.getElementById("btnRelDelete").addEventListener("click", async () => {
-      try {
-        const payload = relPayload();
-        if (!payload.relation_id) throw new Error("删除关系时 relation_id 不能为空，请先点击图中的关系标签");
-        await mutate("/group-graph/api/relation", "DELETE", { relation_id: payload.relation_id });
-      } catch (e) { setStatus(e.message, true); }
-    });
-    if (INITIAL_GROUP_ID) {
-      document.getElementById("groupId").value = INITIAL_GROUP_ID;
-      loadGraph();
+  });
+  return { nodes: mappedNodes, links: mappedLinks };
+}
+
+async function loadGraphByGroupId(groupId, onPage) {
+  const nodesRaw = [];
+  const relsRaw = [];
+  const nodeSet = new Set();
+  const relSet = new Set();
+  const pageSize = Number(clean(document.getElementById("pageSize").value) || "300");
+  let page = 1;
+
+  while (true) {
+    setStatus(`分页加载中: 第 ${page} 页`);
+    const data = await request(`/group-graph/api/graph?group_id=${encodeURIComponent(groupId)}&page=${page}&page_size=${encodeURIComponent(pageSize)}`);
+
+    for (const n of (data.nodes || [])) {
+      const uid = clean(n.uid);
+      if (!uid || nodeSet.has(uid)) continue;
+      nodeSet.add(uid);
+      nodesRaw.push(n);
     }
-    renderNodeProps({});
-    renderNodeMeta({});
-    bindCanvasEvents();
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-  </script>
+
+    for (const r of (data.relations || [])) {
+      const key = relationKey(r, relsRaw.length);
+      if (relSet.has(key)) continue;
+      relSet.add(key);
+      relsRaw.push(r);
+    }
+
+    const graph = mapGraphData(nodesRaw, relsRaw);
+    if (onPage) onPage(graph, page);
+
+    if (!data.nodes_has_more && !data.relations_has_more) break;
+    page += 1;
+  }
+
+  setStatus(`加载完成: 节点 ${nodesRaw.length}，关系 ${relsRaw.length}`);
+  return mapGraphData(nodesRaw, relsRaw);
+}
+
+function loadDemoGraph() {
+  if (document.getElementById("groupId")) {
+    document.getElementById("groupId").value = "";
+  }
+  setStatus("已加载示例图谱");
+  const nodes = DEMO_NODES.map((n) => ({
+    ...n,
+    ...TYPE_META[n.type],
+    raw: {
+      uid: String(n.id),
+      name: n.label,
+      labels: [n.type],
+      description: "",
+      properties: { weight: n.weight },
+      meta: {},
+    },
+  }));
+  const links = DEMO_LINKS.map(([s, t, r], i) => ({
+    source: s,
+    target: t,
+    relation: r,
+    _key: `demo-${i}`,
+    raw: {
+      relation_id: `demo-${i}`,
+      source_uid: String(s),
+      target_uid: String(t),
+      rel_type: r,
+      description: "",
+      properties: {},
+    },
+  }));
+  return { nodes, links };
+}
+
+function fillNodeForm(nodeRaw) {
+  if (!nodeRaw) return;
+  document.getElementById("nodeUid").value = clean(nodeRaw.uid);
+  document.getElementById("nodeName").value = clean(nodeRaw.name);
+  document.getElementById("nodeLabels").value = Array.isArray(nodeRaw.labels) ? nodeRaw.labels.join(",") : "";
+  document.getElementById("nodeDesc").value = clean(nodeRaw.description);
+  renderKv("nodePropsList", nodeRaw.properties || {});
+  renderKv("nodeMetaList", nodeRaw.meta || {});
+}
+
+function fillRelationForm(relRaw) {
+  if (!relRaw) return;
+  document.getElementById("relId").value = clean(relRaw.relation_id);
+  document.getElementById("relSource").value = clean(relRaw.source_uid);
+  document.getElementById("relTarget").value = clean(relRaw.target_uid);
+  document.getElementById("relType").value = relationLabel(relRaw);
+  document.getElementById("relDesc").value = clean(relRaw.description);
+  renderKv("relPropsList", relRaw.properties || {});
+}
+
+function nodePayload() {
+  const group_id = clean(document.getElementById("groupId").value);
+  const uid = clean(document.getElementById("nodeUid").value);
+  if (!group_id || !uid) throw new Error("group_id 和 uid 不能为空");
+  return {
+    group_id,
+    uid,
+    name: clean(document.getElementById("nodeName").value),
+    labels: document.getElementById("nodeLabels").value.split(",").map((s) => clean(s)).filter(Boolean),
+    description: clean(document.getElementById("nodeDesc").value),
+    properties: collectKv("nodePropsList"),
+    meta: collectKv("nodeMetaList"),
+  };
+}
+
+function relationPayload() {
+  const relation_id = clean(document.getElementById("relId").value);
+  const group_id = clean(document.getElementById("groupId").value);
+  const source_uid = clean(document.getElementById("relSource").value);
+  const target_uid = clean(document.getElementById("relTarget").value);
+  const rel_type = clean(document.getElementById("relType").value);
+  if (!group_id || !source_uid || !target_uid || !rel_type) {
+    throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
+  }
+  return {
+    relation_id,
+    group_id,
+    source_uid,
+    target_uid,
+    rel_type,
+    description: clean(document.getElementById("relDesc").value),
+    properties: collectKv("relPropsList"),
+  };
+}
+
+async function mutate(path, method, payload) {
+  setStatus("执行中...");
+  await request(path, { method, body: JSON.stringify(payload) });
+  const gid = clean(document.getElementById("groupId").value);
+  if (!gid) {
+    setStatus("操作成功");
+    return;
+  }
+  await loadAndRenderGroup(gid);
+}
+
+const svg = d3.select("#graph-svg");
+const root = d3.select("#graph-root");
+const defs = svg.select("defs");
+const tip = document.getElementById("tooltip");
+
+let sim = null;
+let nodeSel = null;
+let linkSel = null;
+let edgeLabelSel = null;
+let selected = null;
+let graphNodes = [];
+
+function clearScene() {
+  root.selectAll("*").remove();
+  defs.selectAll("linearGradient").remove();
+}
+
+function clearSel() {
+  selected = null;
+  if (nodeSel) nodeSel.classed("dimmed", false).classed("selected", false);
+  if (linkSel) {
+    linkSel
+      .classed("dimmed", false)
+      .classed("highlighted", false)
+      .classed("dimmed-arrow", false)
+      .classed("highlighted-arrow", false);
+  }
+  if (edgeLabelSel) edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
+  document.getElementById("info-panel").classList.remove("visible");
+}
+
+function render(nodes, links) {
+  if (sim) sim.stop();
+  clearScene();
+  clearSel();
+
+  graphNodes = nodes;
+
+  document.getElementById("s-nodes").textContent = nodes.length;
+  document.getElementById("s-links").textContent = links.length;
+
+  links.forEach((l, i) => {
+    const sn = nodes.find((n) => n.id === l.source);
+    const tn = nodes.find((n) => n.id === l.target);
+    const gid = `lg-${i}`;
+    defs.append("linearGradient").attr("id", gid).attr("gradientUnits", "userSpaceOnUse")
+      .call((g) => {
+        g.append("stop").attr("offset", "0%").attr("stop-color", sn ? sn.color : "#7a82a0").attr("stop-opacity", 0.6);
+        g.append("stop").attr("offset", "100%").attr("stop-color", tn ? tn.color : "#7a82a0").attr("stop-opacity", 0.6);
+      });
+    l._gid = gid;
+  });
+
+  sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id((d) => d.id).distance((d) => {
+      const sid = d.source.id ?? d.source;
+      const tid = d.target.id ?? d.target;
+      const s = nodes.find((n) => n.id === sid);
+      const t = nodes.find((n) => n.id === tid);
+      return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+    }))
+    .force("charge", d3.forceManyBody().strength(-460))
+    .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
+    .force("collision", d3.forceCollide().radius((d) => d.r + 24));
+
+  linkSel = root.append("g").selectAll("line").data(links).join("line")
+    .attr("class", "link")
+    .attr("stroke", (d) => `url(#${d._gid})`)
+    .attr("stroke-width", 1.6)
+    .attr("stroke-opacity", 0.55)
+    .attr("marker-end", "url(#arr-end)")
+    .on("click", (e, d) => {
+      e.stopPropagation();
+      fillRelationForm(d.raw);
+    });
+
+  edgeLabelSel = root.append("g").selectAll("g").data(links).join("g")
+    .attr("class", "edge-label-group")
+    .on("click", (e, d) => {
+      e.stopPropagation();
+      fillRelationForm(d.raw);
+    });
+
+  edgeLabelSel.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
+  edgeLabelSel.append("text").attr("class", "edge-label-text").text((d) => d.relation);
+  edgeLabelSel.each(function (d) {
+    const g = d3.select(this);
+    const sid = d.source.id ?? d.source;
+    const sn = nodes.find((n) => n.id === sid);
+    g.select("text").attr("fill", sn ? sn.color : "#7a82a0");
+    const tw = g.select("text").node().getBBox().width + 8;
+    g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
+  });
+
+  nodeSel = root.append("g").selectAll("g").data(nodes).join("g")
+    .attr("class", "node-group")
+    .call(d3.drag()
+      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  nodeSel.append("circle").attr("class", "node-ring")
+    .attr("r", (d) => d.r + 5)
+    .attr("stroke", (d) => d.color).attr("stroke-width", 1.5)
+    .attr("fill", "none").attr("opacity", 0.35)
+    .style("animation-delay", (_d, i) => `${(i * 0.19) % 2.6}s`);
+
+  nodeSel.append("circle").attr("r", (d) => d.r + 1).attr("fill", (d) => d.color).attr("fill-opacity", 0.12);
+  nodeSel.append("circle").attr("class", "node-circle")
+    .attr("r", (d) => d.r)
+    .attr("fill", (d) => d.bg)
+    .attr("stroke", (d) => d.color).attr("stroke-width", 2)
+    .attr("filter", "url(#f-soft)");
+  nodeSel.append("circle").attr("r", (d) => d.r * 0.3).attr("fill", (d) => d.color);
+  nodeSel.append("text").attr("class", "node-label").attr("y", (d) => d.r + 15).attr("fill", (d) => d.color).text((d) => d.label);
+
+  sim.on("tick", () => {
+    linkSel.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y).attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+    links.forEach((l) => {
+      defs.select(`#${l._gid}`).attr("x1", l.source.x).attr("y1", l.source.y).attr("x2", l.target.x).attr("y2", l.target.y);
+    });
+    edgeLabelSel.attr("transform", (d) => {
+      const mx = (d.source.x + d.target.x) / 2;
+      const my = (d.source.y + d.target.y) / 2;
+      const dx = d.target.x - d.source.x;
+      const dy = d.target.y - d.source.y;
+      let a = Math.atan2(dy, dx) * 180 / Math.PI;
+      if (a > 90 || a < -90) a += 180;
+      return `translate(${mx},${my}) rotate(${a})`;
+    });
+    nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
+  });
+
+  nodeSel.on("click", (e, d) => {
+    e.stopPropagation();
+    fillNodeForm(d.raw);
+
+    if (selected === d.id) { clearSel(); return; }
+    selected = d.id;
+    const nb = new Set([d.id]);
+    links.forEach((l) => {
+      const s = l.source.id ?? l.source;
+      const t = l.target.id ?? l.target;
+      if (s === d.id) nb.add(t);
+      if (t === d.id) nb.add(s);
+    });
+    nodeSel.classed("dimmed", (n) => !nb.has(n.id)).classed("selected", (n) => n.id === d.id);
+    const isRel = (l) => (l.source.id ?? l.source) === d.id || (l.target.id ?? l.target) === d.id;
+    linkSel
+      .classed("dimmed", (l) => !isRel(l))
+      .classed("highlighted", isRel)
+      .classed("dimmed-arrow", (l) => !isRel(l))
+      .classed("highlighted-arrow", isRel);
+    edgeLabelSel.classed("dimmed", (l) => !isRel(l)).classed("highlighted", isRel);
+
+    const cc = links.filter(isRel).length;
+    document.getElementById("p-type").textContent = typeDisplayName(d.type);
+    document.getElementById("p-type").style.color = d.color;
+    document.getElementById("p-name").textContent = d.label;
+    document.getElementById("p-name").style.color = d.color;
+    document.getElementById("p-conn").textContent = cc;
+    document.getElementById("p-weight").textContent = d.weight + " / 100";
+    document.getElementById("p-id").textContent = "#" + d.id;
+    document.getElementById("info-panel").classList.add("visible");
+  });
+
+  nodeSel
+    .on("mouseenter", (_e, d) => { tip.style.opacity = "1"; tip.style.background = d.color; tip.textContent = `${d.label} · ${d.type} · weight ${d.weight}`; })
+    .on("mousemove", (e) => { tip.style.left = `${e.clientX + 14}px`; tip.style.top = `${e.clientY - 10}px`; })
+    .on("mouseleave", () => { tip.style.opacity = "0"; });
+}
+
+const zoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
+  root.attr("transform", e.transform);
+  document.getElementById("s-zoom").textContent = e.transform.k.toFixed(2) + "×";
+});
+svg.call(zoom);
+svg.on("click", () => clearSel());
+document.getElementById("panel-close").addEventListener("click", clearSel);
+
+function shuffleGraph() {
+  graphNodes.forEach((n) => {
+    n.vx = (Math.random() - 0.5) * 100;
+    n.vy = (Math.random() - 0.5) * 100;
+  });
+  if (sim) sim.alpha(0.8).restart();
+}
+
+async function loadAndRenderGroup(groupId) {
+  const graph = await loadGraphByGroupId(groupId, (paged) => {
+    render(paged.nodes, paged.links);
+  });
+  render(graph.nodes, graph.links);
+}
+
+document.getElementById("btn-zoom-in").addEventListener("click", () => svg.transition().duration(280).call(zoom.scaleBy, 1.35));
+document.getElementById("btn-zoom-out").addEventListener("click", () => svg.transition().duration(280).call(zoom.scaleBy, 0.74));
+document.getElementById("btn-reset").addEventListener("click", () => svg.transition().duration(460).call(zoom.transform, d3.zoomIdentity));
+document.getElementById("btn-shuffle").addEventListener("click", shuffleGraph);
+
+document.getElementById("btnLoad").addEventListener("click", async () => {
+  try {
+    const groupId = clean(document.getElementById("groupId").value);
+    if (!groupId) {
+      setStatus("group_id 不能为空", true);
+      return;
+    }
+    await loadAndRenderGroup(groupId);
+  } catch (e) {
+    setStatus(`加载失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnNodePropAdd").addEventListener("click", () => {
+  document.getElementById("nodePropsList").appendChild(createKvRow("", ""));
+});
+
+document.getElementById("btnNodeMetaAdd").addEventListener("click", () => {
+  document.getElementById("nodeMetaList").appendChild(createKvRow("", ""));
+});
+
+document.getElementById("btnRelPropAdd").addEventListener("click", () => {
+  document.getElementById("relPropsList").appendChild(createKvRow("", ""));
+});
+
+document.getElementById("btnNodeCreate").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认新增节点吗？")) return;
+    await mutate("/group-graph/api/node", "POST", nodePayload());
+  } catch (e) {
+    setStatus(`节点新增失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnNodeUpdate").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认更新节点吗？")) return;
+    await mutate("/group-graph/api/node", "PUT", nodePayload());
+  } catch (e) {
+    setStatus(`节点更新失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnNodeDelete").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认删除节点吗？删除后相关关系也会受影响。")) return;
+    const payload = nodePayload();
+    await mutate("/group-graph/api/node", "DELETE", { group_id: payload.group_id, uid: payload.uid });
+  } catch (e) {
+    setStatus(`节点删除失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnRelCreate").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认新增关系吗？")) return;
+    await mutate("/group-graph/api/relation", "POST", relationPayload());
+  } catch (e) {
+    setStatus(`关系新增失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnRelUpdate").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认更新关系吗？")) return;
+    const payload = relationPayload();
+    if (!payload.relation_id) throw new Error("更新关系时 relation_id 不能为空");
+    await mutate("/group-graph/api/relation", "PUT", payload);
+  } catch (e) {
+    setStatus(`关系更新失败: ${e.message}`, true);
+  }
+});
+
+document.getElementById("btnRelDelete").addEventListener("click", async () => {
+  try {
+    if (!window.confirm("确认删除关系吗？")) return;
+    const payload = relationPayload();
+    if (!payload.relation_id) throw new Error("删除关系时 relation_id 不能为空");
+    await mutate("/group-graph/api/relation", "DELETE", { relation_id: payload.relation_id });
+  } catch (e) {
+    setStatus(`关系删除失败: ${e.message}`, true);
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (!sim) return;
+  sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
+  sim.alpha(0.3).restart();
+});
+
+(async function init() {
+  try {
+    renderKv("nodePropsList", {});
+    renderKv("nodeMetaList", {});
+    renderKv("relPropsList", {});
+
+    const groupId = clean(INITIAL_GROUP_ID);
+    if (groupId) {
+      document.getElementById("groupId").value = groupId;
+      await loadAndRenderGroup(groupId);
+    } else {
+      if (shouldRenderDemo()) {
+        const graph = loadDemoGraph();
+        render(graph.nodes, graph.links);
+      } else {
+        render([], []);
+        setStatus("示例数据渲染已关闭，请输入 group_id 后加载图谱");
+      }
+    }
+  } catch (e) {
+    setStatus(`加载失败: ${e.message}`, true);
+    if (shouldRenderDemo()) {
+      const graph = loadDemoGraph();
+      render(graph.nodes, graph.links);
+    } else {
+      render([], []);
+    }
+  }
+})();
+</script>
 </body>
 </html>

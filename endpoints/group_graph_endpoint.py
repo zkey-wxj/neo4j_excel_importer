@@ -70,12 +70,13 @@ class GroupGraphEndpoint(Endpoint):
         return Response(html, status=200, content_type="text/html; charset=utf-8")
 
     def _query_graph(self, r: Request, store: GroupGraphStore) -> Response:
-        """查询 group_id 图谱。"""
+        """分页查询 group_id 图谱。"""
         group_id = self._clean(r.args.get("group_id"))
         if not group_id:
             return self._json_response({"error": "group_id 不能为空"}, 400)
-        limit = self._limit(r.args.get("limit"), default=500, max_value=5000)
-        return self._json_response(store.query_graph(group_id, limit), 200)
+        page = self._positive_int(r.args.get("page"), default=1)
+        page_size = self._limit(r.args.get("page_size"), default=300, max_value=1000)
+        return self._json_response(store.query_graph(group_id, page, page_size), 200)
 
     def _create_node(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
         """新增节点。"""
@@ -272,3 +273,13 @@ class GroupGraphEndpoint(Endpoint):
         if parsed <= 0:
             return default
         return min(parsed, max_value)
+
+    def _positive_int(self, value: Any, *, default: int) -> int:
+        """解析正整数参数。"""
+        if value in (None, ""):
+            return default
+        try:
+            parsed = int(value)
+        except Exception:
+            return default
+        return parsed if parsed > 0 else default

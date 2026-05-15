@@ -1,5 +1,17 @@
 path: "/group-graph/api/graph"
 method: "GET"
+query:
+  - name: group_id
+    type: string
+    required: true
+  - name: page
+    type: number
+    required: false
+    default: 1
+  - name: page_size
+    type: number
+    required: false
+    default: 300
 extra:
   python:
     source: "endpoints/group_graph_endpoint.py"
