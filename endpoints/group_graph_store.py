@@ -340,6 +340,13 @@ RETURN count(*) AS deleted
         if not uid:
             return None
         labels = self._str_list(data.get("labels"))
+        if not labels and hasattr(value, "labels"):
+            try:
+                labels = self._str_list(list(getattr(value, "labels")))
+            except Exception:
+                labels = []
+        if labels:
+            labels = [label for label in labels if label != "KnowledgeNode"]
         properties = self._extract_node_properties(data)
         meta = self._extract_node_meta(properties)
         return {
