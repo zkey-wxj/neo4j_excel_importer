@@ -157,6 +157,10 @@ RETURN count(*) AS deleted
         for row in rel_rows:
             src = self._serialize_node(row.get("src"))
             tgt = self._serialize_node(row.get("tgt"))
+            if src:
+                nodes[src["uid"]] = src
+            if tgt:
+                nodes[tgt["uid"]] = tgt
             rel = self._serialize_relation(row.get("r"), src, tgt)
             if rel:
                 rels.append(rel)

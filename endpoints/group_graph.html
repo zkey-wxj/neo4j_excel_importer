@@ -802,12 +802,16 @@ function mapGraphData(nodesRaw, relsRaw) {
 
   const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
   const mappedLinks = [];
+  const droppedRels = [];
   (relsRaw || []).forEach((r, i) => {
     const sUid = clean(r.source_uid);
     const tUid = clean(r.target_uid);
     const s = idMap.get(sUid);
     const t = idMap.get(tUid);
-    if (!s || !t || !sUid || !tUid) return;
+    if (!s || !t || !sUid || !tUid) {
+      droppedRels.push({ source_uid: sUid, target_uid: tUid, rel_type: relationLabel(r) });
+      return;
+    }
     mappedLinks.push({
       source: sUid,
       target: tUid,
@@ -816,6 +820,9 @@ function mapGraphData(nodesRaw, relsRaw) {
       raw: r,
     });
   });
+  if (droppedRels.length) {
+    console.warn("[group-graph] skip invalid relations because endpoint node missing", droppedRels.slice(0, 20));
+  }
   return { nodes: mappedNodes, links: mappedLinks };
 }
 
