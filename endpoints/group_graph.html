@@ -853,15 +853,18 @@ async function loadGraphByGroupId(groupId, onPage) {
       relsRaw.push(r);
     }
 
-    const graph = mapGraphData(nodesRaw, relsRaw);
-    if (onPage) onPage(graph, page);
+    // 每页组装完当前累积数据后，按需回调渲染（按页刷新画布）
+    const paged = mapGraphData(nodesRaw, relsRaw);
+    if (onPage) onPage(paged, page);
 
     if (!data.nodes_has_more && !data.relations_has_more) break;
     page += 1;
   }
 
+  const graph = mapGraphData(nodesRaw, relsRaw);
+  if (onPage) onPage(graph, page);
   setStatus(`加载完成: 节点 ${nodesRaw.length}，关系 ${relsRaw.length}`);
-  return mapGraphData(nodesRaw, relsRaw);
+  return graph;
 }
 
 function loadDemoGraph() {
@@ -1119,11 +1122,7 @@ function render(nodes, links) {
   });
 
   graphNodes = nodes;
-  graphLinks = links.map(l => ({
-    ...l,
-    source: linkEndpointId(l.source),
-    target: linkEndpointId(l.target),
-  }));
+  graphLinks = links;
 
   document.getElementById("s-nodes").textContent = nodes.length;
   document.getElementById("s-links").textContent = links.length;
@@ -1134,40 +1133,35 @@ function render(nodes, links) {
     l._gid = gradientIdFromKey(l._key);
   });
 
-  const gradientSel = defs.selectAll("linearGradient.edge-gradient").data(links, (d) => d._gid).join(
-    (enter) => {
-      const g = enter.append("linearGradient").attr("class", "edge-gradient").attr("id", (d) => d._gid).attr("gradientUnits", "userSpaceOnUse");
-      g.append("stop").attr("class", "from-stop").attr("offset", "0%").attr("stop-opacity", 0.6);
-      g.append("stop").attr("class", "to-stop").attr("offset", "100%").attr("stop-opacity", 0.6);
-      return g;
-    },
-    (update) => update,
-    (exit) => exit.remove()
-  );
-  gradientSel.each(function (d) {
+  // remove previous defs and layers, then recreate per-page to avoid incremental join issues
+  defs.selectAll("linearGradient.edge-gradient").remove();
+  linkLayer.selectAll("*").remove();
+  edgeLabelLayer.selectAll("*").remove();
+  nodeLayer.selectAll("*").remove();
+
+  // recreate gradients
+  links.forEach(function (d) {
+    const g = defs.append("linearGradient").attr("class", "edge-gradient").attr("id", d._gid).attr("gradientUnits", "userSpaceOnUse");
+    g.append("stop").attr("class", "from-stop").attr("offset", "0%").attr("stop-opacity", 0.6);
+    g.append("stop").attr("class", "to-stop").attr("offset", "100%").attr("stop-opacity", 0.6);
     const sid = linkEndpointId(d.source);
     const tid = linkEndpointId(d.target);
     const sn = nodeById.get(sid);
     const tn = nodeById.get(tid);
-    const g = d3.select(this);
     g.select("stop.from-stop").attr("stop-color", sn ? sn.color : "#7a82a0");
     g.select("stop.to-stop").attr("stop-color", tn ? tn.color : "#7a82a0");
   });
 
-  if (!linkForce) linkForce = d3.forceLink().id((d) => d.id);
-  const safeLinks = links.filter((l) => {
-    const sid = linkEndpointId(l.source);
-    const tid = linkEndpointId(l.target);
-    return nodeById.has(sid) && nodeById.has(tid);
-  });
+  const gradientSel = defs.selectAll("linearGradient.edge-gradient");
 
-  linkForce.links(safeLinks).distance((d) => {
-    const sid = linkEndpointId(d.source);
-    const tid = linkEndpointId(d.target);
-    const s = nodes.find((n) => n.id === sid);
-    const t = nodes.find((n) => n.id === tid);
-    return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
-  });
+  if (!linkForce) linkForce = d3.forceLink().id((d) => d.id);
+  linkForce.links(links).distance((d) => {
+      const sid = linkEndpointId(d.source);
+      const tid = linkEndpointId(d.target);
+      const s = nodes.find((n) => n.id === sid);
+      const t = nodes.find((n) => n.id === tid);
+      return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+    });
 
   if (!sim) {
     sim = d3.forceSimulation(nodes)
@@ -1183,11 +1177,11 @@ function render(nodes, links) {
     sim.force("collision", d3.forceCollide().radius((d) => d.r + 24));
   }
 
-  linkSel = linkLayer.selectAll("line.link").data(links, (d) => d._key).join(
-    (enter) => enter.append("line").attr("class", "link"),
-    (update) => update,
-    (exit) => exit.remove()
-  )
+  // recreate link elements
+  links.forEach(function (d) {
+    linkLayer.append("line").attr("class", "link").datum(d);
+  });
+  linkSel = linkLayer.selectAll("line.link")
     .attr("stroke", (d) => `url(#${d._gid})`)
     .attr("stroke-width", 1.6)
     .attr("stroke-opacity", 0.55)
@@ -1197,20 +1191,16 @@ function render(nodes, links) {
       fillRelationForm(d.raw);
     });
 
-  edgeLabelSel = edgeLabelLayer.selectAll("g.edge-label-group").data(links, (d) => d._key).join(
-    (enter) => {
-      const g = enter.append("g").attr("class", "edge-label-group");
-      g.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
-      g.append("text").attr("class", "edge-label-text");
-      return g;
-    },
-    (update) => update,
-    (exit) => exit.remove()
-  )
-    .on("click", (e, d) => {
-      e.stopPropagation();
-      fillRelationForm(d.raw);
-    });
+  // recreate edge label groups
+  links.forEach(function (d) {
+    const g = edgeLabelLayer.append("g").attr("class", "edge-label-group").datum(d);
+    g.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
+    g.append("text").attr("class", "edge-label-text");
+  });
+  edgeLabelSel = edgeLabelLayer.selectAll("g.edge-label-group").on("click", (e, d) => {
+    e.stopPropagation();
+    fillRelationForm(d.raw);
+  });
   edgeLabelSel.select("text.edge-label-text").text((d) => d.relation);
   edgeLabelSel.each(function (d) {
     const g = d3.select(this);
@@ -1221,19 +1211,16 @@ function render(nodes, links) {
     g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
   });
 
-  nodeSel = nodeLayer.selectAll("g.node-group").data(nodes, (d) => d.id).join(
-    (enter) => {
-      const g = enter.append("g").attr("class", "node-group");
-      g.append("circle").attr("class", "node-ring");
-      g.append("circle").attr("class", "node-outer");
-      g.append("circle").attr("class", "node-circle");
-      g.append("circle").attr("class", "node-inner");
-      g.append("text").attr("class", "node-label");
-      return g;
-    },
-    (update) => update,
-    (exit) => exit.remove()
-  );
+  // recreate nodes
+  nodes.forEach(function (d) {
+    const g = nodeLayer.append("g").attr("class", "node-group").datum(d);
+    g.append("circle").attr("class", "node-ring");
+    g.append("circle").attr("class", "node-outer");
+    g.append("circle").attr("class", "node-circle");
+    g.append("circle").attr("class", "node-inner");
+    g.append("text").attr("class", "node-label");
+  });
+  nodeSel = nodeLayer.selectAll("g.node-group");
 
   nodeSel.select("circle.node-ring")
     .attr("r", (d) => d.r + 5)
