@@ -56,6 +56,7 @@
   .link.highlighted { stroke-width: 2.5px !important; stroke-opacity: 1 !important; }
   .link.dimmed-arrow { marker-end: url(#arr-end-dimmed); }
   .link.highlighted-arrow { marker-end: url(#arr-end); }
+  .link.filtered-out { opacity: 0 !important; stroke-opacity: 0 !important; pointer-events: none; }
 
   .edge-label-group { pointer-events: auto; cursor: pointer; }
   .edge-label-bg  { fill: var(--surface); stroke: var(--border2); stroke-width: 0.8; }
@@ -69,11 +70,13 @@
   .edge-label-group.dimmed   { opacity: 0.05; }
   .edge-label-group.highlighted .edge-label-text { font-weight: 600; }
   .edge-label-group.highlighted .edge-label-bg   { stroke: var(--border2); }
+  .edge-label-group.filtered-out { opacity: 0 !important; pointer-events: none; }
 
   .node-group { cursor: pointer; }
-  .node-ring { fill: none; animation: pulse-ring 2.6s ease-out infinite; }
+  .node-ring { fill: none; }
   .node-group.dimmed  { opacity: 0.13; }
   .node-group.selected .node-circle { filter: drop-shadow(0 0 6px currentColor); }
+  .node-group.filtered-out { opacity: 0 !important; pointer-events: none; }
 
   .node-label {
     font-family: 'JetBrains Mono', monospace;
@@ -82,11 +85,6 @@
     pointer-events: none;
   }
 
-  @keyframes pulse-ring {
-    0%   { r: 14px; opacity: 0.45; }
-    65%  { r: 28px; opacity: 0; }
-    100% { r: 28px; opacity: 0; }
-  }
 
   #stats {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
@@ -135,10 +133,31 @@
     display: flex; align-items: center; gap: 8px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11.5px; color: var(--text); margin-bottom: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
   }
+  .legend-item:hover { background: var(--surface2); border-color: var(--border); }
+  .legend-item.active { background: rgba(59,110,245,0.08); border-color: rgba(59,110,245,0.35); }
   .legend-dot {
     width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
   }
+  .legend-actions { margin-top: 6px; }
+  .legend-reset-btn {
+    width: 100%;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+  }
+  .legend-reset-btn:hover { color: var(--blue); border-color: var(--blue); background: #eef3ff; }
 
   #info-panel {
     position: absolute; top: 26px; right: 28px; width: 238px;
@@ -420,12 +439,12 @@
     <div class="ops-card" style="margin-bottom:0;">
       <div class="ops-title">关系操作</div>
       <div class="ops-grid">
-        <div class="ops-row"><label>关系ID（relation_id）</label><input id="relId" placeholder="点击图中的关系自动填充"></div>
+        <div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid（点击关系自动填充）"></div>
         <div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED"></div>
       </div>
       <div class="ops-grid" style="margin-top:6px;">
-        <div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid"></div>
-        <div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid"></div>
+        <div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid（点击关系自动填充）"></div>
+        <div class="ops-row"><label>说明</label><input value="按 source_uid + target_uid 编辑/删除关系" readonly></div>
       </div>
       <div class="ops-row" style="margin-top:6px;"><label>描述（description）</label><input id="relDesc" placeholder="关系描述"></div>
       <div class="ops-row" style="margin-top:6px;">
@@ -460,38 +479,55 @@ const TYPE_META = {
 };
 
 const DEMO_NODES = [
-  { id: 1, label: "Orchestrator", type: "Core", weight: 98 },
-  { id: 2, label: "Planner", type: "Core", weight: 91 },
-  { id: 3, label: "Memory", type: "Core", weight: 87 },
-  { id: 4, label: "Retriever", type: "Module", weight: 75 },
-  { id: 5, label: "Embedder", type: "Module", weight: 72 },
-  { id: 6, label: "Reasoner", type: "Module", weight: 78 },
-  { id: 7, label: "VectorDB", type: "Data", weight: 65 },
-  { id: 8, label: "Cache", type: "Data", weight: 60 },
-  { id: 9, label: "DocStore", type: "Data", weight: 62 },
-  { id: 10, label: "API Gateway", type: "Service", weight: 83 },
-  { id: 11, label: "Auth", type: "Service", weight: 70 },
-  { id: 12, label: "Logger", type: "Service", weight: 55 },
-  { id: 13, label: "Executor", type: "Agent", weight: 80 },
-  { id: 14, label: "Validator", type: "Agent", weight: 68 },
-  { id: 15, label: "Critic", type: "Agent", weight: 73 },
-  { id: 16, label: "Scheduler", type: "Module", weight: 66 },
-  { id: 17, label: "EventBus", type: "Service", weight: 71 },
-  { id: 18, label: "Metrics", type: "Data", weight: 57 },
+  { uid: "1", name: "Orchestrator", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 98 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "2", name: "Planner", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 91 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "3", name: "Memory", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 87 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "4", name: "Retriever", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 75 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "5", name: "Embedder", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 72 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "6", name: "Reasoner", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 78 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "7", name: "VectorDB", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 65 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "8", name: "Cache", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 60 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "9", name: "DocStore", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 62 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "10", name: "API Gateway", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 83 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "11", name: "Auth", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 70 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "12", name: "Logger", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 55 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "13", name: "Executor", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 80 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "14", name: "Validator", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 68 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "15", name: "Critic", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 73 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "16", name: "Scheduler", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 66 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "17", name: "EventBus", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 71 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { uid: "18", name: "Metrics", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 57 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
 ];
 
 const DEMO_LINKS = [
-  [1, 2, "dispatches"], [1, 3, "reads"], [1, 10, "routes"], [1, 13, "spawns"],
-  [2, 4, "queries"], [2, 6, "invokes"], [2, 16, "schedules"],
-  [3, 7, "indexes"], [3, 8, "caches"],
-  [4, 7, "fetches"], [4, 5, "embeds"], [5, 7, "stores"],
-  [6, 15, "reviews"], [6, 14, "checks"],
-  [10, 11, "verifies"], [10, 12, "logs"], [10, 17, "publishes"],
-  [13, 14, "submits"], [13, 15, "drafts"],
-  [16, 17, "triggers"],
-  [17, 12, "reports"], [17, 18, "tracks"],
-  [8, 9, "persists"], [11, 3, "syncs"], [12, 18, "writes"],
-  [14, 6, "refines"], [15, 2, "retries"], [9, 7, "mirrors"],
+  { relation_id: "demo-1-2-dispatches", source_uid: "1", target_uid: "2", rel_type: "dispatches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-1-3-reads", source_uid: "1", target_uid: "3", rel_type: "reads", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-1-10-routes", source_uid: "1", target_uid: "10", rel_type: "routes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-1-13-spawns", source_uid: "1", target_uid: "13", rel_type: "spawns", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-2-4-queries", source_uid: "2", target_uid: "4", rel_type: "queries", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-2-6-invokes", source_uid: "2", target_uid: "6", rel_type: "invokes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-2-16-schedules", source_uid: "2", target_uid: "16", rel_type: "schedules", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-3-7-indexes", source_uid: "3", target_uid: "7", rel_type: "indexes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-3-8-caches", source_uid: "3", target_uid: "8", rel_type: "caches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-4-7-fetches", source_uid: "4", target_uid: "7", rel_type: "fetches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-4-5-embeds", source_uid: "4", target_uid: "5", rel_type: "embeds", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-5-7-stores", source_uid: "5", target_uid: "7", rel_type: "stores", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-6-15-reviews", source_uid: "6", target_uid: "15", rel_type: "reviews", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-6-14-checks", source_uid: "6", target_uid: "14", rel_type: "checks", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-10-11-verifies", source_uid: "10", target_uid: "11", rel_type: "verifies", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-10-12-logs", source_uid: "10", target_uid: "12", rel_type: "logs", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-10-17-publishes", source_uid: "10", target_uid: "17", rel_type: "publishes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-13-14-submits", source_uid: "13", target_uid: "14", rel_type: "submits", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-13-15-drafts", source_uid: "13", target_uid: "15", rel_type: "drafts", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-16-17-triggers", source_uid: "16", target_uid: "17", rel_type: "triggers", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-17-12-reports", source_uid: "17", target_uid: "12", rel_type: "reports", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-17-18-tracks", source_uid: "17", target_uid: "18", rel_type: "tracks", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-8-9-persists", source_uid: "8", target_uid: "9", rel_type: "persists", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-11-3-syncs", source_uid: "11", target_uid: "3", rel_type: "syncs", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-12-18-writes", source_uid: "12", target_uid: "18", rel_type: "writes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-14-6-refines", source_uid: "14", target_uid: "6", rel_type: "refines", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-15-2-retries", source_uid: "15", target_uid: "2", rel_type: "retries", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-9-7-mirrors", source_uid: "9", target_uid: "7", rel_type: "mirrors", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
 ];
 
 function apiBase() {
@@ -591,16 +627,35 @@ function renderLegend(nodes = []) {
   const legendList = document.getElementById("legendList");
   if (!legendList) return;
   legendList.innerHTML = "";
+  const legendRoot = document.getElementById("legend");
 
   const byType = new Map();
+  const toTypeKey = (label) => {
+    const k = clean(label).toLowerCase();
+    if (k === "core") return "Core";
+    if (k === "module") return "Module";
+    if (k === "service") return "Service";
+    if (k === "data") return "Data";
+    if (k === "agent") return "Agent";
+    return "";
+  };
+
   (nodes || []).forEach((node) => {
-    const type = clean(node.type) || "Agent";
-    if (!byType.has(type)) {
-      byType.set(type, {
-        type,
-        color: node.color || (TYPE_META[type]?.color || TYPE_META.Agent.color),
-      });
-    }
+    const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
+    const effectiveLabels = labels.length ? labels : [node.type || "Agent"];
+    effectiveLabels.forEach((rawLabel) => {
+      const label = clean(rawLabel);
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (byType.has(key)) return;
+
+      const typeKey = toTypeKey(label);
+      const color = typeKey
+        ? (TYPE_META[typeKey]?.color || node.color || TYPE_META.Agent.color)
+        : (node.color || TYPE_META.Agent.color);
+      const display = typeKey ? typeDisplayName(typeKey) : label;
+      byType.set(key, { key, display, color });
+    });
   });
 
   if (!byType.size) {
@@ -608,24 +663,61 @@ function renderLegend(nodes = []) {
     item.className = "legend-item";
     item.textContent = "暂无节点";
     legendList.appendChild(item);
+    if (legendRoot) {
+      const oldActions = legendRoot.querySelector(".legend-actions");
+      if (oldActions) oldActions.remove();
+    }
     return;
   }
 
-  byType.forEach(({ type, color }) => {
+  byType.forEach(({ key, display, color }) => {
     const item = document.createElement("div");
     item.className = "legend-item";
+    if (selectedLegendTypes.has(key)) item.classList.add("active");
+    item.dataset.typeKey = key;
 
     const dot = document.createElement("div");
     dot.className = "legend-dot";
     dot.style.background = color;
 
     const text = document.createElement("span");
-    text.textContent = typeDisplayName(type);
+    text.textContent = display;
 
     item.appendChild(dot);
     item.appendChild(text);
+    item.addEventListener("click", () => {
+      if (selectedLegendTypes.has(key)) {
+        selectedLegendTypes.delete(key);
+      } else {
+        selectedLegendTypes.add(key);
+      }
+      renderLegend(graphNodes);
+      applyTypeFilter();
+      refreshSelectionStyles();
+    });
     legendList.appendChild(item);
   });
+
+  if (legendRoot) {
+    const oldActions = legendRoot.querySelector(".legend-actions");
+    if (oldActions) oldActions.remove();
+    const actions = document.createElement("div");
+    actions.className = "legend-actions";
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "legend-reset-btn";
+    resetBtn.textContent = "重置筛选";
+    resetBtn.addEventListener("click", () => {
+      if (!selectedLegendTypes.size) return;
+      selectedLegendTypes.clear();
+      renderLegend(graphNodes);
+      applyTypeFilter();
+      refreshSelectionStyles();
+      setStatus("已重置类型筛选");
+    });
+    actions.appendChild(resetBtn);
+    legendRoot.appendChild(actions);
+  }
 }
 
 function parseWeight(node) {
@@ -648,8 +740,6 @@ function relationLabel(rel) {
 }
 
 function relationKey(rel, index) {
-  const rid = clean(rel.relation_id);
-  if (rid) return rid;
   return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
 }
 
@@ -683,18 +773,29 @@ function setStatus(text, isError = false) {
 }
 
 function mapGraphData(nodesRaw, relsRaw) {
+  const degreeByUid = new Map();
+  (relsRaw || []).forEach((r) => {
+    const suid = clean(r.source_uid);
+    const tuid = clean(r.target_uid);
+    if (suid) degreeByUid.set(suid, (degreeByUid.get(suid) || 0) + 1);
+    if (tuid) degreeByUid.set(tuid, (degreeByUid.get(tuid) || 0) + 1);
+  });
+
   const mappedNodes = (nodesRaw || []).map((n, idx) => {
     const type = parseType(n.labels, n.uid);
     const meta = TYPE_META[type] || TYPE_META.Agent;
+    const uid = clean(n.uid);
+    const degree = degreeByUid.get(uid) || 0;
+    const dynamicR = Math.max(8, Math.min(26, meta.r + degree * 0.9));
     return {
-      id: idx + 1,
-      uid: clean(n.uid),
+      id: uid || String(idx + 1),
+      uid,
       label: nodeLabel(n),
       type,
       weight: parseWeight(n),
       color: meta.color,
       bg: meta.bg,
-      r: meta.r,
+      r: dynamicR,
       raw: n,
     };
   });
@@ -702,12 +803,14 @@ function mapGraphData(nodesRaw, relsRaw) {
   const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
   const mappedLinks = [];
   (relsRaw || []).forEach((r, i) => {
-    const s = idMap.get(clean(r.source_uid));
-    const t = idMap.get(clean(r.target_uid));
-    if (!s || !t) return;
+    const sUid = clean(r.source_uid);
+    const tUid = clean(r.target_uid);
+    const s = idMap.get(sUid);
+    const t = idMap.get(tUid);
+    if (!s || !t || !sUid || !tUid) return;
     mappedLinks.push({
-      source: s,
-      target: t,
+      source: sUid,
+      target: tUid,
       relation: relationLabel(r),
       _key: relationKey(r, i),
       raw: r,
@@ -758,33 +861,7 @@ function loadDemoGraph() {
     document.getElementById("groupId").value = "";
   }
   setStatus("已加载示例图谱");
-  const nodes = DEMO_NODES.map((n) => ({
-    ...n,
-    ...TYPE_META[n.type],
-    raw: {
-      uid: String(n.id),
-      name: n.label,
-      labels: [n.type],
-      description: "",
-      properties: { weight: n.weight },
-      meta: {},
-    },
-  }));
-  const links = DEMO_LINKS.map(([s, t, r], i) => ({
-    source: s,
-    target: t,
-    relation: r,
-    _key: `demo-${i}`,
-    raw: {
-      relation_id: `demo-${i}`,
-      source_uid: String(s),
-      target_uid: String(t),
-      rel_type: r,
-      description: "",
-      properties: {},
-    },
-  }));
-  return { nodes, links };
+  return mapGraphData(DEMO_NODES, DEMO_LINKS);
 }
 
 function fillNodeForm(nodeRaw) {
@@ -799,7 +876,6 @@ function fillNodeForm(nodeRaw) {
 
 function fillRelationForm(relRaw) {
   if (!relRaw) return;
-  document.getElementById("relId").value = clean(relRaw.relation_id);
   document.getElementById("relSource").value = clean(relRaw.source_uid);
   document.getElementById("relTarget").value = clean(relRaw.target_uid);
   document.getElementById("relType").value = relationLabel(relRaw);
@@ -823,7 +899,6 @@ function nodePayload() {
 }
 
 function relationPayload() {
-  const relation_id = clean(document.getElementById("relId").value);
   const group_id = clean(document.getElementById("groupId").value);
   const source_uid = clean(document.getElementById("relSource").value);
   const target_uid = clean(document.getElementById("relTarget").value);
@@ -832,7 +907,6 @@ function relationPayload() {
     throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
   }
   return {
-    relation_id,
     group_id,
     source_uid,
     target_uid,
@@ -864,117 +938,141 @@ let linkSel = null;
 let edgeLabelSel = null;
 let selected = null;
 let graphNodes = [];
+let graphLinks = [];
+let linkForce = null;
+let linkLayer = null;
+let edgeLabelLayer = null;
+let nodeLayer = null;
+let selectedLegendTypes = new Set();
 
-function clearScene() {
-  root.selectAll("*").remove();
-  defs.selectAll("linearGradient").remove();
+function getNodeLabelKeys(node) {
+  const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
+  const out = [];
+  labels.forEach((label) => {
+    const s = clean(label).toLowerCase();
+    if (s) out.push(s);
+  });
+  if (!out.length) {
+    const fallback = clean(node?.type || "Agent").toLowerCase();
+    if (fallback) out.push(fallback);
+  }
+  return out;
 }
 
-function clearSel() {
-  selected = null;
-  if (nodeSel) nodeSel.classed("dimmed", false).classed("selected", false);
-  if (linkSel) {
+function passTypeFilter(node) {
+  if (!selectedLegendTypes.size) return true;
+  const keys = getNodeLabelKeys(node);
+  return keys.some((k) => selectedLegendTypes.has(k));
+}
+
+function applyTypeFilter() {
+  if (!nodeSel || !linkSel || !edgeLabelSel) return;
+  const visibleNodeIds = new Set();
+  graphNodes.forEach((n) => {
+    if (passTypeFilter(n)) visibleNodeIds.add(n.id);
+  });
+  nodeSel.classed("filtered-out", (n) => !visibleNodeIds.has(n.id));
+  const isLinkVisible = (l) => {
+    const s = linkEndpointId(l.source);
+    const t = linkEndpointId(l.target);
+    return visibleNodeIds.has(s) && visibleNodeIds.has(t);
+  };
+  linkSel.classed("filtered-out", (l) => !isLinkVisible(l));
+  edgeLabelSel.classed("filtered-out", (l) => !isLinkVisible(l));
+}
+
+function ensureSceneLayers() {
+  if (!linkLayer) linkLayer = root.append("g").attr("data-layer", "links");
+  if (!edgeLabelLayer) edgeLabelLayer = root.append("g").attr("data-layer", "edge-labels");
+  if (!nodeLayer) nodeLayer = root.append("g").attr("data-layer", "nodes");
+}
+
+function linkEndpointId(value) {
+  if (value && typeof value === "object") return value.id;
+  return value;
+}
+
+function gradientIdFromKey(key) {
+  const text = String(key || "edge");
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return `lg-${hash.toString(36)}`;
+}
+
+function refreshSelectionStyles() {
+  if (!nodeSel || !linkSel || !edgeLabelSel) return;
+  const visibleNodeIds = new Set();
+  graphNodes.forEach((n) => {
+    if (passTypeFilter(n)) visibleNodeIds.add(n.id);
+  });
+  const nodeVisible = (nodeId) => visibleNodeIds.has(nodeId);
+  const relVisible = (l) => {
+    const s = linkEndpointId(l.source);
+    const t = linkEndpointId(l.target);
+    return nodeVisible(s) && nodeVisible(t);
+  };
+
+  if (!selected) {
+    nodeSel.classed("dimmed", false).classed("selected", false);
     linkSel
       .classed("dimmed", false)
       .classed("highlighted", false)
       .classed("dimmed-arrow", false)
       .classed("highlighted-arrow", false);
+    edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
+    return;
   }
-  if (edgeLabelSel) edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
-  document.getElementById("info-panel").classList.remove("visible");
+  if (!nodeVisible(selected)) {
+    selected = null;
+    nodeSel.classed("dimmed", false).classed("selected", false);
+    linkSel
+      .classed("dimmed", false)
+      .classed("highlighted", false)
+      .classed("dimmed-arrow", false)
+      .classed("highlighted-arrow", false);
+    edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
+    document.getElementById("info-panel").classList.remove("visible");
+    return;
+  }
+
+  const neighbors = new Set([selected]);
+  graphLinks.forEach((l) => {
+    if (!relVisible(l)) return;
+    const s = linkEndpointId(l.source);
+    const t = linkEndpointId(l.target);
+    if (s === selected) neighbors.add(t);
+    if (t === selected) neighbors.add(s);
+  });
+  nodeSel.classed("dimmed", (n) => !neighbors.has(n.id)).classed("selected", (n) => n.id === selected);
+
+  const isRel = (l) => relVisible(l) && (linkEndpointId(l.source) === selected || linkEndpointId(l.target) === selected);
+  linkSel
+    .classed("dimmed", (l) => relVisible(l) && !isRel(l))
+    .classed("highlighted", isRel)
+    .classed("dimmed-arrow", (l) => relVisible(l) && !isRel(l))
+    .classed("highlighted-arrow", isRel);
+  edgeLabelSel.classed("dimmed", (l) => relVisible(l) && !isRel(l)).classed("highlighted", isRel);
 }
 
-function render(nodes, links) {
-  if (sim) sim.stop();
-  clearScene();
-  clearSel();
-
-  graphNodes = nodes;
-
-  document.getElementById("s-nodes").textContent = nodes.length;
-  document.getElementById("s-links").textContent = links.length;
-  renderLegend(nodes);
-
-  links.forEach((l, i) => {
-    const sn = nodes.find((n) => n.id === l.source);
-    const tn = nodes.find((n) => n.id === l.target);
-    const gid = `lg-${i}`;
-    defs.append("linearGradient").attr("id", gid).attr("gradientUnits", "userSpaceOnUse")
-      .call((g) => {
-        g.append("stop").attr("offset", "0%").attr("stop-color", sn ? sn.color : "#7a82a0").attr("stop-opacity", 0.6);
-        g.append("stop").attr("offset", "100%").attr("stop-color", tn ? tn.color : "#7a82a0").attr("stop-opacity", 0.6);
-      });
-    l._gid = gid;
-  });
-
-  sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id((d) => d.id).distance((d) => {
-      const sid = d.source.id ?? d.source;
-      const tid = d.target.id ?? d.target;
-      const s = nodes.find((n) => n.id === sid);
-      const t = nodes.find((n) => n.id === tid);
-      return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
-    }))
-    .force("charge", d3.forceManyBody().strength(-460))
-    .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
-    .force("collision", d3.forceCollide().radius((d) => d.r + 24));
-
-  linkSel = root.append("g").selectAll("line").data(links).join("line")
-    .attr("class", "link")
-    .attr("stroke", (d) => `url(#${d._gid})`)
-    .attr("stroke-width", 1.6)
-    .attr("stroke-opacity", 0.55)
-    .attr("marker-end", "url(#arr-end)")
-    .on("click", (e, d) => {
-      e.stopPropagation();
-      fillRelationForm(d.raw);
+function drawPositions() {
+  if (linkSel) {
+    linkSel
+      .attr("x1", (d) => d.source.x)
+      .attr("y1", (d) => d.source.y)
+      .attr("x2", (d) => d.target.x)
+      .attr("y2", (d) => d.target.y);
+    linkSel.data().forEach((l) => {
+      defs.select(`#${l._gid}`)
+        .attr("x1", l.source.x)
+        .attr("y1", l.source.y)
+        .attr("x2", l.target.x)
+        .attr("y2", l.target.y);
     });
+  }
 
-  edgeLabelSel = root.append("g").selectAll("g").data(links).join("g")
-    .attr("class", "edge-label-group")
-    .on("click", (e, d) => {
-      e.stopPropagation();
-      fillRelationForm(d.raw);
-    });
-
-  edgeLabelSel.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
-  edgeLabelSel.append("text").attr("class", "edge-label-text").text((d) => d.relation);
-  edgeLabelSel.each(function (d) {
-    const g = d3.select(this);
-    const sid = d.source.id ?? d.source;
-    const sn = nodes.find((n) => n.id === sid);
-    g.select("text").attr("fill", sn ? sn.color : "#7a82a0");
-    const tw = g.select("text").node().getBBox().width + 8;
-    g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
-  });
-
-  nodeSel = root.append("g").selectAll("g").data(nodes).join("g")
-    .attr("class", "node-group")
-    .call(d3.drag()
-      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-      .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
-      .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
-
-  nodeSel.append("circle").attr("class", "node-ring")
-    .attr("r", (d) => d.r + 5)
-    .attr("stroke", (d) => d.color).attr("stroke-width", 1.5)
-    .attr("fill", "none").attr("opacity", 0.35)
-    .style("animation-delay", (_d, i) => `${(i * 0.19) % 2.6}s`);
-
-  nodeSel.append("circle").attr("r", (d) => d.r + 1).attr("fill", (d) => d.color).attr("fill-opacity", 0.12);
-  nodeSel.append("circle").attr("class", "node-circle")
-    .attr("r", (d) => d.r)
-    .attr("fill", (d) => d.bg)
-    .attr("stroke", (d) => d.color).attr("stroke-width", 2)
-    .attr("filter", "url(#f-soft)");
-  nodeSel.append("circle").attr("r", (d) => d.r * 0.3).attr("fill", (d) => d.color);
-  nodeSel.append("text").attr("class", "node-label").attr("y", (d) => d.r + 15).attr("fill", (d) => d.color).text((d) => d.label);
-
-  sim.on("tick", () => {
-    linkSel.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y).attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
-    links.forEach((l) => {
-      defs.select(`#${l._gid}`).attr("x1", l.source.x).attr("y1", l.source.y).attr("x2", l.target.x).attr("y2", l.target.y);
-    });
+  if (edgeLabelSel) {
     edgeLabelSel.attr("transform", (d) => {
       const mx = (d.source.x + d.target.x) / 2;
       const my = (d.source.y + d.target.y) / 2;
@@ -984,24 +1082,199 @@ function render(nodes, links) {
       if (a > 90 || a < -90) a += 180;
       return `translate(${mx},${my}) rotate(${a})`;
     });
+  }
+
+  if (nodeSel) {
     nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
+  }
+}
+
+function clearSel() {
+  selected = null;
+  refreshSelectionStyles();
+  document.getElementById("info-panel").classList.remove("visible");
+}
+
+function render(nodes, links) {
+  ensureSceneLayers();
+
+  const prevById = new Map((graphNodes || []).map((n) => [n.id, n]));
+  nodes.forEach((n) => {
+    const prev = prevById.get(n.id);
+    if (!prev) return;
+    if (Number.isFinite(prev.x)) n.x = prev.x;
+    if (Number.isFinite(prev.y)) n.y = prev.y;
+    if (Number.isFinite(prev.vx)) n.vx = prev.vx;
+    if (Number.isFinite(prev.vy)) n.vy = prev.vy;
+    if (Number.isFinite(prev.fx)) n.fx = prev.fx;
+    if (Number.isFinite(prev.fy)) n.fy = prev.fy;
   });
+
+  graphNodes = nodes;
+  graphLinks = links;
+
+  document.getElementById("s-nodes").textContent = nodes.length;
+  document.getElementById("s-links").textContent = links.length;
+  renderLegend(nodes);
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  links.forEach((l) => {
+    l._gid = gradientIdFromKey(l._key);
+  });
+
+  const gradientSel = defs.selectAll("linearGradient.edge-gradient").data(links, (d) => d._gid).join(
+    (enter) => {
+      const g = enter.append("linearGradient").attr("class", "edge-gradient").attr("id", (d) => d._gid).attr("gradientUnits", "userSpaceOnUse");
+      g.append("stop").attr("class", "from-stop").attr("offset", "0%").attr("stop-opacity", 0.6);
+      g.append("stop").attr("class", "to-stop").attr("offset", "100%").attr("stop-opacity", 0.6);
+      return g;
+    },
+    (update) => update,
+    (exit) => exit.remove()
+  );
+  gradientSel.each(function (d) {
+    const sid = linkEndpointId(d.source);
+    const tid = linkEndpointId(d.target);
+    const sn = nodeById.get(sid);
+    const tn = nodeById.get(tid);
+    const g = d3.select(this);
+    g.select("stop.from-stop").attr("stop-color", sn ? sn.color : "#7a82a0");
+    g.select("stop.to-stop").attr("stop-color", tn ? tn.color : "#7a82a0");
+  });
+
+  if (!linkForce) linkForce = d3.forceLink().id((d) => d.id);
+  linkForce.links(links).distance((d) => {
+      const sid = linkEndpointId(d.source);
+      const tid = linkEndpointId(d.target);
+      const s = nodes.find((n) => n.id === sid);
+      const t = nodes.find((n) => n.id === tid);
+      return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+    });
+
+  if (!sim) {
+    sim = d3.forceSimulation(nodes)
+      .force("link", linkForce)
+      .force("charge", d3.forceManyBody().strength(-460))
+      .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
+      .force("collision", d3.forceCollide().radius((d) => d.r + 24));
+  } else {
+    sim.nodes(nodes);
+    sim.force("link", linkForce);
+    sim.force("charge", d3.forceManyBody().strength(-460));
+    sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
+    sim.force("collision", d3.forceCollide().radius((d) => d.r + 24));
+  }
+
+  linkSel = linkLayer.selectAll("line.link").data(links, (d) => d._key).join(
+    (enter) => enter.append("line").attr("class", "link"),
+    (update) => update,
+    (exit) => exit.remove()
+  )
+    .attr("stroke", (d) => `url(#${d._gid})`)
+    .attr("stroke-width", 1.6)
+    .attr("stroke-opacity", 0.55)
+    .attr("marker-end", "url(#arr-end)")
+    .on("click", (e, d) => {
+      e.stopPropagation();
+      fillRelationForm(d.raw);
+    });
+
+  edgeLabelSel = edgeLabelLayer.selectAll("g.edge-label-group").data(links, (d) => d._key).join(
+    (enter) => {
+      const g = enter.append("g").attr("class", "edge-label-group");
+      g.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
+      g.append("text").attr("class", "edge-label-text");
+      return g;
+    },
+    (update) => update,
+    (exit) => exit.remove()
+  )
+    .on("click", (e, d) => {
+      e.stopPropagation();
+      fillRelationForm(d.raw);
+    });
+  edgeLabelSel.select("text.edge-label-text").text((d) => d.relation);
+  edgeLabelSel.each(function (d) {
+    const g = d3.select(this);
+    const sid = linkEndpointId(d.source);
+    const sn = nodeById.get(sid);
+    g.select("text").attr("fill", sn ? sn.color : "#7a82a0");
+    const tw = g.select("text").node().getBBox().width + 8;
+    g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
+  });
+
+  nodeSel = nodeLayer.selectAll("g.node-group").data(nodes, (d) => d.id).join(
+    (enter) => {
+      const g = enter.append("g").attr("class", "node-group");
+      g.append("circle").attr("class", "node-ring");
+      g.append("circle").attr("class", "node-outer");
+      g.append("circle").attr("class", "node-circle");
+      g.append("circle").attr("class", "node-inner");
+      g.append("text").attr("class", "node-label");
+      return g;
+    },
+    (update) => update,
+    (exit) => exit.remove()
+  );
+
+  nodeSel.select("circle.node-ring")
+    .attr("r", (d) => d.r + 5)
+    .attr("stroke", (d) => d.color).attr("stroke-width", 1.5)
+    .attr("fill", "none").attr("opacity", 0.35)
+    .style("animation-delay", (_d, i) => `${(i * 0.19) % 2.6}s`);
+
+  nodeSel.select("circle.node-outer").attr("r", (d) => d.r + 1).attr("fill", (d) => d.color).attr("fill-opacity", 0.12);
+  nodeSel.select("circle.node-circle")
+    .attr("r", (d) => d.r)
+    .attr("fill", (d) => d.bg)
+    .attr("stroke", (d) => d.color).attr("stroke-width", 2)
+    .attr("filter", "url(#f-soft)");
+  nodeSel.select("circle.node-inner").attr("r", (d) => d.r * 0.3).attr("fill", (d) => d.color);
+  nodeSel.select("text.node-label").attr("y", (d) => d.r + 15).attr("fill", (d) => d.color).text((d) => d.label);
+
+  nodeSel.call(d3.drag()
+    .on("start", (e, d) => {
+      if (!e.active) sim.alpha(0.2).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    })
+    .on("drag", (e, d) => {
+      d.fx = e.x;
+      d.fy = e.y;
+      drawPositions();
+    })
+    .on("end", (e, d) => {
+      if (!e.active) sim.alpha(0);
+      d.fx = null;
+      d.fy = null;
+      sim.stop();
+      drawPositions();
+    }));
+
+  sim.on("tick", drawPositions);
+  sim.alpha(0.9);
+  for (let i = 0; i < 120; i += 1) {
+    sim.tick();
+  }
+  drawPositions();
+  sim.stop();
 
   nodeSel.on("click", (e, d) => {
     e.stopPropagation();
+    if (!passTypeFilter(d)) return;
     fillNodeForm(d.raw);
 
     if (selected === d.id) { clearSel(); return; }
     selected = d.id;
     const nb = new Set([d.id]);
-    links.forEach((l) => {
-      const s = l.source.id ?? l.source;
-      const t = l.target.id ?? l.target;
+    graphLinks.forEach((l) => {
+      const s = linkEndpointId(l.source);
+      const t = linkEndpointId(l.target);
       if (s === d.id) nb.add(t);
       if (t === d.id) nb.add(s);
     });
     nodeSel.classed("dimmed", (n) => !nb.has(n.id)).classed("selected", (n) => n.id === d.id);
-    const isRel = (l) => (l.source.id ?? l.source) === d.id || (l.target.id ?? l.target) === d.id;
+    const isRel = (l) => linkEndpointId(l.source) === d.id || linkEndpointId(l.target) === d.id;
     linkSel
       .classed("dimmed", (l) => !isRel(l))
       .classed("highlighted", isRel)
@@ -1009,7 +1282,7 @@ function render(nodes, links) {
       .classed("highlighted-arrow", isRel);
     edgeLabelSel.classed("dimmed", (l) => !isRel(l)).classed("highlighted", isRel);
 
-    const cc = links.filter(isRel).length;
+    const cc = graphLinks.filter(isRel).length;
     document.getElementById("p-type").textContent = typeDisplayName(d.type);
     document.getElementById("p-type").style.color = d.color;
     document.getElementById("p-name").textContent = d.label;
@@ -1024,6 +1297,9 @@ function render(nodes, links) {
     .on("mouseenter", (_e, d) => { tip.style.opacity = "1"; tip.style.background = d.color; tip.textContent = `${d.label} · ${d.type} · weight ${d.weight}`; })
     .on("mousemove", (e) => { tip.style.left = `${e.clientX + 14}px`; tip.style.top = `${e.clientY - 10}px`; })
     .on("mouseleave", () => { tip.style.opacity = "0"; });
+
+  applyTypeFilter();
+  refreshSelectionStyles();
 }
 
 const zoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
@@ -1035,18 +1311,13 @@ svg.on("click", () => clearSel());
 document.getElementById("panel-close").addEventListener("click", clearSel);
 
 function shuffleGraph() {
-  graphNodes.forEach((n) => {
-    n.vx = (Math.random() - 0.5) * 100;
-    n.vy = (Math.random() - 0.5) * 100;
-  });
-  if (sim) sim.alpha(0.8).restart();
+  setStatus("自动移动动画已关闭");
 }
 
 async function loadAndRenderGroup(groupId) {
-  const graph = await loadGraphByGroupId(groupId, (paged) => {
+  await loadGraphByGroupId(groupId, (paged) => {
     render(paged.nodes, paged.links);
   });
-  render(graph.nodes, graph.links);
 }
 
 document.getElementById("btn-zoom-in").addEventListener("click", () => svg.transition().duration(280).call(zoom.scaleBy, 1.35));
@@ -1120,7 +1391,6 @@ document.getElementById("btnRelUpdate").addEventListener("click", async () => {
   try {
     if (!window.confirm("确认更新关系吗？")) return;
     const payload = relationPayload();
-    if (!payload.relation_id) throw new Error("更新关系时 relation_id 不能为空");
     await mutate("/group-graph/api/relation", "PUT", payload);
   } catch (e) {
     setStatus(`关系更新失败: ${e.message}`, true);
@@ -1131,8 +1401,11 @@ document.getElementById("btnRelDelete").addEventListener("click", async () => {
   try {
     if (!window.confirm("确认删除关系吗？")) return;
     const payload = relationPayload();
-    if (!payload.relation_id) throw new Error("删除关系时 relation_id 不能为空");
-    await mutate("/group-graph/api/relation", "DELETE", { relation_id: payload.relation_id });
+    await mutate("/group-graph/api/relation", "DELETE", {
+      group_id: payload.group_id,
+      source_uid: payload.source_uid,
+      target_uid: payload.target_uid,
+    });
   } catch (e) {
     setStatus(`关系删除失败: ${e.message}`, true);
   }
@@ -1141,7 +1414,13 @@ document.getElementById("btnRelDelete").addEventListener("click", async () => {
 window.addEventListener("resize", () => {
   if (!sim) return;
   sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-  sim.alpha(0.3).restart();
+  if (!linkForce) return;
+  sim.alpha(0.25);
+  for (let i = 0; i < 60; i += 1) {
+    sim.tick();
+  }
+  drawPositions();
+  sim.stop();
 });
 
 (async function init() {

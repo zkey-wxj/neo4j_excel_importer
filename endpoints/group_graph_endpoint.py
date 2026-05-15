@@ -32,6 +32,7 @@ class GroupGraphEndpoint(Endpoint):
         path = r.path
         method = r.method.upper()
         logger.info("GroupGraphEndpoint invoked, method=%s path=%s", method, path)
+        store: GroupGraphStore | None = None
 
         try:
             if path == "/group-graph" and method == "GET":
@@ -57,6 +58,9 @@ class GroupGraphEndpoint(Endpoint):
         except Exception as exc:
             logger.exception("endpoint invoke failed")
             return self._json_response({"error": str(exc)}, 500)
+        finally:
+            if store is not None:
+                store.close()
 
         return self._json_response({"error": f"Unsupported route: {method} {path}"}, 404)
 
@@ -123,26 +127,26 @@ class GroupGraphEndpoint(Endpoint):
         err = self._validate_required(body, ["group_id", "source_uid", "target_uid", "rel_type"])
         if err:
             return self._json_response({"error": err}, 400)
-        relation_id = store.create_relation(body)
-        if not relation_id:
+        relation_ref = store.create_relation(body)
+        if not relation_ref:
             return self._json_response({"error": "关系创建失败"}, 500)
-        return self._json_response({"ok": True, "relation_id": relation_id}, 200)
+        return self._json_response({"ok": True, "relation_ref": relation_ref}, 200)
 
     def _update_relation(self, r: Request, store: GroupGraphStore) -> Response:
         """更新关系。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["relation_id"])
+        err = self._validate_required(body, ["group_id", "source_uid", "target_uid", "rel_type"])
         if err:
             return self._json_response({"error": err}, 400)
-        relation_id = store.update_relation(body)
-        if not relation_id:
+        relation_ref = store.update_relation(body)
+        if not relation_ref:
             return self._json_response({"error": "未找到可更新关系"}, 404)
-        return self._json_response({"ok": True, "relation_id": relation_id}, 200)
+        return self._json_response({"ok": True, "relation_ref": relation_ref}, 200)
 
     def _delete_relation(self, r: Request, store: GroupGraphStore) -> Response:
         """删除关系。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["relation_id"])
+        err = self._validate_required(body, ["group_id", "source_uid", "target_uid"])
         if err:
             return self._json_response({"error": err}, 400)
         deleted = store.delete_relation(body)

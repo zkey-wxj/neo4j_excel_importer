@@ -34,7 +34,7 @@ WHERE coalesce(n.group_id, '') = $group_id
 RETURN n
 ORDER BY coalesce(n.name, n.uid) ASC
 SKIP $offset
-LIMIT $page_size
+LIMIT $limit
 """
 
     _RELS_QUERY = """
@@ -44,7 +44,7 @@ WHERE coalesce(r.group_id, '') = $group_id
 RETURN src, r, tgt
 ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, type(r), '')
 SKIP $offset
-LIMIT $page_size
+LIMIT $limit
 """
 
     _UPSERT_NODE = """
@@ -77,9 +77,8 @@ SET r += $props
 RETURN elementId(r) AS relation_id
 """
 
-    _UPDATE_REL_BY_ID = """
-MATCH ()-[r:RELATED]->()
-WHERE elementId(r) = $relation_id
+    _UPDATE_REL_BY_ENDPOINTS = """
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 SET r.rel_type = $rel_type,
     r.group_id = $group_id,
     r.description = $description
@@ -88,17 +87,8 @@ SET r += $props
 RETURN elementId(r) AS relation_id
 """
 
-    _GET_REL_BY_ID = """
-MATCH (src:KnowledgeNode)-[r:RELATED]->(tgt:KnowledgeNode)
-WHERE elementId(r) = $relation_id
-RETURN r, src.uid AS source_uid, tgt.uid AS target_uid,
-       coalesce(r.group_id, src.group_id, tgt.group_id, '') AS inferred_group_id
-LIMIT 1
-"""
-
-    _DELETE_REL_BY_ID = """
-MATCH ()-[r:RELATED]->()
-WHERE elementId(r) = $relation_id
+    _DELETE_REL_BY_ENDPOINTS = """
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 DELETE r
 RETURN count(*) AS deleted
 """
@@ -111,23 +101,50 @@ RETURN count(*) AS deleted
         self.database = self._clean(settings.get("neo4j_database"))
         if not self.uri or not self.user or not self.password:
             raise ValueError("Endpoint settings 缺少 neo4j_uri/neo4j_user/neo4j_password")
+        self._driver = None
+        self._ensure_driver()
+
+    def _ensure_driver(self) -> None:
+        if self._driver is None:
+            self._driver = GraphDatabase.driver(
+                self.uri,
+                auth=(self.user, self.password),
+                connection_timeout=30.0,
+            )
 
     def query_graph(self, group_id: str, page: int, page_size: int) -> dict[str, Any]:
         """分页查询 group_id 下的图谱节点与关系。"""
+        self._ensure_driver()
         offset = max(0, (page - 1) * page_size)
-        node_count_rows = self._run(self._COUNT_NODES_QUERY, {"group_id": group_id})
-        rel_count_rows = self._run(self._COUNT_RELS_QUERY, {"group_id": group_id})
-        nodes_total = int((node_count_rows[0] if node_count_rows else {}).get("total", 0) or 0)
-        relations_total = int((rel_count_rows[0] if rel_count_rows else {}).get("total", 0) or 0)
+        limit = page_size + 1
+        nodes_total = -1
+        relations_total = -1
+        kwargs: dict[str, Any] = {}
+        if self.database:
+            kwargs["database"] = self.database
+        with self._driver.session(**kwargs) as session:
+            # 只在第一页查询 total，避免每次分页都全量 count。
+            if page == 1:
+                node_count_rows = [record.data() for record in session.run(self._COUNT_NODES_QUERY, {"group_id": group_id})]
+                rel_count_rows = [record.data() for record in session.run(self._COUNT_RELS_QUERY, {"group_id": group_id})]
+                nodes_total = int((node_count_rows[0] if node_count_rows else {}).get("total", 0) or 0)
+                relations_total = int((rel_count_rows[0] if rel_count_rows else {}).get("total", 0) or 0)
 
-        node_rows = self._run(
-            self._NODES_QUERY,
-            {"group_id": group_id, "offset": offset, "page_size": page_size},
-        )
-        rel_rows = self._run(
-            self._RELS_QUERY,
-            {"group_id": group_id, "offset": offset, "page_size": page_size},
-        )
+            node_rows = [record.data() for record in session.run(
+                self._NODES_QUERY,
+                {"group_id": group_id, "offset": offset, "limit": limit},
+            )]
+            rel_rows = [record.data() for record in session.run(
+                self._RELS_QUERY,
+                {"group_id": group_id, "offset": offset, "limit": limit},
+            )]
+
+        nodes_has_more = len(node_rows) > page_size
+        relations_has_more = len(rel_rows) > page_size
+        if nodes_has_more:
+            node_rows = node_rows[:page_size]
+        if relations_has_more:
+            rel_rows = rel_rows[:page_size]
 
         nodes: dict[str, dict[str, Any]] = {}
         rels: list[dict[str, Any]] = []
@@ -155,8 +172,8 @@ RETURN count(*) AS deleted
             "relations_total": relations_total,
             "nodes_count": len(nodes),
             "relations_count": len(rels),
-            "nodes_has_more": (offset + len(nodes)) < nodes_total,
-            "relations_has_more": (offset + len(rels)) < relations_total,
+            "nodes_has_more": nodes_has_more,
+            "relations_has_more": relations_has_more,
         }
 
     def create_node(self, payload: Mapping[str, Any]) -> str:
@@ -184,18 +201,28 @@ RETURN count(*) AS deleted
         """新增关系并返回 element id。"""
         params = self._relation_create_params(payload)
         rows = self._run(self._CREATE_REL, params, write=True)
-        return self._clean((rows[0] if rows else {}).get("relation_id"))
+        if rows:
+            return f"{params['source_uid']}->{params['target_uid']}"
+        return ""
 
     def update_relation(self, payload: Mapping[str, Any]) -> str:
-        """通过 relation_id 更新关系并返回 element id。"""
+        """通过 group_id + source_uid + target_uid 更新关系并返回引用键。"""
         params = self._relation_update_params(payload)
-        rows = self._run(self._UPDATE_REL_BY_ID, params, write=True)
-        return self._clean((rows[0] if rows else {}).get("relation_id"))
+        rows = self._run(self._UPDATE_REL_BY_ENDPOINTS, params, write=True)
+        if rows:
+            return f"{params['source_uid']}->{params['target_uid']}"
+        return ""
 
     def delete_relation(self, payload: Mapping[str, Any]) -> int:
-        """通过 relation_id 删除关系。"""
-        relation_id = self._clean(payload.get("relation_id"))
-        rows = self._run(self._DELETE_REL_BY_ID, {"relation_id": relation_id}, write=True)
+        """通过 group_id + source_uid + target_uid 删除关系。"""
+        group_id = self._clean(payload.get("group_id"))
+        source_uid = self._clean(payload.get("source_uid"))
+        target_uid = self._clean(payload.get("target_uid"))
+        rows = self._run(
+            self._DELETE_REL_BY_ENDPOINTS,
+            {"group_id": group_id, "source_uid": source_uid, "target_uid": target_uid},
+            write=True,
+        )
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
 
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -242,60 +269,41 @@ RETURN count(*) AS deleted
         }
 
     def _relation_update_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        relation_id = self._clean(payload.get("relation_id"))
-        if not relation_id:
-            raise ValueError("relation_id 不能为空")
-
-        snapshot_rows = self._run(self._GET_REL_BY_ID, {"relation_id": relation_id})
-        snapshot = snapshot_rows[0] if snapshot_rows else {}
-        if not snapshot:
-            raise ValueError("未找到可更新关系")
-
-        relation_map = self._mapping(snapshot.get("r"))
-        existing_raw_props = self._extract_relation_properties(relation_map)
-        existing_meta, existing_props = self._split_meta_from_props(existing_raw_props)
+        group_id = self._clean(payload.get("group_id"))
+        source_uid = self._clean(payload.get("source_uid"))
+        target_uid = self._clean(payload.get("target_uid"))
+        rel_type = self._clean(payload.get("rel_type")) or "RELATED"
+        if not group_id:
+            raise ValueError("group_id 不能为空")
+        if not source_uid:
+            raise ValueError("source_uid 不能为空")
+        if not target_uid:
+            raise ValueError("target_uid 不能为空")
 
         input_props = payload.get("properties")
-        merged_props = dict(input_props) if isinstance(input_props, Mapping) else dict(existing_props)
-
         input_meta = payload.get("meta")
-        merged_meta = dict(input_meta) if isinstance(input_meta, Mapping) else dict(existing_meta)
-
-        rel_type = self._clean(payload.get("rel_type")) or self._clean(relation_map.get("rel_type")) or "RELATED"
-        group_id = (
-            self._clean(payload.get("group_id"))
-            or self._clean(relation_map.get("group_id"))
-            or self._clean(snapshot.get("inferred_group_id"))
-        )
-        description = (
-            self._clean(payload.get("description"))
-            if "description" in payload
-            else self._clean(relation_map.get("description"))
-        )
-        direction = (
-            self._clean(payload.get("direction"))
-            if "direction" in payload
-            else self._clean(relation_map.get("direction"))
-        )
-        weight = payload.get("weight") if "weight" in payload else relation_map.get("weight")
+        description = self._clean(payload.get("description"))
+        direction = self._clean(payload.get("direction")) or "forward"
+        weight = payload.get("weight")
         if not isinstance(weight, (int, float)):
             weight = None
 
         row = relation_payload_to_cypher_row(
             {
-                "source_uid": self._clean(snapshot.get("source_uid")),
-                "target_uid": self._clean(snapshot.get("target_uid")),
+                "source_uid": source_uid,
+                "target_uid": target_uid,
                 "rel_type": rel_type,
-                "direction": direction or "forward",
+                "direction": direction,
                 "group_id": group_id,
                 "description": description,
                 "weight": weight,
-                "properties": merged_props,
-                "meta": merged_meta,
+                "properties": input_props if isinstance(input_props, Mapping) else {},
+                "meta": input_meta if isinstance(input_meta, Mapping) else {},
             }
         )
         return {
-            "relation_id": relation_id,
+            "source_uid": source_uid,
+            "target_uid": target_uid,
             "rel_type": row["rel_type"],
             "group_id": row["group_id"],
             "description": row["props"].get("description", ""),
@@ -303,19 +311,22 @@ RETURN count(*) AS deleted
         }
 
     def _run(self, query: str, parameters: dict[str, Any], write: bool = False) -> list[dict[str, Any]]:
-        driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password), connection_timeout=30.0)
-        try:
-            kwargs: dict[str, Any] = {}
-            if self.database:
-                kwargs["database"] = self.database
-            with driver.session(**kwargs) as session:
-                result = session.run(query, parameters)
-                rows = [record.data() for record in result]
-                if write:
-                    result.consume()
-                return rows
-        finally:
-            driver.close()
+        self._ensure_driver()
+        kwargs: dict[str, Any] = {}
+        if self.database:
+            kwargs["database"] = self.database
+        with self._driver.session(**kwargs) as session:
+            result = session.run(query, parameters)
+            rows = [record.data() for record in result]
+            if write:
+                result.consume()
+            return rows
+
+    def close(self) -> None:
+        """关闭 Neo4j driver。"""
+        if self._driver is not None:
+            self._driver.close()
+            self._driver = None
 
     def _serialize_node(self, value: Any) -> dict[str, Any] | None:
         if value is None:
