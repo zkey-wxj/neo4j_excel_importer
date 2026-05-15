@@ -31,7 +31,7 @@ RETURN count(r) AS total
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
 WHERE coalesce(n.group_id, '') = $group_id
-RETURN n
+RETURN n, labels(n) AS neo_labels
 ORDER BY coalesce(n.name, n.uid) ASC
 SKIP $offset
 LIMIT $limit
@@ -41,7 +41,7 @@ LIMIT $limit
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE coalesce(r.group_id, '') = $group_id
    OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
-RETURN src, r, tgt
+RETURN src, labels(src) AS src_labels, r, tgt, labels(tgt) AS tgt_labels
 ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, type(r), '')
 SKIP $offset
 LIMIT $limit
@@ -150,13 +150,13 @@ RETURN count(*) AS deleted
         rels: list[dict[str, Any]] = []
 
         for row in node_rows:
-            node = self._serialize_node(row.get("n"))
+            node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
             if node:
                 nodes[node["uid"]] = node
 
         for row in rel_rows:
-            src = self._serialize_node(row.get("src"))
-            tgt = self._serialize_node(row.get("tgt"))
+            src = self._serialize_node(row.get("src"), explicit_labels=row.get("src_labels"))
+            tgt = self._serialize_node(row.get("tgt"), explicit_labels=row.get("tgt_labels"))
             if src:
                 nodes[src["uid"]] = src
             if tgt:
@@ -332,7 +332,7 @@ RETURN count(*) AS deleted
             self._driver.close()
             self._driver = None
 
-    def _serialize_node(self, value: Any) -> dict[str, Any] | None:
+    def _serialize_node(self, value: Any, explicit_labels: Any = None) -> dict[str, Any] | None:
         if value is None:
             return None
         data = self._mapping(value)
@@ -340,6 +340,9 @@ RETURN count(*) AS deleted
         if not uid:
             return None
         labels = self._str_list(data.get("labels"))
+        explicit = self._str_list(explicit_labels)
+        if explicit:
+            labels = explicit
         if not labels and hasattr(value, "labels"):
             try:
                 labels = self._str_list(list(getattr(value, "labels")))
