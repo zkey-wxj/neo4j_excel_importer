@@ -159,8 +159,40 @@
   }
   .legend-reset-btn:hover { color: var(--blue); border-color: var(--blue); background: #eef3ff; }
 
+  #search-panel {
+    position: absolute;
+    top: 26px;
+    right: 28px;
+    width: 238px;
+    z-index: 11;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 8px rgba(80,100,160,0.08);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  #search-panel label {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  #search-panel input {
+    width: 100%;
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    padding: 7px 8px;
+    font: inherit;
+    font-size: 11px;
+    background: #fff;
+    color: var(--text);
+  }
+
   #info-panel {
-    position: absolute; top: 26px; right: 28px; width: 238px;
+    position: absolute; top: 110px; right: 28px; width: 238px;
     background: var(--surface); border: 1px solid var(--border2);
     border-radius: 14px; padding: 20px; z-index: 10;
     opacity: 0; pointer-events: none;
@@ -344,6 +376,8 @@
       max-height: calc(100vh - 20px);
     }
     #legend { right: 10px; bottom: 10px; }
+    #search-panel { right: 10px; top: 10px; width: 300px; }
+    #info-panel { right: 10px; top: 84px; }
     #controls { left: 50%; bottom: 10px; transform: translateX(-50%); }
     #status { bottom: 58px; }
   }
@@ -385,6 +419,11 @@
     <div id="legendList"></div>
   </div>
 
+  <div id="search-panel">
+    <label for="searchKeyword">模糊检索</label>
+    <input id="searchKeyword" placeholder="名称 / uid / 标签">
+  </div>
+
   <div id="info-panel">
     <button class="close-btn" id="panel-close">×</button>
     <div class="p-type" id="p-type"></div>
@@ -402,7 +441,6 @@
         <div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo"></div>
         <div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300"></div>
       </div>
-      <div class="ops-row" style="margin-top:6px;"><label>模糊检索（名称 / uid / 标签）</label><input id="searchKeyword" placeholder="输入关键词后自动过滤图谱"></div>
       <div class="ops-actions" style="grid-template-columns:1fr;">
         <button class="ops-btn primary" id="btnLoad">加载图谱</button>
       </div>
@@ -468,7 +506,7 @@
 </div>
 
 <script>
-const RENDER_DEMO_DATA = false; // 是否渲染示例数据
+const RENDER_DEMO_DATA = true; // 是否渲染示例数据
 const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
 const DEMO_PAGE_SIZE = 6;
 const DEMO_PAGE_DELAY_MS = 280;
