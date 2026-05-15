@@ -469,6 +469,8 @@
 <script>
 const RENDER_DEMO_DATA = false; // 是否渲染示例数据
 const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
+const DEMO_PAGE_SIZE = 6;
+const DEMO_PAGE_DELAY_MS = 280;
 
 const TYPE_META = {
   Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
@@ -528,8 +530,10 @@ const DEMO_LINKS = [
   { relation_id: "demo-14-6-refines", source_uid: "14", target_uid: "6", rel_type: "refines", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
   { relation_id: "demo-15-2-retries", source_uid: "15", target_uid: "2", rel_type: "retries", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
   { relation_id: "demo-9-7-mirrors", source_uid: "9", target_uid: "7", rel_type: "mirrors", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+  { relation_id: "demo-missing-node-case", source_uid: "999", target_uid: "1", rel_type: "orphan-link", direction: "forward", description: "模拟缺失端点关系（source_uid=999 不存在）", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
 ];
 
+/** 解析插件页面所在基础路径，例如 /e/{plugin_id}。 */
 function apiBase() {
   const pathname = String(window.location.pathname || "");
   const match = pathname.match(/^\/e\/[^/]+/);
@@ -537,20 +541,24 @@ function apiBase() {
 }
 const API_BASE = apiBase();
 
+/** 将相对 API 路径拼接到当前插件基路径下。 */
 function apiUrl(path) {
   const base = API_BASE.replace(/\/+$/, "");
   const suffix = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
   return `${base}${suffix}`;
 }
 
+/** 统一字符串清洗，避免 null/undefined 影响 key 匹配。 */
 function clean(v) {
   return String(v || "").trim();
 }
 
+/** 判断是否启用示例数据模式。 */
 function shouldRenderDemo() {
   return RENDER_DEMO_DATA;
 }
 
+/** 创建属性编辑行（key/value + 删除按钮）。 */
 function createKvRow(key = "", value = "") {
   const row = document.createElement("div");
   row.className = "kv-row";
@@ -571,6 +579,7 @@ function createKvRow(key = "", value = "") {
   return row;
 }
 
+/** 把对象渲染到属性编辑列表。 */
 function renderKv(listId, obj = {}) {
   const list = document.getElementById(listId);
   list.innerHTML = "";
@@ -584,6 +593,7 @@ function renderKv(listId, obj = {}) {
   });
 }
 
+/** 从属性编辑列表收集为对象。 */
 function collectKv(listId) {
   const rows = Array.from(document.querySelectorAll(`#${listId} .kv-row`));
   const out = {};
@@ -597,6 +607,7 @@ function collectKv(listId) {
   return out;
 }
 
+/** 根据 labels/uid 推断节点类型。 */
 function parseType(labels = [], uid = "") {
   const all = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
   if (all.includes("core")) return "Core";
@@ -612,6 +623,7 @@ function parseType(labels = [], uid = "") {
   return "Agent";
 }
 
+/** 类型英文标识转中文展示名。 */
 function typeDisplayName(type) {
   const map = {
     Core: "核心",
@@ -623,6 +635,7 @@ function typeDisplayName(type) {
   return map[type] || type || "";
 }
 
+/** 渲染图例并绑定类型筛选交互。 */
 function renderLegend(nodes = []) {
   const legendList = document.getElementById("legendList");
   if (!legendList) return;
@@ -720,6 +733,7 @@ function renderLegend(nodes = []) {
   }
 }
 
+/** 解析节点权重并收敛到 1~100。 */
 function parseWeight(node) {
   const candidates = [node.weight, node.properties?.weight, node.properties?.score, node.meta?.score];
   for (const value of candidates) {
@@ -729,20 +743,46 @@ function parseWeight(node) {
   return 50;
 }
 
+/** 节点展示名：name > uid > Node。 */
 function nodeLabel(node) {
   const name = clean(node.name);
   if (name) return name;
   return clean(node.uid) || "Node";
 }
 
+/** 关系展示名：rel_type > RELATED。 */
 function relationLabel(rel) {
   return clean(rel.rel_type) || "RELATED";
 }
 
+/** 关系备用 key（用于缺少 relation_id 时兜底）。 */
 function relationKey(rel, index) {
   return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
 }
 
+const graphStore = {
+  nodeMap: new Map(),
+  linkMap: new Map(),
+  nodes: [],
+  links: [],
+};
+
+/** 关系存储 key：优先 relation_id，其次 source/target/type。 */
+function relationStoreKey(rel) {
+  const relationId = clean(rel.relation_id);
+  if (relationId) return `rid:${relationId}`;
+  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}`;
+}
+
+/** 清空图谱缓存。 */
+function resetGraphStore() {
+  graphStore.nodeMap.clear();
+  graphStore.linkMap.clear();
+  graphStore.nodes = [];
+  graphStore.links = [];
+}
+
+/** 发起请求并统一 JSON/异常处理。 */
 async function request(pathOrUrl, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : apiUrl(pathOrUrl);
@@ -766,22 +806,36 @@ async function request(pathOrUrl, options = {}) {
   return data;
 }
 
+/** 更新底部状态提示。 */
 function setStatus(text, isError = false) {
   const el = document.getElementById("status");
   el.textContent = text;
   el.style.color = isError ? "#c53030" : "var(--muted)";
 }
 
-function mapGraphData(nodesRaw, relsRaw) {
+/** 从 graphStore 派生可渲染节点/关系，并过滤缺失端点关系。 */
+function mapGraphData() {
+  const nodesRaw = Array.from(graphStore.nodeMap.values());
+  const relsRaw = Array.from(graphStore.linkMap.values());
+  const nodeUidSet = new Set(graphStore.nodeMap.keys());
   const degreeByUid = new Map();
-  (relsRaw || []).forEach((r) => {
+  const droppedRels = [];
+  const validRelsRaw = [];
+
+  // 只过滤关系，不过滤节点：关系两端 uid 只要有一端不在 nodeMap 中则丢弃。
+  relsRaw.forEach((r) => {
     const suid = clean(r.source_uid);
     const tuid = clean(r.target_uid);
+    if (!nodeUidSet.has(suid) || !nodeUidSet.has(tuid) || !suid || !tuid) {
+      droppedRels.push({ source_uid: suid, target_uid: tuid, rel_type: relationLabel(r) });
+      return;
+    }
+    validRelsRaw.push(r);
     if (suid) degreeByUid.set(suid, (degreeByUid.get(suid) || 0) + 1);
     if (tuid) degreeByUid.set(tuid, (degreeByUid.get(tuid) || 0) + 1);
   });
 
-  const mappedNodes = (nodesRaw || []).map((n, idx) => {
+  const mappedNodes = nodesRaw.map((n, idx) => {
     const type = parseType(n.labels, n.uid);
     const meta = TYPE_META[type] || TYPE_META.Agent;
     const uid = clean(n.uid);
@@ -802,13 +856,12 @@ function mapGraphData(nodesRaw, relsRaw) {
 
   const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
   const mappedLinks = [];
-  const droppedRels = [];
-  (relsRaw || []).forEach((r, i) => {
+  validRelsRaw.forEach((r, i) => {
     const sUid = clean(r.source_uid);
     const tUid = clean(r.target_uid);
     const s = idMap.get(sUid);
     const t = idMap.get(tUid);
-    if (!s || !t || !sUid || !tUid) {
+    if (!s || !t) {
       droppedRels.push({ source_uid: sUid, target_uid: tUid, rel_type: relationLabel(r) });
       return;
     }
@@ -817,21 +870,21 @@ function mapGraphData(nodesRaw, relsRaw) {
       source: s,
       target: t,
       relation: relationLabel(r),
-      _key: relationKey(r, i),
+      _key: relationStoreKey(r) || relationKey(r, i),
       raw: r,
     });
   });
   if (droppedRels.length) {
     console.warn("[group-graph] skip invalid relations because endpoint node missing", droppedRels.slice(0, 20));
   }
-  return { nodes: mappedNodes, links: mappedLinks };
+  graphStore.nodes = mappedNodes;
+  graphStore.links = mappedLinks;
+  return { nodes: graphStore.nodes, links: graphStore.links };
 }
 
+/** 分页加载指定 group 的图谱数据并按页渲染。 */
 async function loadGraphByGroupId(groupId, onPage) {
-  const nodesRaw = [];
-  const relsRaw = [];
-  const nodeSet = new Set();
-  const relSet = new Set();
+  resetGraphStore();
   const pageSize = Number(clean(document.getElementById("pageSize").value) || "300");
   let page = 1;
 
@@ -841,37 +894,84 @@ async function loadGraphByGroupId(groupId, onPage) {
 
     for (const n of (data.nodes || [])) {
       const uid = clean(n.uid);
-      if (!uid || nodeSet.has(uid)) continue;
-      nodeSet.add(uid);
-      nodesRaw.push(n);
+      if (!uid) continue;
+      graphStore.nodeMap.set(uid, n);
     }
 
     for (const r of (data.relations || [])) {
-      const key = relationKey(r, relsRaw.length);
-      if (relSet.has(key)) continue;
-      relSet.add(key);
-      relsRaw.push(r);
+      const key = relationStoreKey(r);
+      if (!key) continue;
+      graphStore.linkMap.set(key, r);
     }
 
-    const graph = mapGraphData(nodesRaw, relsRaw);
+    const graph = mapGraphData();
     if (onPage) onPage(graph, page);
 
     if (!data.nodes_has_more && !data.relations_has_more) break;
     page += 1;
   }
 
-  setStatus(`加载完成: 节点 ${nodesRaw.length}，关系 ${relsRaw.length}`);
-  return mapGraphData(nodesRaw, relsRaw);
+  setStatus(`加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
+  return mapGraphData();
 }
 
+/** 一次性加载示例数据。 */
 function loadDemoGraph() {
   if (document.getElementById("groupId")) {
     document.getElementById("groupId").value = "";
   }
+  resetGraphStore();
+  DEMO_NODES.forEach((node) => {
+    const uid = clean(node.uid);
+    if (!uid) return;
+    graphStore.nodeMap.set(uid, node);
+  });
+  DEMO_LINKS.forEach((rel) => {
+    const key = relationStoreKey(rel);
+    if (!key) return;
+    graphStore.linkMap.set(key, rel);
+  });
   setStatus("已加载示例图谱");
-  return mapGraphData(DEMO_NODES, DEMO_LINKS);
+  return mapGraphData();
 }
 
+/** 延时工具函数。 */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+/** 按页动态追加示例数据，模拟真实分页加载。 */
+async function loadDemoGraphByPage(onPage) {
+  resetGraphStore();
+  const total = Math.max(DEMO_NODES.length, DEMO_LINKS.length);
+  let page = 1;
+  for (let start = 0; start < total; start += DEMO_PAGE_SIZE) {
+    const end = start + DEMO_PAGE_SIZE;
+    setStatus(`示例数据动态追加中: 第 ${page} 页`);
+
+    DEMO_NODES.slice(start, end).forEach((node) => {
+      const uid = clean(node.uid);
+      if (!uid) return;
+      graphStore.nodeMap.set(uid, node);
+    });
+    DEMO_LINKS.slice(start, end).forEach((rel) => {
+      const key = relationStoreKey(rel);
+      if (!key) return;
+      graphStore.linkMap.set(key, rel);
+    });
+
+    const graph = mapGraphData();
+    if (onPage) onPage(graph, page);
+    page += 1;
+    await sleep(DEMO_PAGE_DELAY_MS);
+  }
+  setStatus(`示例加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}（已过滤缺失端点关系）`);
+  return mapGraphData();
+}
+
+/** 将节点信息填充到节点编辑表单。 */
 function fillNodeForm(nodeRaw) {
   if (!nodeRaw) return;
   document.getElementById("nodeUid").value = clean(nodeRaw.uid);
@@ -882,6 +982,7 @@ function fillNodeForm(nodeRaw) {
   renderKv("nodeMetaList", nodeRaw.meta || {});
 }
 
+/** 将关系信息填充到关系编辑表单。 */
 function fillRelationForm(relRaw) {
   if (!relRaw) return;
   document.getElementById("relSource").value = clean(relRaw.source_uid);
@@ -891,6 +992,7 @@ function fillRelationForm(relRaw) {
   renderKv("relPropsList", relRaw.properties || {});
 }
 
+/** 从节点编辑表单生成请求 payload。 */
 function nodePayload() {
   const group_id = clean(document.getElementById("groupId").value);
   const uid = clean(document.getElementById("nodeUid").value);
@@ -906,6 +1008,7 @@ function nodePayload() {
   };
 }
 
+/** 从关系编辑表单生成请求 payload。 */
 function relationPayload() {
   const group_id = clean(document.getElementById("groupId").value);
   const source_uid = clean(document.getElementById("relSource").value);
@@ -924,6 +1027,7 @@ function relationPayload() {
   };
 }
 
+/** 执行写操作并在当前 group 下自动刷新图谱。 */
 async function mutate(path, method, payload) {
   setStatus("执行中...");
   await request(path, { method, body: JSON.stringify(payload) });
@@ -953,6 +1057,7 @@ let edgeLabelLayer = null;
 let nodeLayer = null;
 let selectedLegendTypes = new Set();
 
+/** 获取节点可用于筛选的标签 key 列表。 */
 function getNodeLabelKeys(node) {
   const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
   const out = [];
@@ -967,12 +1072,14 @@ function getNodeLabelKeys(node) {
   return out;
 }
 
+/** 判断节点是否通过当前图例筛选。 */
 function passTypeFilter(node) {
   if (!selectedLegendTypes.size) return true;
   const keys = getNodeLabelKeys(node);
   return keys.some((k) => selectedLegendTypes.has(k));
 }
 
+/** 应用类型筛选到节点、关系线和关系标签。 */
 function applyTypeFilter() {
   if (!nodeSel || !linkSel || !edgeLabelSel) return;
   const visibleNodeIds = new Set();
@@ -989,17 +1096,20 @@ function applyTypeFilter() {
   edgeLabelSel.classed("filtered-out", (l) => !isLinkVisible(l));
 }
 
+/** 确保三层画布分组存在：links / edge-labels / nodes。 */
 function ensureSceneLayers() {
   if (!linkLayer) linkLayer = root.append("g").attr("data-layer", "links");
   if (!edgeLabelLayer) edgeLabelLayer = root.append("g").attr("data-layer", "edge-labels");
   if (!nodeLayer) nodeLayer = root.append("g").attr("data-layer", "nodes");
 }
 
+/** 统一取关系端点 id（兼容对象与字符串）。 */
 function linkEndpointId(value) {
   if (value && typeof value === "object") return value.id;
   return value;
 }
 
+/** 基于关系 key 生成稳定渐变 id。 */
 function gradientIdFromKey(key) {
   const text = String(key || "edge");
   let hash = 0;
@@ -1009,6 +1119,7 @@ function gradientIdFromKey(key) {
   return `lg-${hash.toString(36)}`;
 }
 
+/** 刷新选中态相关高亮/置灰样式。 */
 function refreshSelectionStyles() {
   if (!nodeSel || !linkSel || !edgeLabelSel) return;
   const visibleNodeIds = new Set();
@@ -1064,6 +1175,7 @@ function refreshSelectionStyles() {
   edgeLabelSel.classed("dimmed", (l) => relVisible(l) && !isRel(l)).classed("highlighted", isRel);
 }
 
+/** 将力导布局结果绘制到节点、边和标签。 */
 function drawPositions() {
   if (linkSel) {
     linkSel
@@ -1097,17 +1209,60 @@ function drawPositions() {
   }
 }
 
+/** 清空当前选中节点。 */
 function clearSel() {
   selected = null;
   refreshSelectionStyles();
   document.getElementById("info-panel").classList.remove("visible");
 }
 
+/**
+ * 渲染前统一标准化节点/关系，并过滤掉端点不存在的关系。
+ * 这里是最后一道防线，避免 forceLink 抛出 node not found。
+ */
+function sanitizeGraphForRender(nodes, links) {
+  const normalizedNodes = (nodes || []).map((n) => {
+    const id = clean(n.id);
+    return { ...n, id };
+  });
+  const nodeById = new Map(normalizedNodes.map((n) => [n.id, n]));
+  const safeLinks = [];
+  const dropped = [];
+
+  (links || []).forEach((l, i) => {
+    const sourceId = clean(linkEndpointId(l.source));
+    const targetId = clean(linkEndpointId(l.target));
+    if (!sourceId || !targetId || !nodeById.has(sourceId) || !nodeById.has(targetId)) {
+      dropped.push({
+        source: sourceId,
+        target: targetId,
+        key: clean(l._key) || `link-${i}`,
+      });
+      return;
+    }
+    safeLinks.push({
+      ...l,
+      source: sourceId,
+      target: targetId,
+      _key: clean(l._key) || `link-${i}`,
+    });
+  });
+
+  if (dropped.length) {
+    console.warn("[group-graph] render filter dropped invalid links", dropped.slice(0, 20));
+  }
+  return { nodes: normalizedNodes, links: safeLinks };
+}
+
+/** 渲染图谱主流程（包含过滤、防错、布局与交互绑定）。 */
 function render(nodes, links) {
   ensureSceneLayers();
+  const sanitized = sanitizeGraphForRender(nodes, links);
+  const safeNodes = sanitized.nodes;
+  const safeLinks = sanitized.links;
 
   const prevById = new Map((graphNodes || []).map((n) => [n.id, n]));
-  nodes.forEach((n) => {
+  safeNodes.forEach((n) => {
     const prev = prevById.get(n.id);
     if (!prev) return;
     if (Number.isFinite(prev.x)) n.x = prev.x;
@@ -1118,19 +1273,19 @@ function render(nodes, links) {
     if (Number.isFinite(prev.fy)) n.fy = prev.fy;
   });
 
-  graphNodes = nodes;
-  graphLinks = links.map(l => ({
+  graphNodes = safeNodes;
+  graphLinks = safeLinks.map((l) => ({
     ...l,
     source: linkEndpointId(l.source),
     target: linkEndpointId(l.target),
   }));
 
-  document.getElementById("s-nodes").textContent = nodes.length;
-  document.getElementById("s-links").textContent = links.length;
-  renderLegend(nodes);
+  document.getElementById("s-nodes").textContent = safeNodes.length;
+  document.getElementById("s-links").textContent = graphLinks.length;
+  renderLegend(safeNodes);
 
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  links.forEach((l) => {
+  const nodeById = new Map(safeNodes.map((n) => [n.id, n]));
+  graphLinks.forEach((l) => {
     l._gid = gradientIdFromKey(l._key);
   });
 
@@ -1139,7 +1294,7 @@ function render(nodes, links) {
   edgeLabelLayer.selectAll("*").remove();
   nodeLayer.selectAll("*").remove();
 
-  links.forEach(function (d) {
+  graphLinks.forEach(function (d) {
     const g = defs.append("linearGradient").attr("class", "edge-gradient").attr("id", d._gid).attr("gradientUnits", "userSpaceOnUse");
     g.append("stop").attr("class", "from-stop").attr("offset", "0%").attr("stop-opacity", 0.6);
     g.append("stop").attr("class", "to-stop").attr("offset", "100%").attr("stop-opacity", 0.6);
@@ -1153,36 +1308,47 @@ function render(nodes, links) {
 
   const gradientSel = defs.selectAll("linearGradient.edge-gradient");
 
-  if (!linkForce) linkForce = d3.forceLink().id((d) => d.id);
-  const safeLinks = links.filter((l) => {
-    const sid = linkEndpointId(l.source);
-    const tid = linkEndpointId(l.target);
-    return nodeById.has(sid) && nodeById.has(tid);
-  });
+  if (!linkForce) linkForce = d3.forceLink().id((d) => clean(d.id));
+  linkForce.id((d) => clean(d.id));
 
-  linkForce.links(safeLinks).distance((d) => {
-    const sid = linkEndpointId(d.source);
-    const tid = linkEndpointId(d.target);
-    const s = nodes.find((n) => n.id === sid);
-    const t = nodes.find((n) => n.id === tid);
-    return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
-  });
-
+  // 必须先更新 simulation nodes，再挂载 links，避免 forceLink 在旧节点上下文抛 node not found。
   if (!sim) {
-    sim = d3.forceSimulation(nodes)
-      .force("link", linkForce)
+    sim = d3.forceSimulation(safeNodes)
       .force("charge", d3.forceManyBody().strength(-460))
       .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
       .force("collision", d3.forceCollide().radius((d) => d.r + 24));
   } else {
-    sim.nodes(nodes);
-    sim.force("link", linkForce);
+    sim.nodes(safeNodes);
     sim.force("charge", d3.forceManyBody().strength(-460));
     sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
     sim.force("collision", d3.forceCollide().radius((d) => d.r + 24));
   }
 
-  links.forEach(function (d) {
+  linkForce.distance((d) => {
+    const sid = linkEndpointId(d.source);
+    const tid = linkEndpointId(d.target);
+    const s = nodeById.get(sid);
+    const t = nodeById.get(tid);
+    return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+  });
+  try {
+    linkForce.links(graphLinks);
+  } catch (e) {
+    const nodeIdSample = Array.from(nodeById.keys()).slice(0, 20);
+    const badLinks = graphLinks
+      .filter((l) => !nodeById.has(clean(linkEndpointId(l.source))) || !nodeById.has(clean(linkEndpointId(l.target))))
+      .slice(0, 20)
+      .map((l) => ({
+        key: l._key,
+        source: clean(linkEndpointId(l.source)),
+        target: clean(linkEndpointId(l.target)),
+      }));
+    console.error("[group-graph] forceLink init failed", { message: e?.message, badLinks, nodeIdSample });
+    throw e;
+  }
+  sim.force("link", linkForce);
+
+  graphLinks.forEach(function (d) {
     linkLayer.append("line").attr("class", "link").datum(d);
   });
   linkSel = linkLayer.selectAll("line.link")
@@ -1195,7 +1361,7 @@ function render(nodes, links) {
       fillRelationForm(d.raw);
     });
 
-  links.forEach(function (d) {
+  graphLinks.forEach(function (d) {
     const g = edgeLabelLayer.append("g").attr("class", "edge-label-group").datum(d);
     g.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
     g.append("text").attr("class", "edge-label-text");
@@ -1214,7 +1380,7 @@ function render(nodes, links) {
     g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
   });
 
-  nodes.forEach(function (d) {
+  safeNodes.forEach(function (d) {
     const g = nodeLayer.append("g").attr("class", "node-group").datum(d);
     g.append("circle").attr("class", "node-ring");
     g.append("circle").attr("class", "node-outer");
@@ -1317,10 +1483,12 @@ svg.call(zoom);
 svg.on("click", () => clearSel());
 document.getElementById("panel-close").addEventListener("click", clearSel);
 
+/** 保留按钮语义：当前版本不启用随机移动。 */
 function shuffleGraph() {
   setStatus("自动移动动画已关闭");
 }
 
+/** 加载并渲染指定 group（分页追加）。 */
 async function loadAndRenderGroup(groupId) {
   await loadGraphByGroupId(groupId, (paged) => {
     render(paged.nodes, paged.links);
@@ -1435,15 +1603,15 @@ window.addEventListener("resize", () => {
     renderKv("nodePropsList", {});
     renderKv("nodeMetaList", {});
     renderKv("relPropsList", {});
-
     const groupId = clean(INITIAL_GROUP_ID);
-    if (groupId) {
+    if (groupId && !shouldRenderDemo()) {
       document.getElementById("groupId").value = groupId;
       await loadAndRenderGroup(groupId);
     } else {
       if (shouldRenderDemo()) {
-        const graph = loadDemoGraph();
-        render(graph.nodes, graph.links);
+        await loadDemoGraphByPage((graph) => {
+          render(graph.nodes, graph.links);
+        });
       } else {
         render([], []);
         setStatus("请输入 group_id 后加载图谱");
@@ -1462,3 +1630,4 @@ window.addEventListener("resize", () => {
 </script>
 </body>
 </html>
+
