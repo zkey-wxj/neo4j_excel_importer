@@ -1,0 +1,62 @@
+identity:
+  name: get_group_labels
+  author: wxj
+  label:
+    en_US: Get Group Labels
+    zh_Hans: 获取分组下的 Labels
+
+description:
+  human:
+    en_US: Return distinct node labels used under a given group_id.
+    zh_Hans: 根据 `group_id` 返回图数据库中该分组下使用的所有去重 labels。
+  llm: Get distinct node labels by group_id.
+
+parameters:
+  - name: group_id
+    type: string
+    required: true
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Group id used when importing graph data.
+      zh_Hans: 图谱导入时使用的分组 ID。
+    llm_description: Required group_id.
+    form: llm
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    group_id:
+      type: string
+      description: Queried group id.
+    labels_count:
+      type: integer
+      description: Number of distinct labels returned.
+    labels:
+      type: array
+      items:
+        type: string
+      description: Distinct labels used by nodes under the group.
+    request:
+      type: object
+      description: Request echo including group_id and database.
+    summary:
+      type: string
+      description: Human-readable summary.
+
+extra:
+  python:
+    source: tools/get_group_labels.py
