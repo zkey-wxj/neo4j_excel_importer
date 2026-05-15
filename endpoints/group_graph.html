@@ -363,11 +363,7 @@
 
   <div id="legend">
     <h3>节点类型</h3>
-    <div class="legend-item"><div class="legend-dot" style="background:#0ea5c8"></div>Core</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#7c54e8"></div>Module</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#0fa96b"></div>Service</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>Data</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#e8445a"></div>Agent</div>
+    <div id="legendList"></div>
   </div>
 
   <div id="info-panel">
@@ -452,13 +448,7 @@
 </div>
 
 <script>
-let ROOT_PATH = "";
-const RENDER_DEMO_DATA = false;
-try {
-  ROOT_PATH = __ROOT_PATH_JSON__;
-} catch (_e) {
-  ROOT_PATH = "";
-}
+const RENDER_DEMO_DATA = false; // 是否渲染示例数据
 const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
 
 const TYPE_META = {
@@ -505,11 +495,16 @@ const DEMO_LINKS = [
 ];
 
 function apiBase() {
-  return (ROOT_PATH || "").replace(/\/+$/, "");
+  const pathname = String(window.location.pathname || "");
+  const match = pathname.match(/^\/e\/[^/]+/);
+  return match ? match[0] : "";
 }
+const API_BASE = apiBase();
 
 function apiUrl(path) {
-  return apiBase() + path;
+  const base = API_BASE.replace(/\/+$/, "");
+  const suffix = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+  return `${base}${suffix}`;
 }
 
 function clean(v) {
@@ -590,6 +585,47 @@ function typeDisplayName(type) {
     Agent: "智能体",
   };
   return map[type] || type || "";
+}
+
+function renderLegend(nodes = []) {
+  const legendList = document.getElementById("legendList");
+  if (!legendList) return;
+  legendList.innerHTML = "";
+
+  const byType = new Map();
+  (nodes || []).forEach((node) => {
+    const type = clean(node.type) || "Agent";
+    if (!byType.has(type)) {
+      byType.set(type, {
+        type,
+        color: node.color || (TYPE_META[type]?.color || TYPE_META.Agent.color),
+      });
+    }
+  });
+
+  if (!byType.size) {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.textContent = "暂无节点";
+    legendList.appendChild(item);
+    return;
+  }
+
+  byType.forEach(({ type, color }) => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+
+    const dot = document.createElement("div");
+    dot.className = "legend-dot";
+    dot.style.background = color;
+
+    const text = document.createElement("span");
+    text.textContent = typeDisplayName(type);
+
+    item.appendChild(dot);
+    item.appendChild(text);
+    legendList.appendChild(item);
+  });
 }
 
 function parseWeight(node) {
@@ -857,6 +893,7 @@ function render(nodes, links) {
 
   document.getElementById("s-nodes").textContent = nodes.length;
   document.getElementById("s-links").textContent = links.length;
+  renderLegend(nodes);
 
   links.forEach((l, i) => {
     const sn = nodes.find((n) => n.id === l.source);
