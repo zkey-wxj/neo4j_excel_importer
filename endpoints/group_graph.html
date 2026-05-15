@@ -402,6 +402,7 @@
         <div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo"></div>
         <div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300"></div>
       </div>
+      <div class="ops-row" style="margin-top:6px;"><label>模糊检索（名称 / uid / 标签）</label><input id="searchKeyword" placeholder="输入关键词后自动过滤图谱"></div>
       <div class="ops-actions" style="grid-template-columns:1fr;">
         <button class="ops-btn primary" id="btnLoad">加载图谱</button>
       </div>
@@ -471,6 +472,11 @@ const RENDER_DEMO_DATA = false; // 是否渲染示例数据
 const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
 const DEMO_PAGE_SIZE = 6;
 const DEMO_PAGE_DELAY_MS = 280;
+const FORCE_CHARGE_STRENGTH = -280;
+const FORCE_LINK_BASE_DISTANCE = 52;
+const FORCE_LINK_RADIUS_FACTOR = 1.15;
+const FORCE_COLLISION_PADDING = 10;
+const FORCE_CENTER_PULL_STRENGTH = 0.035;
 
 const TYPE_META = {
   Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
@@ -1056,6 +1062,8 @@ let linkLayer = null;
 let edgeLabelLayer = null;
 let nodeLayer = null;
 let selectedLegendTypes = new Set();
+let searchKeyword = "";
+let searchDebounceTimer = null;
 
 /** 获取节点可用于筛选的标签 key 列表。 */
 function getNodeLabelKeys(node) {
@@ -1074,9 +1082,19 @@ function getNodeLabelKeys(node) {
 
 /** 判断节点是否通过当前图例筛选。 */
 function passTypeFilter(node) {
-  if (!selectedLegendTypes.size) return true;
-  const keys = getNodeLabelKeys(node);
-  return keys.some((k) => selectedLegendTypes.has(k));
+  const hitType = !selectedLegendTypes.size || getNodeLabelKeys(node).some((k) => selectedLegendTypes.has(k));
+  if (!hitType) return false;
+  if (!searchKeyword) return true;
+  const labelList = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
+  const candidate = [
+    clean(node?.label).toLowerCase(),
+    clean(node?.uid).toLowerCase(),
+    clean(node?.id).toLowerCase(),
+    clean(node?.type).toLowerCase(),
+    clean(node?.raw?.name).toLowerCase(),
+    ...labelList.map((x) => clean(x).toLowerCase()),
+  ].join("|");
+  return candidate.includes(searchKeyword);
 }
 
 /** 应用类型筛选到节点、关系线和关系标签。 */
@@ -1306,22 +1324,24 @@ function render(nodes, links) {
     g.select("stop.to-stop").attr("stop-color", tn ? tn.color : "#7a82a0");
   });
 
-  const gradientSel = defs.selectAll("linearGradient.edge-gradient");
-
   if (!linkForce) linkForce = d3.forceLink().id((d) => clean(d.id));
   linkForce.id((d) => clean(d.id));
 
   // 必须先更新 simulation nodes，再挂载 links，避免 forceLink 在旧节点上下文抛 node not found。
   if (!sim) {
     sim = d3.forceSimulation(safeNodes)
-      .force("charge", d3.forceManyBody().strength(-460))
+      .force("charge", d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH))
       .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
-      .force("collision", d3.forceCollide().radius((d) => d.r + 24));
+      .force("x", d3.forceX(window.innerWidth / 2).strength(FORCE_CENTER_PULL_STRENGTH))
+      .force("y", d3.forceY(window.innerHeight / 2).strength(FORCE_CENTER_PULL_STRENGTH))
+      .force("collision", d3.forceCollide().radius((d) => d.r + FORCE_COLLISION_PADDING));
   } else {
     sim.nodes(safeNodes);
-    sim.force("charge", d3.forceManyBody().strength(-460));
+    sim.force("charge", d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH));
     sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-    sim.force("collision", d3.forceCollide().radius((d) => d.r + 24));
+    sim.force("x", d3.forceX(window.innerWidth / 2).strength(FORCE_CENTER_PULL_STRENGTH));
+    sim.force("y", d3.forceY(window.innerHeight / 2).strength(FORCE_CENTER_PULL_STRENGTH));
+    sim.force("collision", d3.forceCollide().radius((d) => d.r + FORCE_COLLISION_PADDING));
   }
 
   linkForce.distance((d) => {
@@ -1329,7 +1349,7 @@ function render(nodes, links) {
     const tid = linkEndpointId(d.target);
     const s = nodeById.get(sid);
     const t = nodeById.get(tid);
-    return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+    return FORCE_LINK_BASE_DISTANCE + ((s?.r ?? 10) + (t?.r ?? 10)) * FORCE_LINK_RADIUS_FACTOR;
   });
   try {
     linkForce.links(graphLinks);
@@ -1585,6 +1605,27 @@ document.getElementById("btnRelDelete").addEventListener("click", async () => {
     setStatus(`关系删除失败: ${e.message}`, true);
   }
 });
+
+/** 模糊检索输入监听：前端本地过滤 + 防抖限流，避免输入时频繁执行筛选。 */
+const searchInput = document.getElementById("searchKeyword");
+if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    const nextKeyword = clean(searchInput.value).toLowerCase();
+    if (searchDebounceTimer) {
+      window.clearTimeout(searchDebounceTimer);
+    }
+    searchDebounceTimer = window.setTimeout(() => {
+      searchKeyword = nextKeyword;
+      applyTypeFilter();
+      refreshSelectionStyles();
+      if (searchKeyword) {
+        setStatus(`已按关键词过滤: ${searchKeyword}`);
+      } else {
+        setStatus("已清除关键词过滤");
+      }
+    }, 300);
+  });
+}
 
 window.addEventListener("resize", () => {
   if (!sim) return;
