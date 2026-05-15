@@ -1119,7 +1119,11 @@ function render(nodes, links) {
   });
 
   graphNodes = nodes;
-  graphLinks = links;
+  graphLinks = links.map(l => ({
+    ...l,
+    source: linkEndpointId(l.source),
+    target: linkEndpointId(l.target),
+  }));
 
   document.getElementById("s-nodes").textContent = nodes.length;
   document.getElementById("s-links").textContent = links.length;
@@ -1151,13 +1155,19 @@ function render(nodes, links) {
   });
 
   if (!linkForce) linkForce = d3.forceLink().id((d) => d.id);
-  linkForce.links(links).distance((d) => {
-      const sid = linkEndpointId(d.source);
-      const tid = linkEndpointId(d.target);
-      const s = nodes.find((n) => n.id === sid);
-      const t = nodes.find((n) => n.id === tid);
-      return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
-    });
+  const safeLinks = links.filter((l) => {
+    const sid = linkEndpointId(l.source);
+    const tid = linkEndpointId(l.target);
+    return nodeById.has(sid) && nodeById.has(tid);
+  });
+
+  linkForce.links(safeLinks).distance((d) => {
+    const sid = linkEndpointId(d.source);
+    const tid = linkEndpointId(d.target);
+    const s = nodes.find((n) => n.id === sid);
+    const t = nodes.find((n) => n.id === tid);
+    return 80 + ((s?.r ?? 10) + (t?.r ?? 10)) * 1.9;
+  });
 
   if (!sim) {
     sim = d3.forceSimulation(nodes)
