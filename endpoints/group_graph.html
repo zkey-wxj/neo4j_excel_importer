@@ -813,8 +813,9 @@ function mapGraphData(nodesRaw, relsRaw) {
       return;
     }
     mappedLinks.push({
-      source: sUid,
-      target: tUid,
+      // use mapped node ids (from idMap) for source/target so D3 keys match
+      source: s,
+      target: t,
       relation: relationLabel(r),
       _key: relationKey(r, i),
       raw: r,
