@@ -64,9 +64,7 @@ class GroupGraphEndpoint(Endpoint):
         """渲染 D3 页面，并注入 root_path。"""
         html = Path(__file__).with_name("group_graph.html").read_text(encoding="utf-8")
         root_path_json = json.dumps(self._clean(r.root_path))
-        initial_group_id_json = json.dumps(self._clean(r.args.get("group_id")))
         html = html.replace("__ROOT_PATH_JSON__", root_path_json)
-        html = html.replace("__INITIAL_GROUP_ID_JSON__", initial_group_id_json)
         return Response(html, status=200, content_type="text/html; charset=utf-8")
 
     def _query_graph(self, r: Request, store: GroupGraphStore) -> Response:

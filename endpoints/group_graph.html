@@ -453,15 +453,13 @@
 
 <script>
 let ROOT_PATH = "";
-let INITIAL_GROUP_ID = "";
 const RENDER_DEMO_DATA = false;
 try {
   ROOT_PATH = __ROOT_PATH_JSON__;
-  INITIAL_GROUP_ID = __INITIAL_GROUP_ID_JSON__;
 } catch (_e) {
   ROOT_PATH = "";
-  INITIAL_GROUP_ID = "";
 }
+const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
 
 const TYPE_META = {
   Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
@@ -1125,7 +1123,7 @@ window.addEventListener("resize", () => {
         render(graph.nodes, graph.links);
       } else {
         render([], []);
-        setStatus("示例数据渲染已关闭，请输入 group_id 后加载图谱");
+        setStatus("请输入 group_id 后加载图谱");
       }
     }
   } catch (e) {
