@@ -1,4 +1,4 @@
-version: 0.0.32
+version: 0.0.33
 type: "plugin"
 author: "wxj"
 name: "neo4j_excel_importer"
@@ -27,7 +27,7 @@ plugins:
   endpoints:
     - "provider/neo4j_graph_endpoint.yaml"
 meta:
-  version: 0.0.32
+  version: 0.0.33
   arch:
     - "amd64"
     - "arm64"

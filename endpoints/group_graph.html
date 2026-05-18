@@ -1,1649 +1,1805 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>D3 Graph — Neural Map</title>
-<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>D3 Graph — Neural Map</title>
+		<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+		<style>
+			@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap");
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
 
-  :root {
-    --bg:       #f0f2f7;
-    --surface:  #ffffff;
-    --surface2: #f5f7fb;
-    --border:   rgba(80,100,160,0.14);
-    --border2:  rgba(80,100,160,0.22);
-    --text:     #1a1d2e;
-    --muted:    #7a82a0;
-    --faint:    #b0b8d0;
+			:root {
+				--bg: #f0f2f7;
+				--surface: #ffffff;
+				--surface2: #f5f7fb;
+				--border: rgba(80, 100, 160, 0.14);
+				--border2: rgba(80, 100, 160, 0.22);
+				--text: #1a1d2e;
+				--muted: #7a82a0;
+				--faint: #b0b8d0;
 
-    --cyan:     #0ea5c8;
-    --blue:     #3b6ef5;
-    --purple:   #7c54e8;
-    --amber:    #d97706;
-    --rose:     #e8445a;
-    --green:    #0fa96b;
-  }
+				--cyan: #0ea5c8;
+				--blue: #3b6ef5;
+				--purple: #7c54e8;
+				--amber: #d97706;
+				--rose: #e8445a;
+				--green: #0fa96b;
+			}
 
-  html, body {
-    width: 100%; height: 100%; overflow: hidden;
-    background: var(--bg);
-    font-family: 'Syne', sans-serif;
-    color: var(--text);
-  }
+			html,
+			body {
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				background: var(--bg);
+				font-family: "Syne", sans-serif;
+				color: var(--text);
+			}
 
-  body::before {
-    content: '';
-    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(100,120,200,0.12) 1px, transparent 1px);
-    background-size: 28px 28px;
-  }
+			body::before {
+				content: "";
+				position: fixed;
+				inset: 0;
+				z-index: 0;
+				pointer-events: none;
+				background-image: radial-gradient(circle, rgba(100, 120, 200, 0.12) 1px, transparent 1px);
+				background-size: 28px 28px;
+			}
 
-  #app { position: relative; width: 100vw; height: 100vh; }
+			#app {
+				position: relative;
+				width: 100vw;
+				height: 100vh;
+			}
 
-  #graph-canvas {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    display: block;
-  }
+			#graph-canvas {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				display: block;
+			}
 
-  #stats {
-    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 1px; z-index: 10;
-    background: var(--border); border-radius: 10px; overflow: hidden;
-    font-family: 'JetBrains Mono', monospace;
-    box-shadow: 0 1px 4px rgba(80,100,160,0.1);
-  }
-  .stat-cell { background: var(--surface); padding: 8px 16px; text-align: center; }
-  .stat-cell .n { font-size: 15px; font-weight: 600; color: var(--blue); }
-  .stat-cell .l { font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+			#stats {
+				position: absolute;
+				top: 16px;
+				left: 50%;
+				transform: translateX(-50%);
+				display: flex;
+				gap: 1px;
+				z-index: 10;
+				background: var(--border);
+				border-radius: 10px;
+				overflow: hidden;
+				font-family: "JetBrains Mono", monospace;
+				box-shadow: 0 1px 4px rgba(80, 100, 160, 0.1);
+			}
+			.stat-cell {
+				background: var(--surface);
+				padding: 8px 16px;
+				text-align: center;
+			}
+			.stat-cell .n {
+				font-size: 15px;
+				font-weight: 600;
+				color: var(--blue);
+			}
+			.stat-cell .l {
+				font-size: 9px;
+				color: var(--muted);
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				margin-top: 2px;
+			}
 
-  #controls {
-    position: absolute; bottom: 28px; left: 50%;
-    transform: translateX(-50%);
-    display: flex; gap: 6px; z-index: 10;
-  }
-  .ctrl-btn {
-    width: 34px; height: 34px;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 8px; color: var(--muted);
-    font-size: 16px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    font-family: 'JetBrains Mono', monospace; font-weight: 600;
-    box-shadow: 0 1px 3px rgba(80,100,160,0.08);
-  }
-  .ctrl-btn:hover {
-    background: var(--surface2); border-color: var(--blue);
-    color: var(--blue); box-shadow: 0 2px 8px rgba(59,110,245,0.15);
-  }
+			#controls {
+				position: absolute;
+				bottom: 28px;
+				left: 50%;
+				transform: translateX(-50%);
+				display: flex;
+				gap: 6px;
+				z-index: 10;
+			}
+			.ctrl-btn {
+				width: 34px;
+				height: 34px;
+				background: var(--surface);
+				border: 1px solid var(--border2);
+				border-radius: 8px;
+				color: var(--muted);
+				font-size: 16px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				transition: all 0.15s;
+				font-family: "JetBrains Mono", monospace;
+				font-weight: 600;
+				box-shadow: 0 1px 3px rgba(80, 100, 160, 0.08);
+			}
+			.ctrl-btn:hover {
+				background: var(--surface2);
+				border-color: var(--blue);
+				color: var(--blue);
+				box-shadow: 0 2px 8px rgba(59, 110, 245, 0.15);
+			}
 
-  #legend {
-    position: absolute; bottom: 28px; right: 28px;
-    background: var(--surface); border: 1px solid var(--border2);
-    border-radius: 12px; padding: 14px 18px; z-index: 10;
-    box-shadow: 0 2px 8px rgba(80,100,160,0.08);
-  }
-  #legend h3 {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px; letter-spacing: 0.1em; color: var(--muted);
-    text-transform: uppercase; margin-bottom: 10px;
-  }
-  .legend-item {
-    display: flex; align-items: center; gap: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px; color: var(--text); margin-bottom: 6px;
-    padding: 3px 6px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.15s ease;
-  }
-  .legend-item:hover { background: var(--surface2); border-color: var(--border); }
-  .legend-item.active { background: rgba(59,110,245,0.08); border-color: rgba(59,110,245,0.35); }
-  .legend-dot {
-    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-  }
-  .legend-actions { margin-top: 6px; }
-  .legend-reset-btn {
-    width: 100%;
-    border: 1px solid var(--border2);
-    background: var(--surface2);
-    color: var(--muted);
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    cursor: pointer;
-  }
-  .legend-reset-btn:hover { color: var(--blue); border-color: var(--blue); background: #eef3ff; }
+			#legend {
+				position: absolute;
+				bottom: 28px;
+				right: 28px;
+				background: var(--surface);
+				border: 1px solid var(--border2);
+				border-radius: 12px;
+				padding: 14px 18px;
+				z-index: 10;
+				box-shadow: 0 2px 8px rgba(80, 100, 160, 0.08);
+			}
+			#legend h3 {
+				font-family: "JetBrains Mono", monospace;
+				font-size: 9.5px;
+				letter-spacing: 0.1em;
+				color: var(--muted);
+				text-transform: uppercase;
+				margin-bottom: 10px;
+			}
+			.legend-item {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-family: "JetBrains Mono", monospace;
+				font-size: 11.5px;
+				color: var(--text);
+				margin-bottom: 6px;
+				padding: 3px 6px;
+				border-radius: 6px;
+				border: 1px solid transparent;
+				cursor: pointer;
+				user-select: none;
+				transition: all 0.15s ease;
+			}
+			.legend-item:hover {
+				background: var(--surface2);
+				border-color: var(--border);
+			}
+			.legend-item.active {
+				background: rgba(59, 110, 245, 0.08);
+				border-color: rgba(59, 110, 245, 0.35);
+			}
+			.legend-dot {
+				width: 10px;
+				height: 10px;
+				border-radius: 50%;
+				flex-shrink: 0;
+			}
+			.legend-actions {
+				margin-top: 6px;
+			}
+			.legend-reset-btn {
+				width: 100%;
+				border: 1px solid var(--border2);
+				background: var(--surface2);
+				color: var(--muted);
+				border-radius: 6px;
+				padding: 4px 8px;
+				font-size: 11px;
+				font-family: "JetBrains Mono", monospace;
+				cursor: pointer;
+			}
+			.legend-reset-btn:hover {
+				color: var(--blue);
+				border-color: var(--blue);
+				background: #eef3ff;
+			}
 
-  #search-panel {
-    position: absolute;
-    top: 16px;
-    right: 28px;
-    width: 238px;
-    z-index: 11;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 12px;
-    padding: 10px 12px;
-    box-shadow: 0 2px 8px rgba(80,100,160,0.08);
-    font-family: 'JetBrains Mono', monospace;
-  }
-  #search-panel label {
-    display: block;
-    font-size: 10px;
-    color: var(--muted);
-    margin-bottom: 6px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  #search-panel input {
-    width: 100%;
-    border: 1px solid var(--border2);
-    border-radius: 7px;
-    padding: 7px 8px;
-    font: inherit;
-    font-size: 11px;
-    background: #fff;
-    color: var(--text);
-  }
+			#search-panel {
+				position: absolute;
+				top: 16px;
+				right: 28px;
+				width: 238px;
+				z-index: 11;
+				background: var(--surface);
+				border: 1px solid var(--border2);
+				border-radius: 12px;
+				padding: 10px 12px;
+				box-shadow: 0 2px 8px rgba(80, 100, 160, 0.08);
+				font-family: "JetBrains Mono", monospace;
+			}
+			#search-panel label {
+				display: block;
+				font-size: 10px;
+				color: var(--muted);
+				margin-bottom: 6px;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+			}
+			#search-panel input {
+				width: 100%;
+				border: 1px solid var(--border2);
+				border-radius: 7px;
+				padding: 7px 8px;
+				font: inherit;
+				font-size: 11px;
+				background: #fff;
+				color: var(--text);
+			}
 
-  #info-panel {
-    position: absolute; top: 110px; right: 28px; width: 238px;
-    background: var(--surface); border: 1px solid var(--border2);
-    border-radius: 14px; padding: 20px; z-index: 10;
-    opacity: 0; pointer-events: none;
-    transform: translateX(12px);
-    transition: opacity 0.22s ease, transform 0.22s ease;
-    box-shadow: 0 4px 18px rgba(80,100,160,0.1);
-  }
-  #info-panel.visible { opacity: 1; pointer-events: auto; transform: translateX(0); }
-  #info-panel .p-type {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 7px;
-  }
-  #info-panel .p-name {
-    font-size: 20px; font-weight: 700; line-height: 1.15;
-    margin-bottom: 14px; color: var(--text);
-  }
-  #info-panel .p-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 6px 0; border-bottom: 1px solid var(--border);
-    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
-  }
-  #info-panel .p-row:last-child { border-bottom: none; }
-  #info-panel .p-key { color: var(--muted); }
-  #info-panel .p-val { font-weight: 600; color: var(--text); }
-  #info-panel .close-btn {
-    position: absolute; top: 13px; right: 13px;
-    background: none; border: none; color: var(--faint);
-    font-size: 17px; cursor: pointer; font-family: 'Syne', sans-serif;
-    line-height: 1; padding: 2px 5px; border-radius: 4px;
-  }
-  #info-panel .close-btn:hover { color: var(--text); background: var(--surface2); }
+			#info-panel {
+				position: absolute;
+				top: 110px;
+				right: 28px;
+				width: 238px;
+				background: var(--surface);
+				border: 1px solid var(--border2);
+				border-radius: 14px;
+				padding: 20px;
+				z-index: 10;
+				opacity: 0;
+				pointer-events: none;
+				transform: translateX(12px);
+				transition:
+					opacity 0.22s ease,
+					transform 0.22s ease;
+				box-shadow: 0 4px 18px rgba(80, 100, 160, 0.1);
+			}
+			#info-panel.visible {
+				opacity: 1;
+				pointer-events: auto;
+				transform: translateX(0);
+			}
+			#info-panel .p-type {
+				font-family: "JetBrains Mono", monospace;
+				font-size: 9.5px;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				margin-bottom: 7px;
+			}
+			#info-panel .p-name {
+				font-size: 20px;
+				font-weight: 700;
+				line-height: 1.15;
+				margin-bottom: 14px;
+				color: var(--text);
+			}
+			#info-panel .p-row {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 6px 0;
+				border-bottom: 1px solid var(--border);
+				font-family: "JetBrains Mono", monospace;
+				font-size: 11.5px;
+			}
+			#info-panel .p-row:last-child {
+				border-bottom: none;
+			}
+			#info-panel .p-key {
+				color: var(--muted);
+			}
+			#info-panel .p-val {
+				font-weight: 600;
+				color: var(--text);
+			}
+			#info-panel .close-btn {
+				position: absolute;
+				top: 13px;
+				right: 13px;
+				background: none;
+				border: none;
+				color: var(--faint);
+				font-size: 17px;
+				cursor: pointer;
+				font-family: "Syne", sans-serif;
+				line-height: 1;
+				padding: 2px 5px;
+				border-radius: 4px;
+			}
+			#info-panel .close-btn:hover {
+				color: var(--text);
+				background: var(--surface2);
+			}
 
+			#status {
+				font-family: "JetBrains Mono", monospace;
+				font-size: 10px;
+				color: var(--muted);
+				border-top: 1px solid var(--border);
+				padding: 6px 4px 2px;
+				margin-top: 6px;
+				text-align: right;
+			}
 
-  #status {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-    border-top: 1px solid var(--border);
-    padding: 6px 4px 2px;
-    margin-top: 6px;
-    text-align: right;
-  }
+			#ops-panel {
+				position: absolute;
+				left: 16px;
+				top: 16px;
+				width: 340px;
+				max-height: calc(100vh - 32px);
+				overflow: auto;
+				z-index: 12;
+				background: rgba(255, 255, 255, 0.92);
+				border: 1px solid var(--border2);
+				border-radius: 10px;
+				box-shadow: 0 6px 20px rgba(80, 100, 160, 0.14);
+				padding: 10px;
+				font-family: "JetBrains Mono", monospace;
+			}
 
-  #ops-panel {
-    position: absolute;
-    left: 16px;
-    top: 16px;
-    width: 340px;
-    max-height: calc(100vh - 32px);
-    overflow: auto;
-    z-index: 12;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid var(--border2);
-    border-radius: 10px;
-    box-shadow: 0 6px 20px rgba(80,100,160,0.14);
-    padding: 10px;
-    font-family: 'JetBrains Mono', monospace;
-  }
+			.ops-card {
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 8px;
+				background: #fff;
+				margin-bottom: 8px;
+			}
 
-  .ops-card {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    background: #fff;
-    margin-bottom: 8px;
-  }
+			.ops-title {
+				font-size: 12px;
+				color: var(--text);
+				font-weight: 700;
+				margin-bottom: 6px;
+			}
 
-  .ops-title {
-    font-size: 12px;
-    color: var(--text);
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
+			.ops-grid {
+				display: grid;
+				gap: 6px;
+				grid-template-columns: 1fr 1fr;
+			}
 
-  .ops-grid {
-    display: grid;
-    gap: 6px;
-    grid-template-columns: 1fr 1fr;
-  }
+			.ops-row {
+				display: grid;
+				gap: 4px;
+			}
 
-  .ops-row { display: grid; gap: 4px; }
+			.ops-row label {
+				font-size: 11px;
+				color: var(--muted);
+			}
 
-  .ops-row label {
-    font-size: 11px;
-    color: var(--muted);
-  }
+			.ops-row input,
+			.ops-row textarea {
+				width: 100%;
+				border: 1px solid var(--border2);
+				border-radius: 6px;
+				padding: 6px;
+				background: #fff;
+				color: var(--text);
+				font: inherit;
+				font-size: 11px;
+			}
 
-  .ops-row input,
-  .ops-row textarea {
-    width: 100%;
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 6px;
-    background: #fff;
-    color: var(--text);
-    font: inherit;
-    font-size: 11px;
-  }
+			.ops-row textarea {
+				min-height: 60px;
+				resize: vertical;
+			}
 
-  .ops-row textarea {
-    min-height: 60px;
-    resize: vertical;
-  }
+			.kv-list {
+				display: grid;
+				gap: 6px;
+			}
 
-  .kv-list {
-    display: grid;
-    gap: 6px;
-  }
+			.kv-row {
+				display: grid;
+				grid-template-columns: 1fr 1fr auto;
+				gap: 6px;
+				align-items: center;
+			}
 
-  .kv-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 6px;
-    align-items: center;
-  }
+			.kv-del {
+				width: 26px;
+				height: 26px;
+				border: 1px solid var(--border2);
+				border-radius: 6px;
+				background: #fff;
+				color: #a33;
+				cursor: pointer;
+				font-size: 12px;
+				line-height: 1;
+			}
 
-  .kv-del {
-    width: 26px;
-    height: 26px;
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    background: #fff;
-    color: #a33;
-    cursor: pointer;
-    font-size: 12px;
-    line-height: 1;
-  }
+			.kv-del:hover {
+				border-color: #e29a9a;
+				background: #fff5f5;
+			}
 
-  .kv-del:hover {
-    border-color: #e29a9a;
-    background: #fff5f5;
-  }
+			.ops-actions {
+				display: grid;
+				grid-template-columns: repeat(3, 1fr);
+				gap: 6px;
+				margin-top: 8px;
+			}
 
-  .ops-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-top: 8px;
-  }
+			.ops-btn {
+				border: 1px solid var(--border2);
+				border-radius: 6px;
+				padding: 6px;
+				font: inherit;
+				font-size: 11px;
+				background: #fff;
+				color: var(--text);
+				cursor: pointer;
+			}
 
-  .ops-btn {
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 6px;
-    font: inherit;
-    font-size: 11px;
-    background: #fff;
-    color: var(--text);
-    cursor: pointer;
-  }
+			.ops-btn:hover {
+				border-color: var(--blue);
+				color: var(--blue);
+				background: var(--surface2);
+			}
 
-  .ops-btn:hover {
-    border-color: var(--blue);
-    color: var(--blue);
-    background: var(--surface2);
-  }
+			.ops-btn.primary {
+				background: #eef4ff;
+				border-color: #c8d8ff;
+				color: #2454cf;
+			}
 
-  .ops-btn.primary {
-    background: #eef4ff;
-    border-color: #c8d8ff;
-    color: #2454cf;
-  }
+			@media (max-width: 1100px) {
+				#ops-panel {
+					width: 300px;
+					top: 10px;
+					left: 10px;
+					max-height: calc(100vh - 20px);
+				}
+				#legend {
+					right: 10px;
+					bottom: 10px;
+				}
+				#search-panel {
+					right: 10px;
+					top: 10px;
+					width: 300px;
+				}
+				#info-panel {
+					right: 10px;
+					top: 84px;
+				}
+				#controls {
+					left: 50%;
+					bottom: 10px;
+					transform: translateX(-50%);
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="stats">
+				<div class="stat-cell">
+					<div class="n" id="s-nodes">0</div>
+					<div class="l">节点</div>
+				</div>
+				<div class="stat-cell">
+					<div class="n" id="s-links">0</div>
+					<div class="l">关系</div>
+				</div>
+				<div class="stat-cell">
+					<div class="n" id="s-zoom">1.00×</div>
+					<div class="l">缩放</div>
+				</div>
+			</div>
 
-  @media (max-width: 1100px) {
-    #ops-panel {
-      width: 300px;
-      top: 10px;
-      left: 10px;
-      max-height: calc(100vh - 20px);
-    }
-    #legend { right: 10px; bottom: 10px; }
-    #search-panel { right: 10px; top: 10px; width: 300px; }
-    #info-panel { right: 10px; top: 84px; }
-    #controls { left: 50%; bottom: 10px; transform: translateX(-50%); }
-  }
-</style>
-</head>
-<body>
-<div id="app">
-  <div id="stats">
-    <div class="stat-cell"><div class="n" id="s-nodes">0</div><div class="l">节点</div></div>
-    <div class="stat-cell"><div class="n" id="s-links">0</div><div class="l">关系</div></div>
-    <div class="stat-cell"><div class="n" id="s-zoom">1.00×</div><div class="l">缩放</div></div>
-  </div>
+			<canvas id="graph-canvas"></canvas>
 
-  <canvas id="graph-canvas"></canvas>
+			<div id="controls">
+				<button class="ctrl-btn" id="btn-zoom-in">+</button>
+				<button class="ctrl-btn" id="btn-zoom-out">−</button>
+				<button class="ctrl-btn" id="btn-reset" style="font-size: 13px">⟳</button>
+			</div>
 
-  <div id="controls">
-    <button class="ctrl-btn" id="btn-zoom-in">+</button>
-    <button class="ctrl-btn" id="btn-zoom-out">−</button>
-    <button class="ctrl-btn" id="btn-reset" style="font-size:13px">⟳</button>
-  </div>
+			<div id="legend">
+				<h3>节点类型</h3>
+				<div id="legendList"></div>
+			</div>
 
-  <div id="legend">
-    <h3>节点类型</h3>
-    <div id="legendList"></div>
-  </div>
+			<div id="search-panel">
+				<label for="searchKeyword">模糊检索</label>
+				<input id="searchKeyword" placeholder="名称 / uid / 标签" />
+			</div>
 
-  <div id="search-panel">
-    <label for="searchKeyword">模糊检索</label>
-    <input id="searchKeyword" placeholder="名称 / uid / 标签">
-  </div>
+			<div id="info-panel">
+				<button class="close-btn" id="panel-close">×</button>
+				<div class="p-name" id="p-name"></div>
+				<div class="p-type" id="p-type"></div>
+				<div class="p-row"><span class="p-key">关联数</span><span class="p-val" id="p-conn"></span></div>
+				<div class="p-row"><span class="p-key">权重</span><span class="p-val" id="p-weight"></span></div>
+				<div class="p-row"><span class="p-key">编号</span><span class="p-val" id="p-id"></span></div>
+				<div class="p-row"><span class="p-key">状态</span><span class="p-val" style="color: #0fa96b">● 活跃</span></div>
+			</div>
 
-  <div id="info-panel">
-    <button class="close-btn" id="panel-close">×</button>
-    <div class="p-name" id="p-name"></div>
-    <div class="p-type" id="p-type"></div>
-    <div class="p-row"><span class="p-key">关联数</span><span class="p-val" id="p-conn"></span></div>
-    <div class="p-row"><span class="p-key">权重</span><span class="p-val" id="p-weight"></span></div>
-    <div class="p-row"><span class="p-key">编号</span><span class="p-val" id="p-id"></span></div>
-    <div class="p-row"><span class="p-key">状态</span><span class="p-val" style="color:#0fa96b">● 活跃</span></div>
-  </div>
+			<div id="ops-panel">
+				<div class="ops-card">
+					<div class="ops-title">图谱加载</div>
+					<div class="ops-grid">
+						<div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo" /></div>
+						<div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300" /></div>
+					</div>
+					<div class="ops-actions" style="grid-template-columns: 1fr">
+						<button class="ops-btn primary" id="btnLoad">加载图谱</button>
+					</div>
+				</div>
 
-  <div id="ops-panel">
-    <div class="ops-card">
-      <div class="ops-title">图谱加载</div>
-      <div class="ops-grid">
-        <div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo"></div>
-        <div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300"></div>
-      </div>
-      <div class="ops-actions" style="grid-template-columns:1fr;">
-        <button class="ops-btn primary" id="btnLoad">加载图谱</button>
-      </div>
-    </div>
+				<div class="ops-card">
+					<div class="ops-title">节点操作</div>
+					<div class="ops-grid">
+						<div class="ops-row"><label>节点ID（uid）</label><input id="nodeUid" placeholder="节点唯一ID" /></div>
+						<div class="ops-row"><label>名称（name）</label><input id="nodeName" placeholder="节点名称" /></div>
+					</div>
+					<div class="ops-row" style="margin-top: 6px"><label>标签（labels，逗号分隔）</label><input id="nodeLabels" placeholder="例如：Core,Service" /></div>
+					<div class="ops-row" style="margin-top: 6px"><label>描述（description）</label><input id="nodeDesc" placeholder="节点描述" /></div>
+					<div class="ops-row" style="margin-top: 6px">
+						<label>属性（properties）</label>
+						<div id="nodePropsList" class="kv-list"></div>
+					</div>
+					<div class="ops-row" style="margin-top: 6px">
+						<button class="ops-btn" type="button" id="btnNodePropAdd">+ 添加属性</button>
+					</div>
+					<div class="ops-row" style="margin-top: 6px">
+						<label>元信息（meta）</label>
+						<div id="nodeMetaList" class="kv-list"></div>
+					</div>
+					<div class="ops-row" style="margin-top: 6px">
+						<button class="ops-btn" type="button" id="btnNodeMetaAdd">+ 添加元信息</button>
+					</div>
+					<div class="ops-actions">
+						<button class="ops-btn primary" id="btnNodeCreate">新增</button>
+						<button class="ops-btn" id="btnNodeUpdate">更新</button>
+						<button class="ops-btn" id="btnNodeDelete">删除</button>
+					</div>
+				</div>
 
-    <div class="ops-card">
-      <div class="ops-title">节点操作</div>
-      <div class="ops-grid">
-        <div class="ops-row"><label>节点ID（uid）</label><input id="nodeUid" placeholder="节点唯一ID"></div>
-        <div class="ops-row"><label>名称（name）</label><input id="nodeName" placeholder="节点名称"></div>
-      </div>
-      <div class="ops-row" style="margin-top:6px;"><label>标签（labels，逗号分隔）</label><input id="nodeLabels" placeholder="例如：Core,Service"></div>
-      <div class="ops-row" style="margin-top:6px;"><label>描述（description）</label><input id="nodeDesc" placeholder="节点描述"></div>
-      <div class="ops-row" style="margin-top:6px;">
-        <label>属性（properties）</label>
-        <div id="nodePropsList" class="kv-list"></div>
-      </div>
-      <div class="ops-row" style="margin-top:6px;">
-        <button class="ops-btn" type="button" id="btnNodePropAdd">+ 添加属性</button>
-      </div>
-      <div class="ops-row" style="margin-top:6px;">
-        <label>元信息（meta）</label>
-        <div id="nodeMetaList" class="kv-list"></div>
-      </div>
-      <div class="ops-row" style="margin-top:6px;">
-        <button class="ops-btn" type="button" id="btnNodeMetaAdd">+ 添加元信息</button>
-      </div>
-      <div class="ops-actions">
-        <button class="ops-btn primary" id="btnNodeCreate">新增</button>
-        <button class="ops-btn" id="btnNodeUpdate">更新</button>
-        <button class="ops-btn" id="btnNodeDelete">删除</button>
-      </div>
-    </div>
+				<div class="ops-card" style="margin-bottom: 0">
+					<div class="ops-title">关系操作</div>
+					<div class="ops-grid">
+						<div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid（点击关系自动填充）" /></div>
+						<div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED" /></div>
+					</div>
+					<div class="ops-grid" style="margin-top: 6px">
+						<div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid（点击关系自动填充）" /></div>
+						<div class="ops-row"><label>说明</label><input value="按 source_uid + target_uid 编辑/删除关系" readonly /></div>
+					</div>
+					<div class="ops-row" style="margin-top: 6px"><label>描述（description）</label><input id="relDesc" placeholder="关系描述" /></div>
+					<div class="ops-row" style="margin-top: 6px">
+						<label>属性（properties）</label>
+						<div id="relPropsList" class="kv-list"></div>
+					</div>
+					<div class="ops-row" style="margin-top: 6px">
+						<button class="ops-btn" type="button" id="btnRelPropAdd">+ 添加关系属性</button>
+					</div>
+					<div class="ops-actions">
+						<button class="ops-btn primary" id="btnRelCreate">新增</button>
+						<button class="ops-btn" id="btnRelUpdate">更新</button>
+						<button class="ops-btn" id="btnRelDelete">删除</button>
+					</div>
+				</div>
+				<div id="status"></div>
+			</div>
+		</div>
 
-    <div class="ops-card" style="margin-bottom:0;">
-      <div class="ops-title">关系操作</div>
-      <div class="ops-grid">
-        <div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid（点击关系自动填充）"></div>
-        <div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED"></div>
-      </div>
-      <div class="ops-grid" style="margin-top:6px;">
-        <div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid（点击关系自动填充）"></div>
-        <div class="ops-row"><label>说明</label><input value="按 source_uid + target_uid 编辑/删除关系" readonly></div>
-      </div>
-      <div class="ops-row" style="margin-top:6px;"><label>描述（description）</label><input id="relDesc" placeholder="关系描述"></div>
-      <div class="ops-row" style="margin-top:6px;">
-        <label>属性（properties）</label>
-        <div id="relPropsList" class="kv-list"></div>
-      </div>
-      <div class="ops-row" style="margin-top:6px;">
-        <button class="ops-btn" type="button" id="btnRelPropAdd">+ 添加关系属性</button>
-      </div>
-      <div class="ops-actions">
-        <button class="ops-btn primary" id="btnRelCreate">新增</button>
-        <button class="ops-btn" id="btnRelUpdate">更新</button>
-        <button class="ops-btn" id="btnRelDelete">删除</button>
-      </div>
-    </div>
-    <div id="status"></div>
-  </div>
-
-
-</div>
-
-<script>
-/* ═══════════════════════════════════════════════════════════════════
-   Constants & Configuration
+		<script>
+			/* ═══════════════════════════════════════════════════════════════════
+   全局常量配置
    ═══════════════════════════════════════════════════════════════════ */
-
-const querySearch = new URLSearchParams(window.location.search);
-const RENDER_DEMO_DATA = querySearch.get("demo") === "true";
-const INITIAL_GROUP_ID = clean(querySearch.get("group_id"));
-const DEMO_PAGE_SIZE = 200;
-const DEMO_PAGE_DELAY_MS = 280;
-const FORCE_CHARGE_STRENGTH = -400;
-const FORCE_LINK_BASE_DISTANCE = 150;
-const FORCE_COLLISION_PADDING = 6;
-const FORCE_CENTER_PULL_STRENGTH = 0.04;
-
-const TYPE_META = {
-  Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
-  Module: { color: "#7c54e8", bg: "rgba(124,84,232,0.10)", r: 13 },
-  Service: { color: "#0fa96b", bg: "rgba(15,169,107,0.10)", r: 11 },
-  Data: { color: "#d97706", bg: "rgba(217,119,6,0.10)", r: 10 },
-  Agent: { color: "#e8445a", bg: "rgba(232,68,90,0.10)", r: 9 },
-};
-
-const DEMO_NODE_COUNT = 1000;
-
-const DEMO_NAME_POOL = [
-  "Orchestrator","Planner","Memory","Retriever","Embedder","Reasoner",
-  "VectorDB","Cache","DocStore","Gateway","Auth","Logger",
-  "Executor","Validator","Critic","Scheduler","EventBus","Metrics",
-  "Router","Parser","Encoder","Decoder","Monitor","Collector",
-  "Dispatcher","Registry","Resolver","Transformer","Aggregator","Connector",
-  "Buffer","Indexer","Crawler","Fetcher","Loader","Saver",
-  "Tracker","Analyzer","Renderer","Compiler","Interpreter","Assembler",
-];
-
-const DEMO_TYPE_KEYS = ["Core","Module","Service","Data","Agent"];
-
-const DEMO_REL_TYPES = [
-  "dispatches","reads","routes","spawns","queries","invokes",
-  "schedules","indexes","caches","fetches","embeds","stores",
-  "reviews","checks","verifies","logs","publishes","submits",
-  "drafts","triggers","reports","tracks","persists","syncs",
-  "writes","refines","retries","mirrors","calls","depends",
-];
-
-function generateDemoNodes(count) {
-  const now = new Date().toISOString();
-  const meta = { created_at: now, updated_at: now, source: "demo", version: 1 };
-  const nodes = [];
-  for (let i = 0; i < count; i++) {
-    const typeKey = DEMO_TYPE_KEYS[i % DEMO_TYPE_KEYS.length];
-    const name = DEMO_NAME_POOL[i % DEMO_NAME_POOL.length];
-    nodes.push({
-      uid: String(i + 1),
-      name,
-      labels: [typeKey],
-      description: "",
-      group_id: "demo",
-      properties: { weight: Math.round(40 + Math.random() * 60) },
-      meta,
-    });
-  }
-  return nodes;
-}
-
-function generateDemoLinks(nodes) {
-  const now = new Date().toISOString();
-  const meta = { created_at: now, updated_at: now, source: "demo", version: 1 };
-  const n = nodes.length;
-  if (n < 2) return [];
-  const uids = nodes.map(nd => nd.uid);
-  const links = [];
-  const seen = new Set();
-
-  const addLink = (s, t) => {
-    const key = `${s}->${t}`;
-    if (seen.has(key) || s === t) return;
-    seen.add(key);
-    const rel = DEMO_REL_TYPES[links.length % DEMO_REL_TYPES.length];
-    links.push({
-      relation_id: `demo-${s}-${t}-${rel}`,
-      source_uid: s, target_uid: t, rel_type: rel,
-      direction: "forward", description: "", weight: 1,
-      group_id: "demo", properties: {}, meta,
-    });
-  };
-
-  // spanning tree to guarantee connectivity
-  for (let i = 1; i < n; i++) {
-    const parent = uids[Math.floor(Math.random() * i)];
-    addLink(parent, uids[i]);
-  }
-
-  // extra random edges (~1.5x node count total)
-  const extraTarget = Math.floor(n * 1.5);
-  let attempts = 0;
-  while (links.length < extraTarget && attempts < extraTarget * 4) {
-    const s = uids[Math.floor(Math.random() * n)];
-    const t = uids[Math.floor(Math.random() * n)];
-    addLink(s, t);
-    attempts++;
-  }
-
-  return links;
-}
-
-/* ── Utility functions ─────────────────────────────────────────── */
-
-function apiBase() {
-  const pathname = String(window.location.pathname || "");
-  const match = pathname.match(/^\/e\/[^/]+/);
-  return match ? match[0] : "";
-}
-const API_BASE = apiBase();
-
-function apiUrl(path) {
-  const base = API_BASE.replace(/\/+$/, "");
-  const suffix = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
-  return `${base}${suffix}`;
-}
-
-function clean(v) { return String(v || "").trim(); }
-
-function shouldRenderDemo() { return RENDER_DEMO_DATA; }
-
-function createKvRow(key = "", value = "") {
-  const row = document.createElement("div");
-  row.className = "kv-row";
-  const keyInput = document.createElement("input");
-  keyInput.placeholder = "key";
-  keyInput.value = key;
-  const valueInput = document.createElement("input");
-  valueInput.placeholder = "value";
-  valueInput.value = value;
-  const delBtn = document.createElement("button");
-  delBtn.type = "button";
-  delBtn.className = "kv-del";
-  delBtn.textContent = "×";
-  delBtn.addEventListener("click", () => row.remove());
-  row.appendChild(keyInput);
-  row.appendChild(valueInput);
-  row.appendChild(delBtn);
-  return row;
-}
-
-function renderKv(listId, obj = {}) {
-  const list = document.getElementById(listId);
-  list.innerHTML = "";
-  const entries = Object.entries(obj || {});
-  if (!entries.length) { list.appendChild(createKvRow("", "")); return; }
-  entries.forEach(([k, v]) => list.appendChild(createKvRow(String(k), v == null ? "" : String(v))));
-}
-
-function collectKv(listId) {
-  const rows = Array.from(document.querySelectorAll(`#${listId} .kv-row`));
-  const out = {};
-  rows.forEach((row) => {
-    const inputs = row.querySelectorAll("input");
-    const key = clean(inputs[0]?.value);
-    const val = clean(inputs[1]?.value);
-    if (key) out[key] = val;
-  });
-  return out;
-}
-
-function parseType(labels = [], uid = "") {
-  const all = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
-  if (all.includes("core")) return "Core";
-  if (all.includes("module")) return "Module";
-  if (all.includes("service")) return "Service";
-  if (all.includes("data")) return "Data";
-  if (all.includes("agent")) return "Agent";
-  const s = clean(uid).toLowerCase();
-  if (s.includes("core")) return "Core";
-  if (s.includes("service")) return "Service";
-  if (s.includes("module")) return "Module";
-  if (s.includes("data")) return "Data";
-  return "Agent";
-}
-
-function typeDisplayName(type) {
-  return type || "";
-}
-
-function parseWeight(node) {
-  const candidates = [node.weight, node.properties?.weight, node.properties?.score, node.meta?.score];
-  for (const value of candidates) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return Math.max(1, Math.min(100, Math.round(n)));
-  }
-  return 50;
-}
-
-function nodeLabel(node) {
-  const name = clean(node.name);
-  return name || clean(node.uid) || "Node";
-}
-
-function relationLabel(rel) { return clean(rel.rel_type) || "RELATED"; }
-
-function relationKey(rel, index) {
-  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
-}
-
-/* ── Graph store ────────────────────────────────────────────────── */
-
-const graphStore = { nodeMap: new Map(), linkMap: new Map(), nodes: [], links: [] };
-
-function relationStoreKey(rel) {
-  const relationId = clean(rel.relation_id);
-  if (relationId) return `rid:${relationId}`;
-  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}`;
-}
-
-function resetGraphStore() {
-  graphStore.nodeMap.clear();
-  graphStore.linkMap.clear();
-  graphStore.nodes = [];
-  graphStore.links = [];
-}
-
-/* ── HTTP helper ────────────────────────────────────────────────── */
-
-async function request(pathOrUrl, options = {}) {
-  const method = (options.method || "GET").toUpperCase();
-  const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : apiUrl(pathOrUrl);
-  const init = { method, headers: { Accept: "application/json" } };
-  if (options.body !== undefined) {
-    init.headers["Content-Type"] = "application/json";
-    init.body = options.body;
-  }
-  const res = await fetch(url, init);
-  const text = await res.text();
-  let data = {};
-  if (text) { try { data = JSON.parse(text); } catch (_e) { throw new Error(`接口返回非 JSON: ${text.slice(0, 120)}`); } }
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
-
-function setStatus(text, isError = false) {
-  const el = document.getElementById("status");
-  el.textContent = text;
-  el.style.color = isError ? "#c53030" : "var(--muted)";
-}
-
-/* ── Data mapping (graphStore → renderable) ─────────────────────── */
-
-function mapGraphData() {
-  const nodesRaw = Array.from(graphStore.nodeMap.values());
-  const relsRaw = Array.from(graphStore.linkMap.values());
-  const nodeUidSet = new Set(graphStore.nodeMap.keys());
-  const degreeByUid = new Map();
-  const droppedRels = [];
-  const validRelsRaw = [];
-
-  relsRaw.forEach((r) => {
-    const suid = clean(r.source_uid);
-    const tuid = clean(r.target_uid);
-    if (!nodeUidSet.has(suid) || !nodeUidSet.has(tuid) || !suid || !tuid) {
-      droppedRels.push({ source_uid: suid, target_uid: tuid, rel_type: relationLabel(r) });
-      return;
-    }
-    validRelsRaw.push(r);
-    if (suid) degreeByUid.set(suid, (degreeByUid.get(suid) || 0) + 1);
-    if (tuid) degreeByUid.set(tuid, (degreeByUid.get(tuid) || 0) + 1);
-  });
-
-  const mappedNodes = nodesRaw.map((n, idx) => {
-    const type = parseType(n.labels, n.uid);
-    const meta = TYPE_META[type] || TYPE_META.Agent;
-    const uid = clean(n.uid);
-    const degree = degreeByUid.get(uid) || 0;
-    const dynamicR = Math.max(8, Math.min(26, meta.r + degree * 0.9));
-    return { id: uid || String(idx + 1), uid, label: nodeLabel(n), type, weight: parseWeight(n), color: meta.color, bg: meta.bg, r: dynamicR, raw: n };
-  });
-
-  const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
-  const mappedLinks = [];
-  validRelsRaw.forEach((r, i) => {
-    const sUid = clean(r.source_uid);
-    const tUid = clean(r.target_uid);
-    const s = idMap.get(sUid);
-    const t = idMap.get(tUid);
-    if (!s || !t) { droppedRels.push({ source_uid: sUid, target_uid: tUid, rel_type: relationLabel(r) }); return; }
-    mappedLinks.push({ source: s, target: t, relation: relationLabel(r), _key: relationStoreKey(r) || relationKey(r, i), raw: r });
-  });
-  if (droppedRels.length) console.warn("[group-graph] skip invalid relations", droppedRels.slice(0, 20));
-  graphStore.nodes = mappedNodes;
-  graphStore.links = mappedLinks;
-  return { nodes: graphStore.nodes, links: graphStore.links };
-}
-
-/* ── Data loaders ───────────────────────────────────────────────── */
-
-async function loadGraphByGroupId(groupId, onPage) {
-  resetGraphStore();
-  const pageSize = Number(clean(document.getElementById("pageSize").value) || "300");
-  let page = 1;
-  while (true) {
-    setStatus(`分页加载中: 第 ${page} 页`);
-    const data = await request(`/group-graph/api/graph?group_id=${encodeURIComponent(groupId)}&page=${page}&page_size=${encodeURIComponent(pageSize)}`);
-    for (const n of (data.nodes || [])) { const uid = clean(n.uid); if (uid) graphStore.nodeMap.set(uid, n); }
-    for (const r of (data.relations || [])) { const key = relationStoreKey(r); if (key) graphStore.linkMap.set(key, r); }
-    const graph = mapGraphData();
-    if (onPage) onPage(graph, page);
-    if (!data.nodes_has_more && !data.relations_has_more) break;
-    page += 1;
-  }
-  setStatus(`加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
-  return mapGraphData();
-}
-
-function loadDemoGraph() {
-  if (document.getElementById("groupId")) document.getElementById("groupId").value = "";
-  resetGraphStore();
-  const demoNodes = generateDemoNodes(DEMO_NODE_COUNT);
-  const demoLinks = generateDemoLinks(demoNodes);
-  demoNodes.forEach((node) => { const uid = clean(node.uid); if (uid) graphStore.nodeMap.set(uid, node); });
-  demoLinks.forEach((rel) => { const key = relationStoreKey(rel); if (key) graphStore.linkMap.set(key, rel); });
-  setStatus("已加载示例图谱");
-  return mapGraphData();
-}
-
-function sleep(ms) { return new Promise((resolve) => { window.setTimeout(resolve, ms); }); }
-
-async function loadDemoGraphByPage(onPage) {
-  resetGraphStore();
-  const demoNodes = generateDemoNodes(DEMO_NODE_COUNT);
-  const demoLinks = generateDemoLinks(demoNodes);
-  const total = Math.max(demoNodes.length, demoLinks.length);
-  let page = 1;
-  for (let start = 0; start < total; start += DEMO_PAGE_SIZE) {
-    const end = start + DEMO_PAGE_SIZE;
-    setStatus(`示例数据动态追加中: 第 ${page} 页`);
-    demoNodes.slice(start, end).forEach((node) => { const uid = clean(node.uid); if (uid) graphStore.nodeMap.set(uid, node); });
-    demoLinks.slice(start, end).forEach((rel) => { const key = relationStoreKey(rel); if (key) graphStore.linkMap.set(key, rel); });
-    const graph = mapGraphData();
-    if (onPage) onPage(graph, page);
-    page += 1;
-    await sleep(DEMO_PAGE_DELAY_MS);
-  }
-  setStatus(`示例加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
-  return mapGraphData();
-}
-
-/* ── Form helpers ───────────────────────────────────────────────── */
-
-function fillNodeForm(nodeRaw) {
-  if (!nodeRaw) return;
-  document.getElementById("nodeUid").value = clean(nodeRaw.uid);
-  document.getElementById("nodeName").value = clean(nodeRaw.name);
-  document.getElementById("nodeLabels").value = Array.isArray(nodeRaw.labels) ? nodeRaw.labels.join(",") : "";
-  document.getElementById("nodeDesc").value = clean(nodeRaw.description);
-  renderKv("nodePropsList", nodeRaw.properties || {});
-  renderKv("nodeMetaList", nodeRaw.meta || {});
-}
-
-function fillRelationForm(relRaw) {
-  if (!relRaw) return;
-  document.getElementById("relSource").value = clean(relRaw.source_uid);
-  document.getElementById("relTarget").value = clean(relRaw.target_uid);
-  document.getElementById("relType").value = relationLabel(relRaw);
-  document.getElementById("relDesc").value = clean(relRaw.description);
-  renderKv("relPropsList", relRaw.properties || {});
-}
-
-function nodePayload() {
-  const group_id = clean(document.getElementById("groupId").value);
-  const uid = clean(document.getElementById("nodeUid").value);
-  if (!group_id || !uid) throw new Error("group_id 和 uid 不能为空");
-  return {
-    group_id, uid,
-    name: clean(document.getElementById("nodeName").value),
-    labels: document.getElementById("nodeLabels").value.split(",").map((s) => clean(s)).filter(Boolean),
-    description: clean(document.getElementById("nodeDesc").value),
-    properties: collectKv("nodePropsList"),
-    meta: collectKv("nodeMetaList"),
-  };
-}
-
-function relationPayload() {
-  const group_id = clean(document.getElementById("groupId").value);
-  const source_uid = clean(document.getElementById("relSource").value);
-  const target_uid = clean(document.getElementById("relTarget").value);
-  const rel_type = clean(document.getElementById("relType").value);
-  if (!group_id || !source_uid || !target_uid || !rel_type) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
-  return {
-    group_id, source_uid, target_uid, rel_type,
-    description: clean(document.getElementById("relDesc").value),
-    properties: collectKv("relPropsList"),
-  };
-}
-
-async function mutate(path, method, payload) {
-  setStatus("执行中...");
-  await request(path, { method, body: JSON.stringify(payload) });
-  const gid = clean(document.getElementById("groupId").value);
-  if (!gid) { setStatus("操作成功"); return; }
-  await loadAndRenderGroup(gid);
-}
-
-/* ── Legend & type filtering (DOM-based) ────────────────────────── */
-
-let graphNodes = [];
-let graphLinks = [];
-let selectedLegendTypes = new Set();
-let searchKeyword = "";
-let searchDebounceTimer = null;
-
-function getNodeLabelKeys(node) {
-  const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
-  const out = [];
-  labels.forEach((label) => { const s = clean(label).toLowerCase(); if (s) out.push(s); });
-  if (!out.length) { const fallback = clean(node?.type || "Agent").toLowerCase(); if (fallback) out.push(fallback); }
-  return out;
-}
-
-function passTypeFilter(node) {
-  const hitType = !selectedLegendTypes.size || getNodeLabelKeys(node).some((k) => selectedLegendTypes.has(k));
-  if (!hitType) return false;
-  if (!searchKeyword) return true;
-  const labelList = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
-  const candidate = [
-    clean(node?.label).toLowerCase(), clean(node?.uid).toLowerCase(),
-    clean(node?.id).toLowerCase(), clean(node?.type).toLowerCase(),
-    clean(node?.raw?.name).toLowerCase(),
-    ...labelList.map((x) => clean(x).toLowerCase()),
-  ].join("|");
-  return candidate.includes(searchKeyword);
-}
-
-function renderLegend(nodes = []) {
-  const legendList = document.getElementById("legendList");
-  if (!legendList) return;
-  legendList.innerHTML = "";
-  const legendRoot = document.getElementById("legend");
-
-  const byType = new Map();
-  const toTypeKey = (label) => {
-    const k = clean(label).toLowerCase();
-    if (k === "core") return "Core";
-    if (k === "module") return "Module";
-    if (k === "service") return "Service";
-    if (k === "data") return "Data";
-    if (k === "agent") return "Agent";
-    return "";
-  };
-
-  (nodes || []).forEach((node) => {
-    const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
-    const effectiveLabels = labels.length ? labels : [node.type || "Agent"];
-    effectiveLabels.forEach((rawLabel) => {
-      const label = clean(rawLabel);
-      if (!label) return;
-      const key = label.toLowerCase();
-      if (byType.has(key)) return;
-      const typeKey = toTypeKey(label);
-      const color = typeKey ? (TYPE_META[typeKey]?.color || node.color || TYPE_META.Agent.color) : (node.color || TYPE_META.Agent.color);
-      const display = typeKey ? typeDisplayName(typeKey) : label;
-      byType.set(key, { key, display, color });
-    });
-  });
-
-  if (!byType.size) {
-    const item = document.createElement("div");
-    item.className = "legend-item";
-    item.textContent = "暂无节点";
-    legendList.appendChild(item);
-    if (legendRoot) { const oldActions = legendRoot.querySelector(".legend-actions"); if (oldActions) oldActions.remove(); }
-    return;
-  }
-
-  byType.forEach(({ key, display, color }) => {
-    const item = document.createElement("div");
-    item.className = "legend-item";
-    if (selectedLegendTypes.has(key)) item.classList.add("active");
-    item.dataset.typeKey = key;
-    const dot = document.createElement("div");
-    dot.className = "legend-dot";
-    dot.style.background = color;
-    const text = document.createElement("span");
-    text.textContent = display;
-    item.appendChild(dot);
-    item.appendChild(text);
-    item.addEventListener("click", () => {
-      if (selectedLegendTypes.has(key)) selectedLegendTypes.delete(key); else selectedLegendTypes.add(key);
-      renderLegend(graphNodes);
-      scheduleRender();
-    });
-    legendList.appendChild(item);
-  });
-
-  if (legendRoot) {
-    const oldActions = legendRoot.querySelector(".legend-actions");
-    if (oldActions) oldActions.remove();
-    const actions = document.createElement("div");
-    actions.className = "legend-actions";
-    const resetBtn = document.createElement("button");
-    resetBtn.type = "button";
-    resetBtn.className = "legend-reset-btn";
-    resetBtn.textContent = "重置筛选";
-    resetBtn.addEventListener("click", () => {
-      if (!selectedLegendTypes.size) return;
-      selectedLegendTypes.clear();
-      renderLegend(graphNodes);
-      scheduleRender();
-      setStatus("已重置类型筛选");
-    });
-    actions.appendChild(resetBtn);
-    legendRoot.appendChild(actions);
-  }
-}
-
-/* ── Canvas rendering engine (ported from GraphPanel.vue) ───────── */
-
-const canvasEl = document.getElementById("graph-canvas");
-let ctx = null;
-let W = 0, H = 0;
-let sim = null;
-let quadtree = null;
-let transform = d3.zoomIdentity;
-
-let selectedNodeId = null;
-let hoveredNodeId = null;
-let hoveredEdgeIdx = -1;
-
-let rafId = null;
-let needRender = false;
-
-let _nodes = [];
-let _edges = [];
-
-function getColor(type) {
-  return TYPE_META[type]?.color || "#999";
-}
-
-/* ── Edge curvature geometry ──────────────────────────────────── */
-
-function getEdgeControlPoint(edge) {
-  const sn = edge.source, tn = edge.target;
-  const sx = sn.x ?? 0, sy = sn.y ?? 0, tx = tn.x ?? 0, ty = tn.y ?? 0;
-  if (edge.curvature === 0) return { cx: (sx+tx)/2, cy: (sy+ty)/2 };
-  const dx = tx-sx, dy = ty-sy;
-  const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-  const ratio = 0.25 + (edge.pairTotal||1) * 0.05;
-  const offset = Math.max(35, dist * ratio);
-  return {
-    cx: (sx+tx)/2 - dy/dist * edge.curvature * offset,
-    cy: (sy+ty)/2 + dx/dist * edge.curvature * offset
-  };
-}
-
-function getEdgeMidpoint(edge) {
-  const sn = edge.source, tn = edge.target;
-  const sx = sn.x??0, sy = sn.y??0, tx = tn.x??0, ty = tn.y??0;
-  if (edge.isSelfLoop) return { x: sx + 70, y: sy };
-  const cp = getEdgeControlPoint(edge);
-  if (!cp) return { x:(sx+tx)/2, y:(sy+ty)/2 };
-  return { x: 0.25*sx + 0.5*cp.cx + 0.25*tx, y: 0.25*sy + 0.5*cp.cy + 0.25*ty };
-}
-
-function sampleBezierPoint(edge, t) {
-  const sn = edge.source, tn = edge.target;
-  const sx = sn.x??0, sy = sn.y??0, tx = tn.x??0, ty = tn.y??0;
-  if (edge.isSelfLoop) {
-    const angle = t * Math.PI * 2;
-    return { x: sx + 30 * Math.cos(angle), y: sy + 30 * Math.sin(angle) - 15 };
-  }
-  const cp = getEdgeControlPoint(edge);
-  if (!cp) return { x: sx + t*(tx-sx), y: sy + t*(ty-sy) };
-  const u = 1-t;
-  return { x: u*u*sx + 2*u*t*cp.cx + t*t*tx, y: u*u*sy + 2*u*t*cp.cy + t*t*ty };
-}
-
-/* ── Coordinate conversion & hit detection ────────────────────── */
-
-function toWorld(ex, ey) {
-  const rect = canvasEl.getBoundingClientRect();
-  return transform.invert([ex - rect.left, ey - rect.top]);
-}
-
-function findNodeAt(wx, wy, r = 18) {
-  return quadtree?.find(wx, wy, r) ?? null;
-}
-
-function findEdgeAt(wx, wy, threshold = 8) {
-  for (let i = _edges.length - 1; i >= 0; i--) {
-    const e = _edges[i];
-    const src = e.source, tgt = e.target;
-    if (!src?.x || !tgt?.x) continue;
-    for (let t = 0; t <= 1; t += 0.05) {
-      const p = sampleBezierPoint(e, t);
-      const dx = p.x - wx, dy = p.y - wy;
-      if (Math.sqrt(dx*dx + dy*dy) < threshold) return i;
-    }
-  }
-  return -1;
-}
-
-function buildQuadtree() {
-  quadtree = d3.quadtree().x(d => d.x ?? 0).y(d => d.y ?? 0).addAll(_nodes);
-}
-
-/* ── RAF scheduling ───────────────────────────────────────────── */
-
-function scheduleRender() {
-  if (needRender) return;
-  needRender = true;
-  rafId = requestAnimationFrame(drawFrame);
-}
-
-/* ── Canvas init ──────────────────────────────────────────────── */
-
-function initCanvas() {
-  const container = document.getElementById("app");
-  W = container.clientWidth;
-  H = container.clientHeight;
-  const dpr = window.devicePixelRatio || 1;
-  canvasEl.width = W * dpr;
-  canvasEl.height = H * dpr;
-  canvasEl.style.width = W + "px";
-  canvasEl.style.height = H + "px";
-  ctx = canvasEl.getContext("2d");
-  ctx.scale(dpr, dpr);
-}
-
-/* ── Interaction state ─────────────────────────────────────────── */
-
-let dragging = null;
-let dragStartWX = 0, dragStartWY = 0;
-let isDragging = false;
-
-let panning = false;
-let panStartX = 0, panStartY = 0;
-let panStartTX = 0, panStartTY = 0;
-
-let _showInfoTimer = null;
-let _hideInfoTimer = null;
-
-function showNodeInfo(node, immediate) {
-  if (_hideInfoTimer) { clearTimeout(_hideInfoTimer); _hideInfoTimer = null; }
-  const doShow = () => {
-    const cc = _edges.filter(ed => !ed.isSelfLoop && (ed.source?.id === node.id || ed.target?.id === node.id)).length;
-    console.info(node)
-    document.getElementById("p-type").textContent = node.raw.labels?.join(", ") || node.type || "";
-    document.getElementById("p-type").style.color = node.color;
-    document.getElementById("p-name").textContent = node.label;
-    document.getElementById("p-name").style.color = node.color;
-    document.getElementById("p-conn").textContent = cc;
-    document.getElementById("p-weight").textContent = node.weight + " / 100";
-    document.getElementById("p-id").textContent = "#" + node.id;
-    document.getElementById("info-panel").classList.add("visible");
-  };
-  if (immediate) { doShow(); return; }
-  if (_showInfoTimer) clearTimeout(_showInfoTimer);
-  _showInfoTimer = setTimeout(doShow, 150);
-}
-
-function hideNodeInfo(immediate) {
-  if (_showInfoTimer) { clearTimeout(_showInfoTimer); _showInfoTimer = null; }
-  const doHide = () => { document.getElementById("info-panel").classList.remove("visible"); };
-  if (immediate) { doHide(); return; }
-  if (_hideInfoTimer) clearTimeout(_hideInfoTimer);
-  _hideInfoTimer = setTimeout(doHide, 300);
-}
-
-function _isNeighbor(nodeId, selId) {
-  return _edges.some(e => !e.isSelfLoop && (
-    (e.source?.id === selId && e.target?.id === nodeId) ||
-    (e.target?.id === selId && e.source?.id === nodeId)
-  ));
-}
-
-function onPointerMove(e) {
-  if (dragging) {
-    const [wx, wy] = toWorld(e.clientX, e.clientY);
-    const dx = wx - dragStartWX, dy = wy - dragStartWY;
-    if (!isDragging && Math.sqrt(dx*dx + dy*dy) > 4) {
-      isDragging = true;
-      sim.alphaTarget(0.3).restart();
-    }
-    if (isDragging) { dragging.fx = wx; dragging.fy = wy; }
-    return;
-  }
-  if (panning) {
-    transform = d3.zoomIdentity
-      .translate(panStartTX + (e.clientX - panStartX), panStartTY + (e.clientY - panStartY))
-      .scale(transform.k);
-    scheduleRender();
-    return;
-  }
-  const [wx, wy] = toWorld(e.clientX, e.clientY);
-  const node = findNodeAt(wx, wy, 18);
-  const prevHovN = hoveredNodeId;
-  const prevHovE = hoveredEdgeIdx;
-  if (selectedNodeId && node && node.id !== selectedNodeId && !_isNeighbor(node.id, selectedNodeId)) {
-    hoveredNodeId = null;
-  } else {
-    hoveredNodeId = node ? node.id : null;
-  }
-  if(!hoveredNodeId && selectedNodeId){
-    hoveredNodeId = selectedNodeId;
-  }
-  hoveredEdgeIdx = (!node && !selectedNodeId) ? findEdgeAt(wx, wy) : -1;
-  canvasEl.style.cursor = (hoveredNodeId || hoveredEdgeIdx >= 0) ? "pointer" : "default";
-  if (hoveredNodeId !== prevHovN || hoveredEdgeIdx !== prevHovE) {
-    if (hoveredNodeId) {
-      const n = _nodes.find(nd => nd.id === hoveredNodeId);
-      if (n) showNodeInfo(n);
-    } else if (!selectedNodeId) {
-      hideNodeInfo();
-    }
-    scheduleRender();
-  }
-}
-
-function onPointerDown(e) {
-  if (e.button !== 0) return;
-  const [wx, wy] = toWorld(e.clientX, e.clientY);
-  const node = findNodeAt(wx, wy, 18);
-  if (node) {
-    canvasEl.setPointerCapture(e.pointerId);
-    dragging = node;
-    dragStartWX = wx; dragStartWY = wy;
-    isDragging = false;
-    dragging.fx = dragging.x; dragging.fy = dragging.y;
-  } else {
-    canvasEl.setPointerCapture(e.pointerId);
-    panning = true;
-    panStartX = e.clientX; panStartY = e.clientY;
-    panStartTX = transform.x; panStartTY = transform.y;
-    canvasEl.style.cursor = "grabbing";
-  }
-}
-
-function onPointerUp(e) {
-  if (dragging) {
-    if (isDragging) sim.alphaTarget(0);
-    dragging.fx = null; dragging.fy = null;
-    dragging = null; isDragging = false;
-  }
-  if (panning) { panning = false; canvasEl.style.cursor = "default"; }
-}
-
-function onPointerLeave() {
-  if (panning) { panning = false; canvasEl.style.cursor = "default"; }
-  if (hoveredNodeId !== null || hoveredEdgeIdx !== -1) {
-    hoveredNodeId = null; hoveredEdgeIdx = -1;
-    canvasEl.style.cursor = "default";
-    if (!selectedNodeId) hideNodeInfo();
-    scheduleRender();
-  }
-}
-
-function onClick(e) {
-  const [wx, wy] = toWorld(e.clientX, e.clientY);
-  const node = findNodeAt(wx, wy, 18);
-  if (node) {
-    if (selectedNodeId === node.id) {
-      clearSel();
-    } else {
-      selectedNodeId = node.id;
-      fillNodeForm(node.raw);
-      showNodeInfo(node, true);
-      scheduleRender();
-    }
-    return;
-  }
-  const edgeIdx = findEdgeAt(wx, wy);
-  if (edgeIdx >= 0) {
-    fillRelationForm(_edges[edgeIdx].raw);
-    scheduleRender();
-    return;
-  }
-  selectedNodeId = null;
-  hideNodeInfo(true);
-  scheduleRender();
-}
-
-function clearSel() {
-  selectedNodeId = null;
-  hideNodeInfo(true);
-  scheduleRender();
-}
-
-/* ── Zoom (wheel only, pan via pointer) ──────────────────────── */
-
-canvasEl.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  const rect = canvasEl.getBoundingClientRect();
-  const mx = event.clientX - rect.left;
-  const my = event.clientY - rect.top;
-  const delta = -event.deltaY * (event.deltaMode === 1 ? 30 : 1);
-  const factor = Math.pow(1.001, delta);
-  const newK = Math.min(4, Math.max(0.1, transform.k * factor));
-  const tx = mx - (mx - transform.x) * (newK / transform.k);
-  const ty = my - (my - transform.y) * (newK / transform.k);
-  transform = d3.zoomIdentity.translate(tx, ty).scale(newK);
-  document.getElementById("s-zoom").textContent = newK.toFixed(2) + "×";
-  scheduleRender();
-}, { passive: false });
-
-canvasEl.addEventListener("pointermove", onPointerMove);
-canvasEl.addEventListener("pointerdown", onPointerDown);
-canvasEl.addEventListener("pointerup", onPointerUp);
-canvasEl.addEventListener("pointercancel", onPointerUp);
-canvasEl.addEventListener("pointerleave", onPointerLeave);
-canvasEl.addEventListener("click", onClick);
-
-/* ── Canvas draw ───────────────────────────────────────────────── */
-
-function drawFrame() {
-  needRender = false;
-  if (!ctx) return;
-
-  ctx.clearRect(0, 0, W, H);
-  ctx.save();
-  ctx.translate(transform.x, transform.y);
-  ctx.scale(transform.k, transform.k);
-
-  const k = transform.k;
-  const vx0 = (-transform.x) / k - 100;
-  const vy0 = (-transform.y) / k - 100;
-  const vx1 = (W - transform.x) / k + 100;
-  const vy1 = (H - transform.y) / k + 100;
-
-  const hasHover = hoveredNodeId !== null || hoveredEdgeIdx >= 0;
-  const focusNodeId = hoveredNodeId || (hasHover ? null : selectedNodeId);
-  const activeEdgeIdx = hoveredEdgeIdx >= 0 ? hoveredEdgeIdx : (hasHover ? -1 : -1);
-  const focusEdgeObj = !focusNodeId && activeEdgeIdx >= 0 ? (_edges[activeEdgeIdx] ?? null) : null;
-  const focusEdgeNodeIds = focusEdgeObj
-    ? new Set([focusEdgeObj.source?.id, focusEdgeObj.target?.id].filter(Boolean))
-    : null;
-
-  drawEdges(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds, activeEdgeIdx);
-  drawNodes(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds);
-
-  ctx.restore();
-}
-
-function drawEdges(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds, activeEdgeIdx) {
-  const hasFocus = !!(focusNodeId || focusEdgeObj);
-  const visibleNodeIds = new Set();
-  graphNodes.forEach((n) => { if (passTypeFilter(n)) visibleNodeIds.add(n.id); });
-
-  _edges.forEach((edge, i) => {
-    const sn = edge.source, tn = edge.target;
-    if (!sn?.x || !tn?.x) return;
-    const sx = sn.x, sy = sn.y, tx = tn.x, ty = tn.y;
-    if (Math.max(sx,tx)<vx0 || Math.min(sx,tx)>vx1 || Math.max(sy,ty)<vy0 || Math.min(sy,ty)>vy1) return;
-    if (!visibleNodeIds.has(sn.id) || !visibleNodeIds.has(tn.id)) return;
-
-    const isThisEdge = i === activeEdgeIdx;
-    const isNodeLinked = focusNodeId && (sn.id === focusNodeId || tn.id === focusNodeId);
-    const isActive = isThisEdge || isNodeLinked;
-
-    ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.10) : 0.55;
-    ctx.beginPath();
-    ctx.lineWidth = isActive ? 2.5/k : 1.6/k;
-    ctx.strokeStyle = isThisEdge ? '#3498db' : isNodeLinked ? '#9b59b6' : '#C0C0C0';
-
-    if (edge.isSelfLoop) {
-      ctx.arc(sx + 20, sy - 20, 22, 0, Math.PI * 2);
-    } else {
-      const cp = getEdgeControlPoint(edge);
-      ctx.moveTo(sx, sy);
-      if (cp && edge.curvature !== 0) {
-        ctx.quadraticCurveTo(cp.cx, cp.cy, tx, ty);
-      } else {
-        ctx.lineTo(tx, ty);
-      }
-    }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    if (edge.name) {
-      if (hasFocus && !isActive) return;
-      const mid = getEdgeMidpoint(edge);
-      const label = edge.name.length > 14 ? edge.name.slice(0, 14) + '…' : edge.name;
-      const fs = Math.max(9, 9/k);
-      ctx.font = `${fs}px 'JetBrains Mono', monospace`;
-      const tw = ctx.measureText(label).width;
-      const th = fs * 1.4;
-      const isHighlightedLabel = isThisEdge || isNodeLinked;
-
-      ctx.fillStyle = isHighlightedLabel ? 'rgba(155,89,182,0.12)' : 'rgba(255,255,255,0.95)';
-      ctx.beginPath();
-      ctx.roundRect(mid.x - tw/2 - 4, mid.y - th/2 - 2, tw + 8, th + 4, 3/k);
-      ctx.fill();
-
-      ctx.fillStyle = isThisEdge ? '#3498db' : isNodeLinked ? '#9b59b6' : '#666';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, mid.x, mid.y);
-    }
-  });
-}
-
-function drawNodes(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds) {
-  const hasFocus = !!(focusNodeId || focusEdgeObj);
-  const visibleNodeIds = new Set();
-  graphNodes.forEach((n) => { if (passTypeFilter(n)) visibleNodeIds.add(n.id); });
-
-  _nodes.forEach(node => {
-    const x = node.x ?? 0, y = node.y ?? 0;
-    if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
-    if (!visibleNodeIds.has(node.id)) return;
-
-    const BASE_R = node.r ?? 10;
-    const isNodeFocus = node.id === focusNodeId;
-    const isNodeNeighbor = focusNodeId && !isNodeFocus && _edges.some(e =>
-      !e.isSelfLoop && (
-        (e.source?.id === focusNodeId && e.target?.id === node.id) ||
-        (e.target?.id === focusNodeId && e.source?.id === node.id)
-      )
-    );
-    const isEdgeFocusNode = focusEdgeNodeIds?.has(node.id);
-    const isSelectedNode = node.id === selectedNodeId;
-    const isFocus = isNodeFocus || isEdgeFocusNode || isSelectedNode;
-    const isActive = hasFocus ? (isFocus || isNodeNeighbor) : true;
-    const r = isFocus ? BASE_R * 1.3 : BASE_R;
-
-    ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.15) : 1;
-
-    if (isFocus) {
-      ctx.beginPath();
-      ctx.arc(x, y, r + 5/k, 0, Math.PI*2);
-      ctx.strokeStyle = node.color;
-      ctx.lineWidth = 2.5/k;
-      ctx.globalAlpha = 0.35;
-      ctx.stroke();
-      ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.15) : 1;
-    }
-
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI*2);
-    ctx.fillStyle = node.color;
-    ctx.fill();
-
-    ctx.strokeStyle = isFocus ? '#333' : '#fff';
-    ctx.lineWidth = (isFocus ? 3 : 2.5) / k;
-    ctx.stroke();
-
-    if (k > 0.6) {
-      const showFull = isActive;
-      const rawName = node.name || node.label || '';
-      const label = showFull
-        ? (rawName.length > 16 ? rawName.slice(0, 16) + '…' : rawName)
-        : (rawName.length > 8 ? rawName.slice(0, 8) + '…' : rawName);
-      const fs = showFull ? Math.max(12, 12/k) : Math.max(11, 11/k);
-      const weight = showFull ? '600' : '500';
-
-      ctx.font = `${weight} ${fs}px 'JetBrains Mono', monospace`;
-      const lx = x + r + 5/k;
-      const ly = y;
-
-      if (showFull) {
-        ctx.globalAlpha = 1;
-        const tw = ctx.measureText(label).width;
-        const pad = 5/k;
-        const bh = (fs + 8) / k;
-        ctx.shadowColor = 'rgba(0,0,0,0.18)';
-        ctx.shadowBlur = 6/k;
-        ctx.shadowOffsetY = 2/k;
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.roundRect(lx - pad, ly - bh/2, tw + pad*2, bh, bh/2);
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.strokeStyle = node.color;
-        ctx.lineWidth = 1.5/k;
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = showFull ? '#111' : '#555';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, lx, ly);
-    }
-    ctx.globalAlpha = 1;
-  });
-}
-
-/* ── Main render: build edges, setup simulation, draw ────────────── */
-
-function render(nodes, links) {
-  initCanvas();
-
-  const safeNodes = (nodes || []).map((n, i) => ({ ...n, id: clean(n.id) || String(i + 1) }));
-  const nodeById = new Map(safeNodes.map((n) => [n.id, n]));
-
-  const safeLinks = (links || []).filter((l) => {
-    const s = clean(typeof l.source === "object" ? l.source?.id : l.source);
-    const t = clean(typeof l.target === "object" ? l.target?.id : l.target);
-    return s && t && nodeById.has(s) && nodeById.has(t);
-  }).map((l) => ({
-    ...l,
-    source: clean(typeof l.source === "object" ? l.source?.id : l.source),
-    target: clean(typeof l.target === "object" ? l.target?.id : l.target),
-  }));
-
-  // Preserve positions from previous frame
-  const prevById = new Map((_nodes || []).map((n) => [n.id, n]));
-  safeNodes.forEach((n) => {
-    const prev = prevById.get(n.id);
-    if (!prev) return;
-    if (Number.isFinite(prev.x)) n.x = prev.x;
-    if (Number.isFinite(prev.y)) n.y = prev.y;
-    if (Number.isFinite(prev.vx)) n.vx = prev.vx;
-    if (Number.isFinite(prev.vy)) n.vy = prev.vy;
-  });
-
-  graphNodes = safeNodes;
-  graphLinks = safeLinks;
-
-  document.getElementById("s-nodes").textContent = safeNodes.length;
-  document.getElementById("s-links").textContent = safeLinks.length;
-  renderLegend(safeNodes);
-
-  // ── Build _edges with curvature (from Vue component) ──
-  const edgePairCount = {};
-  const tempEdges = safeLinks;
-  tempEdges.forEach(e => {
-    const pk = [e.source, e.target].sort().join('_');
-    edgePairCount[pk] = (edgePairCount[pk] || 0) + 1;
-  });
-
-  const edgePairIndex = {};
-  _edges = tempEdges.map((e, i) => {
-    const pk = [e.source, e.target].sort().join('_');
-    const total = edgePairCount[pk];
-    const idx = edgePairIndex[pk] || 0;
-    edgePairIndex[pk] = idx + 1;
-    const isReversed = e.source > e.target;
-    let curvature = 0;
-    if (total > 1) {
-      const range = Math.min(1.2, 0.6 + total * 0.15);
-      curvature = ((idx / (total - 1)) - 0.5) * range * 2;
-      if (isReversed) curvature = -curvature;
-    }
-    return {
-      source: e.source, target: e.target,
-      name: e.relation || 'RELATED',
-      curvature, isSelfLoop: false,
-      pairIndex: idx, pairTotal: total,
-      raw: e.raw,
-    };
-  });
-
-  // ── Degree → node radius (log scale from Vue) ──
-  const degreeMap = {};
-  _edges.forEach(e => {
-    degreeMap[e.source] = (degreeMap[e.source] || 0) + 1;
-    degreeMap[e.target] = (degreeMap[e.target] || 0) + 1;
-  });
-  const maxDegree = Math.max(1, ...Object.values(degreeMap));
-  _nodes = safeNodes.map(n => ({
-    ...n,
-    degree: degreeMap[n.id] || 0,
-    r: 6 + Math.log1p(degreeMap[n.id] || 0) / Math.log1p(maxDegree) * 18,
-    name: n.label,
-  }));
-
-  // ── Force simulation ──
-  sim?.stop();
-  sim = d3.forceSimulation(_nodes)
-    .force('link', d3.forceLink(_edges).id(d => d.id)
-      .distance(d => FORCE_LINK_BASE_DISTANCE + ((d.pairTotal || 1) - 1) * 50)
-      .iterations(1))
-    .force('charge', d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH).distanceMax(300))
-    .force('center', d3.forceCenter(W / 2, H / 2))
-    .force('collide', d3.forceCollide(d => (d.r ?? 10) + FORCE_COLLISION_PADDING))
-    .force('x', d3.forceX(W / 2).strength(FORCE_CENTER_PULL_STRENGTH))
-    .force('y', d3.forceY(H / 2).strength(FORCE_CENTER_PULL_STRENGTH))
-    .alphaDecay(0.03)
-    .velocityDecay(0.4)
-    // .alphaDecay(0.005)
-    // .velocityDecay(0.2)
-    .on('tick', () => { buildQuadtree(); scheduleRender(); });
-    // .stop();
-
-  // for (let i = 0; i < 300; i++) sim.tick();
-
-  buildQuadtree();
-  scheduleRender();
-}
-
-/* ── Event bindings ─────────────────────────────────────────────── */
-
-function zoomTo(newK) {
-  const cx = W / 2, cy = H / 2;
-  const tx = cx - (cx - transform.x) * (newK / transform.k);
-  const ty = cy - (cy - transform.y) * (newK / transform.k);
-  transform = d3.zoomIdentity.translate(tx, ty).scale(newK);
-  document.getElementById("s-zoom").textContent = newK.toFixed(2) + "×";
-  scheduleRender();
-}
-
-document.getElementById("btn-zoom-in").addEventListener("click", () => zoomTo(Math.min(4, transform.k * 1.35)));
-document.getElementById("btn-zoom-out").addEventListener("click", () => zoomTo(Math.max(0.1, transform.k * 0.74)));
-document.getElementById("btn-reset").addEventListener("click", () => {
-  transform = d3.zoomIdentity;
-  document.getElementById("s-zoom").textContent = "1.00×";
-  scheduleRender();
-});
-
-async function loadAndRenderGroup(groupId) {
-  await loadGraphByGroupId(groupId, (paged) => { render(paged.nodes, paged.links); });
-}
-
-document.getElementById("btnLoad").addEventListener("click", async () => {
-  try {
-    const groupId = clean(document.getElementById("groupId").value);
-    if (!groupId) { setStatus("group_id 不能为空", true); return; }
-    await loadAndRenderGroup(groupId);
-  } catch (e) { setStatus(`加载失败: ${e.message}`, true); }
-});
-
-document.getElementById("btnNodePropAdd").addEventListener("click", () => document.getElementById("nodePropsList").appendChild(createKvRow("", "")));
-document.getElementById("btnNodeMetaAdd").addEventListener("click", () => document.getElementById("nodeMetaList").appendChild(createKvRow("", "")));
-document.getElementById("btnRelPropAdd").addEventListener("click", () => document.getElementById("relPropsList").appendChild(createKvRow("", "")));
-
-document.getElementById("btnNodeCreate").addEventListener("click", async () => {
-  try { if (!window.confirm("确认新增节点吗？")) return; await mutate("/group-graph/api/node", "POST", nodePayload()); }
-  catch (e) { setStatus(`节点新增失败: ${e.message}`, true); }
-});
-document.getElementById("btnNodeUpdate").addEventListener("click", async () => {
-  try { if (!window.confirm("确认更新节点吗？")) return; await mutate("/group-graph/api/node", "PUT", nodePayload()); }
-  catch (e) { setStatus(`节点更新失败: ${e.message}`, true); }
-});
-document.getElementById("btnNodeDelete").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认删除节点吗？删除后相关关系也会受影响。")) return;
-    const payload = nodePayload();
-    await mutate("/group-graph/api/node", "DELETE", { group_id: payload.group_id, uid: payload.uid });
-  } catch (e) { setStatus(`节点删除失败: ${e.message}`, true); }
-});
-
-document.getElementById("btnRelCreate").addEventListener("click", async () => {
-  try { if (!window.confirm("确认新增关系吗？")) return; await mutate("/group-graph/api/relation", "POST", relationPayload()); }
-  catch (e) { setStatus(`关系新增失败: ${e.message}`, true); }
-});
-document.getElementById("btnRelUpdate").addEventListener("click", async () => {
-  try { if (!window.confirm("确认更新关系吗？")) return; await mutate("/group-graph/api/relation", "PUT", relationPayload()); }
-  catch (e) { setStatus(`关系更新失败: ${e.message}`, true); }
-});
-document.getElementById("btnRelDelete").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认删除关系吗？")) return;
-    const payload = relationPayload();
-    await mutate("/group-graph/api/relation", "DELETE", { group_id: payload.group_id, source_uid: payload.source_uid, target_uid: payload.target_uid });
-  } catch (e) { setStatus(`关系删除失败: ${e.message}`, true); }
-});
-
-document.getElementById("panel-close").addEventListener("click", clearSel);
-
-const searchInput = document.getElementById("searchKeyword");
-if (searchInput) {
-  searchInput.addEventListener("input", () => {
-    const nextKeyword = clean(searchInput.value).toLowerCase();
-    if (searchDebounceTimer) window.clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = window.setTimeout(() => {
-      searchKeyword = nextKeyword;
-      scheduleRender();
-      if (searchKeyword) setStatus(`已按关键词过滤: ${searchKeyword}`); else setStatus("已清除关键词过滤");
-    }, 300);
-  });
-}
-
-window.addEventListener("resize", () => {
-  if (!sim) return;
-  sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-  sim.alpha(0.25);
-  initCanvas();
-  scheduleRender();
-});
-
-/* ── Init ────────────────────────────────────────────────────────── */
-
-(async function init() {
-  try {
-    renderKv("nodePropsList", {});
-    renderKv("nodeMetaList", {});
-    renderKv("relPropsList", {});
-    initCanvas();
-    const groupId = clean(INITIAL_GROUP_ID);
-    if (groupId && !shouldRenderDemo()) {
-      document.getElementById("groupId").value = groupId;
-      await loadAndRenderGroup(groupId);
-    } else if (shouldRenderDemo()) {
-      await loadDemoGraphByPage((graph) => { render(graph.nodes, graph.links); });
-    } else {
-      render([], []);
-      setStatus("请输入 group_id 后加载图谱");
-    }
-  } catch (e) {
-    setStatus(`加载失败: ${e.message}`, true);
-    if (shouldRenderDemo()) { const graph = loadDemoGraph(); render(graph.nodes, graph.links); }
-    else { render([], []); }
-  }
-})();
-</script>
-</body>
+			const FORCE_CHARGE = -800,
+				FORCE_LINK_DIST = 200,
+				FORCE_COLLISION = 14,
+				FORCE_PULL = 0.01;
+			const TYPE_META = { Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 }, Module: { color: "#7c54e8", bg: "rgba(124,84,232,0.10)", r: 13 }, Service: { color: "#0fa96b", bg: "rgba(15,169,107,0.10)", r: 11 }, Data: { color: "#d97706", bg: "rgba(217,119,6,0.10)", r: 10 }, Agent: { color: "#e8445a", bg: "rgba(232,68,90,0.10)", r: 9 } };
+			const DEMO_NAMES = ["Orchestrator", "Planner", "Memory", "Retriever", "Embedder", "Reasoner", "VectorDB", "Cache", "DocStore", "Gateway", "Auth", "Logger", "Executor", "Validator", "Critic", "Scheduler", "EventBus", "Metrics", "Router", "Parser", "Encoder", "Decoder", "Monitor", "Collector", "Dispatcher", "Registry", "Resolver", "Transformer", "Aggregator", "Connector", "Buffer", "Indexer", "Crawler", "Fetcher", "Loader", "Saver", "Tracker", "Analyzer", "Renderer", "Compiler", "Interpreter", "Assembler"];
+			const DEMO_TYPES = ["Core", "Module", "Service", "Data", "Agent"];
+			const DEMO_RELS = ["dispatches", "reads", "routes", "spawns", "queries", "invokes", "schedules", "indexes", "caches", "fetches", "embeds", "stores", "reviews", "checks", "verifies", "logs", "publishes", "submits", "drafts", "triggers", "reports", "tracks", "persists", "syncs", "writes", "refines", "retries", "mirrors", "calls", "depends"];
+
+			/* ═══════════════════════════════════════════════════════════════════
+   工具函数
+   ═══════════════════════════════════════════════════════════════════ */
+			function clean(v) {
+				return String(v || "").trim();
+			}
+			function sleep(ms) {
+				return new Promise((r) => setTimeout(r, ms));
+			}
+			function setStatus(t, err) {
+				const el = document.getElementById("status");
+				el.textContent = t;
+				el.style.color = err ? "#c53030" : "var(--muted)";
+			}
+			function createKvRow(k = "", v = "") {
+				const row = document.createElement("div");
+				row.className = "kv-row";
+				const ki = document.createElement("input");
+				ki.placeholder = "key";
+				ki.value = k;
+				const vi = document.createElement("input");
+				vi.placeholder = "value";
+				vi.value = v;
+				const d = document.createElement("button");
+				d.type = "button";
+				d.className = "kv-del";
+				d.textContent = "×";
+				d.onclick = () => row.remove();
+				row.append(ki, vi, d);
+				return row;
+			}
+			function renderKv(id, obj = {}) {
+				const l = document.getElementById(id);
+				l.innerHTML = "";
+				const e = Object.entries(obj || {});
+				if (!e.length) {
+					l.appendChild(createKvRow());
+					return;
+				}
+				e.forEach(([k, v]) => l.appendChild(createKvRow(String(k), v == null ? "" : String(v))));
+			}
+			function collectKv(id) {
+				const o = {};
+				document.querySelectorAll(`#${id} .kv-row`).forEach((r) => {
+					const i = r.querySelectorAll("input");
+					const k = clean(i[0]?.value),
+						v = clean(i[1]?.value);
+					if (k) o[k] = v;
+				});
+				return o;
+			}
+			function parseType(labels, uid) {
+				const a = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
+				for (const k of ["core", "module", "service", "data", "agent"]) if (a.includes(k)) return k[0].toUpperCase() + k.slice(1);
+				const s = clean(uid).toLowerCase();
+				for (const k of ["core", "service", "module", "data"]) if (s.includes(k)) return k[0].toUpperCase() + k.slice(1);
+				return "Agent";
+			}
+			function parseWeight(n) {
+				for (const v of [n.weight, n.properties?.weight, n.properties?.score, n.meta?.score]) {
+					const x = Number(v);
+					if (Number.isFinite(x)) return Math.max(1, Math.min(100, Math.round(x)));
+				}
+				return 50;
+			}
+			function nodeLabel(n) {
+				return clean(n.name) || clean(n.uid) || "Node";
+			}
+			function relLabel(r) {
+				return clean(r.rel_type) || "RELATED";
+			}
+			function relStoreKey(r) {
+				const id = clean(r.relation_id);
+				return id ? `rid:${id}` : `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}`;
+			}
+			function fillNodeForm(n) {
+				if (!n) return;
+				document.getElementById("nodeUid").value = clean(n.uid);
+				document.getElementById("nodeName").value = clean(n.name);
+				document.getElementById("nodeLabels").value = Array.isArray(n.labels) ? n.labels.join(",") : "";
+				document.getElementById("nodeDesc").value = clean(n.description);
+				renderKv("nodePropsList", n.properties || {});
+				renderKv("nodeMetaList", n.meta || {});
+			}
+			function fillRelForm(r) {
+				if (!r) return;
+				document.getElementById("relSource").value = clean(r.source_uid);
+				document.getElementById("relTarget").value = clean(r.target_uid);
+				document.getElementById("relType").value = relLabel(r);
+				document.getElementById("relDesc").value = clean(r.description);
+				renderKv("relPropsList", r.properties || {});
+			}
+			function nodePayload() {
+				const g = clean(document.getElementById("groupId").value),
+					u = clean(document.getElementById("nodeUid").value);
+				if (!g || !u) throw new Error("group_id 和 uid 不能为空");
+				return {
+					group_id: g,
+					uid: u,
+					name: clean(document.getElementById("nodeName").value),
+					labels: document
+						.getElementById("nodeLabels")
+						.value.split(",")
+						.map((s) => clean(s))
+						.filter(Boolean),
+					description: clean(document.getElementById("nodeDesc").value),
+					properties: collectKv("nodePropsList"),
+					meta: collectKv("nodeMetaList"),
+				};
+			}
+			function relPayload() {
+				const g = clean(document.getElementById("groupId").value),
+					s = clean(document.getElementById("relSource").value),
+					t = clean(document.getElementById("relTarget").value),
+					rt = clean(document.getElementById("relType").value);
+				if (!g || !s || !t || !rt) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
+				return { group_id: g, source_uid: s, target_uid: t, rel_type: rt, description: clean(document.getElementById("relDesc").value), properties: collectKv("relPropsList") };
+			}
+			function genDemoNodes(c) {
+				const now = new Date().toISOString(),
+					m = { created_at: now, updated_at: now, source: "demo", version: 1 };
+				return Array.from({ length: c }, (_, i) => ({ uid: String(i + 1), name: DEMO_NAMES[i % DEMO_NAMES.length], labels: [DEMO_TYPES[i % DEMO_TYPES.length]], description: "", group_id: "demo", properties: { weight: Math.round(40 + Math.random() * 60) }, meta: m }));
+			}
+			function genDemoLinks(nodes) {
+				const now = new Date().toISOString(),
+					m = { created_at: now, updated_at: now, source: "demo", version: 1 },
+					n = nodes.length;
+				if (n < 2) return [];
+				const uids = nodes.map((nd) => nd.uid),
+					links = [],
+					seen = new Set();
+				const add = (s, t) => {
+					const k = `${s}->${t}`;
+					if (seen.has(k) || s === t) return;
+					seen.add(k);
+					links.push({ relation_id: `demo-${s}-${t}-${DEMO_RELS[links.length % DEMO_RELS.length]}`, source_uid: s, target_uid: t, rel_type: DEMO_RELS[links.length % DEMO_RELS.length], direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: m });
+				};
+				for (let i = 1; i < n; i++) add(uids[Math.floor(Math.random() * i)], uids[i]);
+				const tgt = Math.floor(n * 1.5);
+				let att = 0;
+				while (links.length < tgt && att < tgt * 4) {
+					add(uids[Math.floor(Math.random() * n)], uids[Math.floor(Math.random() * n)]);
+					att++;
+				}
+				return links;
+			}
+
+			/* ═══════════════════════════════════════════════════════════════════
+   GraphStore — 图数据存储
+   ═══════════════════════════════════════════════════════════════════ */
+			class GraphStore {
+				constructor() {
+					this.nodeMap = new Map();
+					this.linkMap = new Map();
+					this.nodes = [];
+					this.links = [];
+				}
+				reset() {
+					this.nodeMap.clear();
+					this.linkMap.clear();
+					this.nodes = [];
+					this.links = [];
+				}
+				addNodes(arr) {
+					for (const n of arr) {
+						const uid = clean(n.uid);
+						if (uid) this.nodeMap.set(uid, n);
+					}
+				}
+				addLinks(arr) {
+					for (const r of arr) {
+						const k = relStoreKey(r);
+						if (k) this.linkMap.set(k, r);
+					}
+				}
+				mapGraphData() {
+					const raw = Array.from(this.nodeMap.values()),
+						rels = Array.from(this.linkMap.values()),
+						uidSet = new Set(this.nodeMap.keys()),
+						degMap = new Map(),
+						valid = [];
+					for (const r of rels) {
+						const s = clean(r.source_uid),
+							t = clean(r.target_uid);
+						if (!uidSet.has(s) || !uidSet.has(t) || !s || !t) continue;
+						valid.push(r);
+						degMap.set(s, (degMap.get(s) || 0) + 1);
+						degMap.set(t, (degMap.get(t) || 0) + 1);
+					}
+					this.nodes = raw.map((n, i) => {
+						const type = parseType(n.labels, n.uid),
+							m = TYPE_META[type] || TYPE_META.Agent,
+							uid = clean(n.uid),
+							deg = degMap.get(uid) || 0;
+						return { id: uid || String(i + 1), uid, label: nodeLabel(n), type, weight: parseWeight(n), color: m.color, bg: m.bg, r: Math.max(8, Math.min(26, m.r + deg * 0.9)), raw: n };
+					});
+					const idMap = new Map(this.nodes.map((n) => [n.uid, n.id]));
+					this.links = valid
+						.map((r, i) => {
+							const s = idMap.get(clean(r.source_uid)),
+								t = idMap.get(clean(r.target_uid));
+							if (!s || !t) return null;
+							return { source: s, target: t, relation: relLabel(r), _key: relStoreKey(r) || `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}:${i}`, raw: r };
+						})
+						.filter(Boolean);
+					// ── 计算复合节点权重 ──
+					this.computeNodeWeights();
+					return { nodes: this.nodes, links: this.links };
+				}
+				computeNodeWeights() {
+					const N = this.nodes.length;
+					if (!N) return;
+					const L = this.links.length;
+					if (!L) {
+						this.nodes.forEach((n) => {
+							n.weight = 50;
+						});
+						return;
+					}
+
+					const idIdx = new Map(this.nodes.map((n, i) => [n.id, i]));
+					const adj = Array.from({ length: N }, () => []);
+					const inAdj = Array.from({ length: N }, () => []);
+					const wDeg = new Float64Array(N);
+					const edgeW = new Float64Array(L);
+
+					for (let i = 0; i < L; i++) {
+						const l = this.links[i];
+						const si = idIdx.get(l.source),
+							ti = idIdx.get(l.target);
+						if (si == null || ti == null || si === ti) continue;
+						const w = Number(l.raw?.weight) || 1;
+						edgeW[i] = w;
+						adj[si].push(ti);
+						inAdj[ti].push(si);
+						wDeg[si] += w;
+						wDeg[ti] += w;
+					}
+
+					// PageRank 算法（20 轮迭代）：节点重要性通过连接关系递归传播
+					const d = 0.85,
+						pr = new Float64Array(N).fill(1 / N);
+					for (let iter = 0; iter < 20; iter++) {
+						const next = new Float64Array(N).fill((1 - d) / N);
+						for (let u = 0; u < N; u++) {
+							if (!adj[u].length) {
+								const share = (d * pr[u]) / N;
+								for (let v = 0; v < N; v++) next[v] += share;
+								continue;
+							}
+							const share = (d * pr[u]) / adj[u].length;
+							for (const v of adj[u]) next[v] += share;
+						}
+						pr.set(next);
+					}
+
+					// HITS 算法（10 轮迭代）：Hub 衡量知识延伸能力，Authority 衡量被引用权威性
+					const hub = new Float64Array(N).fill(1),
+						auth = new Float64Array(N).fill(1);
+					for (let iter = 0; iter < 10; iter++) {
+						let normA = 0,
+							normH = 0;
+						const prevHub = hub.slice();
+						for (let u = 0; u < N; u++) {
+							auth[u] = 0;
+							for (const v of inAdj[u]) auth[u] += prevHub[v];
+						}
+						const prevAuth = auth.slice();
+						for (let u = 0; u < N; u++) {
+							hub[u] = 0;
+							for (const v of adj[u]) hub[u] += prevAuth[v];
+						}
+						for (let u = 0; u < N; u++) {
+							normA += auth[u] * auth[u];
+							normH += hub[u] * hub[u];
+						}
+						normA = Math.sqrt(normA) || 1;
+						normH = Math.sqrt(normH) || 1;
+						for (let u = 0; u < N; u++) {
+							auth[u] /= normA;
+							hub[u] /= normH;
+						}
+					}
+
+					// 计算原始分数
+					const scorePR = pr,
+						scoreDeg = new Float64Array(N),
+						scoreWD = wDeg,
+						scoreAuth = auth,
+						scoreHub = hub;
+					for (let u = 0; u < N; u++) scoreDeg[u] = adj[u].length + inAdj[u].length;
+
+					// 最小-最大归一化到 [0,1] 区间
+					function norm(arr) {
+						let mn = Infinity,
+							mx = -Infinity;
+						for (let i = 0; i < arr.length; i++) {
+							if (arr[i] < mn) mn = arr[i];
+							if (arr[i] > mx) mx = arr[i];
+						}
+						const range = mx - mn || 1;
+						for (let i = 0; i < arr.length; i++) arr[i] = (arr[i] - mn) / range;
+					}
+					norm(scorePR);
+					norm(scoreDeg);
+					norm(scoreWD);
+					norm(scoreAuth);
+					norm(scoreHub);
+
+					// 加权合成：Hub（知识延伸）40%、PageRank 25%、度中心性 15%、Authority 12%、加权度 8%
+					for (let i = 0; i < N; i++) {
+						const raw = parseWeight(this.nodes[i].raw);
+						const graph = (scoreHub[i] * 0.40 + scorePR[i] * 0.25 + scoreDeg[i] * 0.15 + scoreAuth[i] * 0.12 + scoreWD[i] * 0.08) * 100;
+						this.nodes[i].weight = Math.round(Math.max(1, Math.min(100, raw * 0.25 + graph * 0.75)));
+					}
+				}
+			}
+
+			/* ═══════════════════════════════════════════════════════════════════
+   GraphAPI — HTTP 请求与数据加载
+   ═══════════════════════════════════════════════════════════════════ */
+			class GraphAPI {
+				constructor(store) {
+					this.store = store;
+					const m = window.location.pathname.match(/^\/e\/[^/]+/);
+					this.base = m ? m[0] : "";
+				}
+				url(p) {
+					return this.base.replace(/\/+$/, "") + (String(p).startsWith("/") ? p : `/${p}`);
+				}
+				async req(path, opt = {}) {
+					const m = (opt.method || "GET").toUpperCase(),
+						u = /^https?:\/\//.test(path) ? path : this.url(path),
+						init = { method: m, headers: { Accept: "application/json" } };
+					if (opt.body !== undefined) {
+						init.headers["Content-Type"] = "application/json";
+						init.body = opt.body;
+					}
+					const res = await fetch(u, init),
+						txt = await res.text();
+					let d = {};
+					if (txt)
+						try {
+							d = JSON.parse(txt);
+						} catch (e) {
+							throw new Error(`接口返回非 JSON: ${txt.slice(0, 120)}`);
+						}
+					if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+					return d;
+				}
+				async loadGroup(gid, onPage) {
+					this.store.reset();
+					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
+					let pg = 1;
+					while (true) {
+						setStatus(`分页加载中: 第 ${pg} 页`);
+						const d = await this.req(`/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`);
+						this.store.addNodes(d.nodes || []);
+						this.store.addLinks(d.relations || []);
+						const g = this.store.mapGraphData();
+						if (onPage) onPage(g, pg);
+						if (!d.nodes_has_more && !d.relations_has_more) break;
+						pg++;
+					}
+					setStatus(`加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
+					return this.store.mapGraphData();
+				}
+				async loadDemoSync() {
+					if (document.getElementById("groupId")) document.getElementById("groupId").value = "";
+					this.store.reset();
+					this.store.addNodes(genDemoNodes(1000));
+					this.store.addLinks(genDemoLinks(Array.from(this.store.nodeMap.values())));
+					setStatus("已加载示例图谱");
+					return this.store.mapGraphData();
+				}
+				async loadDemoPaged(onPage) {
+					this.store.reset();
+					const dn = genDemoNodes(1000),
+						dl = genDemoLinks(dn),
+						total = Math.max(dn.length, dl.length);
+					let pg = 1;
+					for (let s = 0; s < total; s += 200) {
+						const e = s + 200;
+						setStatus(`示例数据追加中: 第 ${pg} 页`);
+						this.store.addNodes(dn.slice(s, e));
+						this.store.addLinks(dl.slice(s, e));
+						const g = this.store.mapGraphData();
+						if (onPage) onPage(g, pg);
+						pg++;
+						await sleep(280);
+					}
+					setStatus(`示例加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
+					return this.store.mapGraphData();
+				}
+				async mutate(path, method, payload) {
+					setStatus("执行中...");
+					await this.req(path, { method, body: JSON.stringify(payload) });
+					const gid = clean(document.getElementById("groupId").value);
+					if (!gid) {
+						setStatus("操作成功");
+						return;
+					}
+					return this.loadGroup(gid, (g) => {
+						window._graphApp.render(g.nodes, g.links);
+					});
+				}
+			}
+
+			/* ═══════════════════════════════════════════════════════════════════
+   GraphCanvas — Canvas 画布渲染引擎
+   ═══════════════════════════════════════════════════════════════════ */
+			class GraphCanvas {
+				constructor(store, el) {
+					this.store = store;
+					this.el = el;
+					this.ctx = null;
+					this.W = 0;
+					this.H = 0;
+					this.sim = null;
+					this.quadtree = null;
+					this.transform = d3.zoomIdentity;
+					this._nodes = [];
+					this._edges = [];
+					this.graphNodes = [];
+					this.graphLinks = [];
+					this.selectedLegendTypes = new Set();
+					this.searchKeyword = "";
+					this.needRender = false;
+				}
+				initCanvas() {
+					const c = document.getElementById("app");
+					this.W = c.clientWidth;
+					this.H = c.clientHeight;
+					const dpr = window.devicePixelRatio || 1;
+					this.el.width = this.W * dpr;
+					this.el.height = this.H * dpr;
+					this.el.style.width = this.W + "px";
+					this.el.style.height = this.H + "px";
+					this.ctx = this.el.getContext("2d");
+					this.ctx.scale(dpr, dpr);
+				}
+				scheduleRender() {
+					if (this.needRender) return;
+					this.needRender = true;
+					requestAnimationFrame(() => this.drawFrame());
+				}
+				buildQuadtree() {
+					this.quadtree = d3
+						.quadtree()
+						.x((d) => d.x ?? 0)
+						.y((d) => d.y ?? 0)
+						.addAll(this._nodes);
+				}
+				toWorld(ex, ey) {
+					const r = this.el.getBoundingClientRect();
+					return this.transform.invert([ex - r.left, ey - r.top]);
+				}
+				findNodeAt(wx, wy, r = 18) {
+					return this.quadtree?.find(wx, wy, r) ?? null;
+				}
+				findEdgeAt(wx, wy, th = 8) {
+					for (let i = this._edges.length - 1; i >= 0; i--) {
+						const e = this._edges[i],
+							s = e.source,
+							t = e.target;
+						if (!s?.x || !t?.x) continue;
+						for (let u = 0; u <= 1; u += 0.05) {
+							const p = this._bezPt(e, u),
+								dx = p.x - wx,
+								dy = p.y - wy;
+							if (Math.sqrt(dx * dx + dy * dy) < th) return i;
+						}
+					}
+					return -1;
+				}
+				_bezCp(e) {
+					const s = e.source,
+						t = e.target,
+						sx = s.x ?? 0,
+						sy = s.y ?? 0,
+						tx = t.x ?? 0,
+						ty = t.y ?? 0;
+					if (!e.curvature) return { cx: (sx + tx) / 2, cy: (sy + ty) / 2 };
+					const dx = tx - sx,
+						dy = ty - sy,
+						dist = Math.sqrt(dx * dx + dy * dy) || 1,
+						off = Math.max(35, dist * (0.25 + (e.pairTotal || 1) * 0.05));
+					return { cx: (sx + tx) / 2 - (dy / dist) * e.curvature * off, cy: (sy + ty) / 2 + (dx / dist) * e.curvature * off };
+				}
+				_bezMid(e) {
+					const s = e.source,
+						t = e.target,
+						sx = s.x ?? 0,
+						sy = s.y ?? 0,
+						tx = t.x ?? 0,
+						ty = t.y ?? 0;
+					if (e.isSelfLoop) return { x: sx + 70, y: sy };
+					const c = this._bezCp(e);
+					return { x: 0.25 * sx + 0.5 * c.cx + 0.25 * tx, y: 0.25 * sy + 0.5 * c.cy + 0.25 * ty };
+				}
+				_bezPt(e, u) {
+					const s = e.source,
+						t = e.target,
+						sx = s.x ?? 0,
+						sy = s.y ?? 0,
+						tx = t.x ?? 0,
+						ty = t.y ?? 0;
+					if (e.isSelfLoop) {
+						const a = u * Math.PI * 2;
+						return { x: sx + 30 * Math.cos(a), y: sy + 30 * Math.sin(a) - 15 };
+					}
+					const c = this._bezCp(e),
+						w = 1 - u;
+					return { x: w * w * sx + 2 * w * u * c.cx + u * u * tx, y: w * w * sy + 2 * w * u * c.cy + u * u * ty };
+				}
+				_getNodeLabelKeys(n) {
+					const l = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
+					const o = l.map((x) => clean(x).toLowerCase()).filter(Boolean);
+					return o.length ? o : [clean(n?.type || "Agent").toLowerCase()];
+				}
+				passFilter(n) {
+					if (this.selectedLegendTypes.size && !this._getNodeLabelKeys(n).some((k) => this.selectedLegendTypes.has(k))) return false;
+					if (!this.searchKeyword) return true;
+					const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
+					return [clean(n?.label).toLowerCase(), clean(n?.uid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
+				}
+				renderLegend() {
+					const ll = document.getElementById("legendList"),
+						lr = document.getElementById("legend");
+					if (!ll) return;
+					ll.innerHTML = "";
+					const byType = new Map(),
+						tk = (l) => {
+							const k = clean(l).toLowerCase();
+							return { core: "Core", module: "Module", service: "Service", data: "Data", agent: "Agent" }[k] || "";
+						};
+					(this.graphNodes || []).forEach((n) => {
+						const ls = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
+						const el = ls.length ? ls : [n.type || "Agent"];
+						el.forEach((rl) => {
+							const l = clean(rl);
+							if (!l) return;
+							const k = l.toLowerCase();
+							if (byType.has(k)) return;
+							const t = tk(l),
+								c = t ? TYPE_META[t]?.color || n.color || TYPE_META.Agent.color : n.color || TYPE_META.Agent.color;
+							byType.set(k, { key: k, display: t || l, color: c });
+						});
+					});
+					if (!byType.size) {
+						const i = document.createElement("div");
+						i.className = "legend-item";
+						i.textContent = "暂无节点";
+						ll.appendChild(i);
+						const a = lr.querySelector(".legend-actions");
+						if (a) a.remove();
+						return;
+					}
+					byType.forEach(({ key, display, color }) => {
+						const i = document.createElement("div");
+						i.className = "legend-item";
+						if (this.selectedLegendTypes.has(key)) i.classList.add("active");
+						const d = document.createElement("div");
+						d.className = "legend-dot";
+						d.style.background = color;
+						const t = document.createElement("span");
+						t.textContent = display;
+						i.append(d, t);
+						i.addEventListener("click", () => {
+							if (this.selectedLegendTypes.has(key)) this.selectedLegendTypes.delete(key);
+							else this.selectedLegendTypes.add(key);
+							this.renderLegend();
+							this.scheduleRender();
+						});
+						ll.appendChild(i);
+					});
+					const a = lr.querySelector(".legend-actions");
+					if (a) a.remove();
+					const act = document.createElement("div");
+					act.className = "legend-actions";
+					const btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "legend-reset-btn";
+					btn.textContent = "重置筛选";
+					btn.onclick = () => {
+						if (!this.selectedLegendTypes.size) return;
+						this.selectedLegendTypes.clear();
+						this.renderLegend();
+						this.scheduleRender();
+						setStatus("已重置类型筛选");
+					};
+					act.appendChild(btn);
+					lr.appendChild(act);
+				}
+				zoomTo(k) {
+					const cx = this.W / 2,
+						cy = this.H / 2,
+						tx = cx - (cx - this.transform.x) * (k / this.transform.k),
+						ty = cy - (cy - this.transform.y) * (k / this.transform.k);
+					this.transform = d3.zoomIdentity.translate(tx, ty).scale(k);
+					document.getElementById("s-zoom").textContent = k.toFixed(2) + "×";
+					this.scheduleRender();
+				}
+				render(nodes, links) {
+					this.initCanvas();
+					const safeN = (nodes || []).map((n, i) => ({ ...n, id: clean(n.id) || String(i + 1) }));
+					const byId = new Map(safeN.map((n) => [n.id, n]));
+					const safeL = (links || [])
+						.filter((l) => {
+							const s = clean(typeof l.source === "object" ? l.source?.id : l.source),
+								t = clean(typeof l.target === "object" ? l.target?.id : l.target);
+							return s && t && byId.has(s) && byId.has(t);
+						})
+						.map((l) => ({ ...l, source: clean(typeof l.source === "object" ? l.source?.id : l.source), target: clean(typeof l.target === "object" ? l.target?.id : l.target) }));
+					const prev = new Map((this._nodes || []).map((n) => [n.id, n]));
+					safeN.forEach((n) => {
+						const p = prev.get(n.id);
+						if (!p) return;
+						if (Number.isFinite(p.x)) n.x = p.x;
+						if (Number.isFinite(p.y)) n.y = p.y;
+						if (Number.isFinite(p.vx)) n.vx = p.vx;
+						if (Number.isFinite(p.vy)) n.vy = p.vy;
+					});
+					this.graphNodes = safeN;
+					this.graphLinks = safeL;
+					document.getElementById("s-nodes").textContent = safeN.length;
+					document.getElementById("s-links").textContent = safeL.length;
+					this.renderLegend();
+					const pc = {};
+					safeL.forEach((e) => {
+						const pk = [e.source, e.target].sort().join("_");
+						pc[pk] = (pc[pk] || 0) + 1;
+					});
+					const pi = {};
+					this._edges = safeL.map((e, i) => {
+						const pk = [e.source, e.target].sort().join("_"),
+							tot = pc[pk],
+							idx = pi[pk] || 0;
+						pi[pk] = idx + 1;
+						let c = 0;
+						if (tot > 1) {
+							const r = Math.min(1.2, 0.6 + tot * 0.15);
+							c = (idx / (tot - 1) - 0.5) * r * 2;
+							if (e.source > e.target) c = -c;
+						}
+						return { source: e.source, target: e.target, name: e.relation || "RELATED", curvature: c, isSelfLoop: false, pairIndex: idx, pairTotal: tot, raw: e.raw };
+					});
+					const dm = {};
+					this._edges.forEach((e) => {
+						dm[e.source] = (dm[e.source] || 0) + 1;
+						dm[e.target] = (dm[e.target] || 0) + 1;
+					});
+					const mx = Math.max(1, ...Object.values(dm));
+					this._nodes = safeN.map((n) => ({ ...n, degree: dm[n.id] || 0, r: 6 + (Math.log1p(dm[n.id] || 0) / Math.log1p(mx)) * 18, name: n.label }));
+					this.sim?.stop();
+					this.sim = d3
+						.forceSimulation(this._nodes)
+						.force(
+							"link",
+							d3
+								.forceLink(this._edges)
+								.id((d) => d.id)
+								.distance((d) => FORCE_LINK_DIST + ((d.pairTotal || 1) - 1) * 50)
+								.iterations(1),
+						)
+						.force("charge", d3.forceManyBody().strength(FORCE_CHARGE).distanceMax(600))
+						.force("center", d3.forceCenter(this.W / 2, this.H / 2))
+						.force(
+							"collide",
+							d3.forceCollide((d) => (d.r ?? 10) + FORCE_COLLISION).iterations(3),
+						)
+						.force("x", d3.forceX(this.W / 2).strength(FORCE_PULL))
+						.force("y", d3.forceY(this.H / 2).strength(FORCE_PULL))
+						.alphaDecay(0.02)
+						.velocityDecay(0.3)
+						.on("tick", () => {
+							this.buildQuadtree();
+							this.scheduleRender();
+						});
+					this.buildQuadtree();
+					this.scheduleRender();
+				}
+				drawFrame() {
+					this.needRender = false;
+					if (!this.ctx) return;
+					const c = this.ctx,
+						k = this.transform.k;
+					c.clearRect(0, 0, this.W, this.H);
+					c.save();
+					c.translate(this.transform.x, this.transform.y);
+					c.scale(k, k);
+					const vx0 = -this.transform.x / k - 100,
+						vy0 = -this.transform.y / k - 100,
+						vx1 = (this.W - this.transform.x) / k + 100,
+						vy1 = (this.H - this.transform.y) / k + 100;
+					const ia = this._interaction,
+						fn = ia ? ia.hoveredNodeId : null,
+						fe = ia ? ia.hoveredEdgeIdx : -1,
+						sn = ia ? ia.selectedNodeId : null;
+					const hasH = fn !== null || fe >= 0,
+						focusN = fn || (hasH ? null : sn),
+						ae = fe >= 0 ? fe : -1;
+					const feObj = ae >= 0 ? (this._edges[ae] ?? null) : null,
+						feIds = feObj ? new Set([feObj.source?.id, feObj.target?.id].filter(Boolean)) : null;
+					this._drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, sn);
+					this._drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn);
+					c.restore();
+				}
+				_drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, sn) {
+					const hasF = !!(focusN || feObj),
+						vis = new Set();
+					this.graphNodes.forEach((n) => {
+						if (this.passFilter(n)) vis.add(n.id);
+					});
+					this._edges.forEach((edge, i) => {
+						const s = edge.source,
+							t = edge.target;
+						if (!s?.x || !t?.x) return;
+						const sx = s.x,
+							sy = s.y,
+							tx = t.x,
+							ty = t.y;
+						if (Math.max(sx, tx) < vx0 || Math.min(sx, tx) > vx1 || Math.max(sy, ty) < vy0 || Math.min(sy, ty) > vy1) return;
+						if (!vis.has(s.id) || !vis.has(t.id)) return;
+						const isE = i === ae,
+							isNL = focusN && (s.id === focusN || t.id === focusN),
+							act = isE || isNL;
+						c.globalAlpha = hasF ? (act ? 1 : 0.1) : 0.55;
+						c.beginPath();
+						c.lineWidth = act ? 2.5 / k : 1.6 / k;
+						c.strokeStyle = isE ? "#3498db" : isNL ? "#9b59b6" : "#C0C0C0";
+						if (edge.isSelfLoop) {
+							c.arc(sx + 20, sy - 20, 22, 0, Math.PI * 2);
+						} else {
+							const cp = this._bezCp(edge);
+							c.moveTo(sx, sy);
+							if (cp && edge.curvature) c.quadraticCurveTo(cp.cx, cp.cy, tx, ty);
+							else c.lineTo(tx, ty);
+						}
+						c.stroke();
+						// 在目标节点边缘绘制箭头
+						if (!edge.isSelfLoop) {
+							const tr = t.r ?? 10;
+							let ax, ay, angle;
+							if (edge.curvature) {
+								const cp = this._bezCp(edge), u = 0.92, w = 1 - u;
+								ax = w * w * sx + 2 * w * u * cp.cx + u * u * tx;
+								ay = w * w * sy + 2 * w * u * cp.cy + u * u * ty;
+								const u2 = 0.93, w2 = 1 - u2;
+								const bx = w2 * w2 * sx + 2 * w2 * u2 * cp.cx + u2 * u2 * tx;
+								const by = w2 * w2 * sy + 2 * w2 * u2 * cp.cy + u2 * u2 * ty;
+								angle = Math.atan2(by - ay, bx - ax);
+							} else {
+								const dx = tx - sx, dy = ty - sy, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+								ax = tx - (dx / dist) * tr;
+								ay = ty - (dy / dist) * tr;
+								angle = Math.atan2(dy, dx);
+							}
+							const sz = Math.max(6, 8 / k);
+							c.save(); c.translate(ax, ay); c.rotate(angle);
+							c.beginPath(); c.moveTo(0, 0); c.lineTo(-sz, -sz * 0.5); c.lineTo(-sz, sz * 0.5); c.closePath();
+							c.fillStyle = c.strokeStyle; c.fill(); c.restore();
+						}
+						c.globalAlpha = 1;
+						if (edge.name) {
+							if (hasF && !act) return;
+							const m = this._bezMid(edge),
+								lb = edge.name.length > 14 ? edge.name.slice(0, 14) + "…" : edge.name,
+								fs = Math.max(9, 9 / k);
+							c.font = `${fs}px 'JetBrains Mono',monospace`;
+							const tw = c.measureText(lb).width,
+								th = fs * 1.4,
+								hl = isE || isNL;
+							c.fillStyle = hl ? "rgba(155,89,182,0.12)" : "rgba(255,255,255,0.95)";
+							c.beginPath();
+							c.roundRect(m.x - tw / 2 - 4, m.y - th / 2 - 2, tw + 8, th + 4, 3 / k);
+							c.fill();
+							c.fillStyle = isE ? "#3498db" : isNL ? "#9b59b6" : "#666";
+							c.textAlign = "center";
+							c.textBaseline = "middle";
+							c.fillText(lb, m.x, m.y);
+						}
+					});
+				}
+				_drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn) {
+					const hasF = !!(focusN || feObj),
+						vis = new Set();
+					this.graphNodes.forEach((n) => {
+						if (this.passFilter(n)) vis.add(n.id);
+					});
+					[...this._nodes].sort((a, b) => (a.weight || 0) - (b.weight || 0)).forEach((nd) => {
+						const x = nd.x ?? 0,
+							y = nd.y ?? 0;
+						if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
+						if (!vis.has(nd.id)) return;
+						const BR = nd.r ?? 10,
+							isNF = nd.id === focusN,
+							isNN = focusN && !isNF && this._edges.some((e) => !e.isSelfLoop && ((e.source?.id === focusN && e.target?.id === nd.id) || (e.target?.id === focusN && e.source?.id === nd.id)));
+						const isEF = feIds?.has(nd.id),
+							isSN = nd.id === sn,
+							fc = isNF || isEF || isSN,
+							ac = hasF ? fc || isNN : true,
+							r = BR;
+						c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
+						if (fc) {
+							c.beginPath();
+							c.arc(x, y, r + 5 / k, 0, Math.PI * 2);
+							c.strokeStyle = nd.color;
+							c.lineWidth = 2.5 / k;
+							c.globalAlpha = 0.35;
+							c.stroke();
+							c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
+						}
+						c.beginPath();
+						c.arc(x, y, r, 0, Math.PI * 2);
+						c.fillStyle = nd.color;
+						c.fill();
+						c.strokeStyle = fc ? "#333" : "#fff";
+						c.lineWidth = (fc ? 3 : 2.5) / k;
+						c.stroke();
+						if (k > 0.6) {
+							const sf = ac,
+								rn = nd.name || nd.label || "",
+								lb = sf ? (rn.length > 16 ? rn.slice(0, 16) + "…" : rn) : rn.length > 8 ? rn.slice(0, 8) + "…" : rn,
+								fs = sf ? Math.max(12, 12 / k) : Math.max(11, 11 / k),
+								wt = sf ? "600" : "500";
+							c.font = `${wt} ${fs}px 'JetBrains Mono',monospace`;
+							const lx = x + r + 5 / k,
+								ly = y;
+							if (sf) {
+								c.globalAlpha = 1;
+								const tw = c.measureText(lb).width,
+									pad = 5 / k,
+									bh = (fs + 8) / k;
+								c.shadowColor = "rgba(0,0,0,0.18)";
+								c.shadowBlur = 6 / k;
+								c.shadowOffsetY = 2 / k;
+								c.fillStyle = "#fff";
+								c.beginPath();
+								c.roundRect(lx - pad, ly - bh / 2, tw + pad * 2, bh, bh / 2);
+								c.fill();
+								c.shadowColor = "transparent";
+								c.shadowBlur = 0;
+								c.shadowOffsetY = 0;
+								c.strokeStyle = nd.color;
+								c.lineWidth = 1.5 / k;
+								c.stroke();
+							}
+							c.fillStyle = sf ? "#111" : "#555";
+							c.textAlign = "left";
+							c.textBaseline = "middle";
+							c.fillText(lb, lx, ly);
+						}
+						c.globalAlpha = 1;
+					});
+				}
+			}
+
+			/* ═══════════════════════════════════════════════════════════════════
+   GraphInteraction — 指针事件、选中/悬浮、拖拽/平移
+   ═══════════════════════════════════════════════════════════════════ */
+			class GraphInteraction {
+				constructor(canvas) {
+					this.canvas = canvas;
+					this.el = canvas.el;
+					this.selectedNodeId = null;
+					this.hoveredNodeId = null;
+					this.hoveredEdgeIdx = -1;
+					this.dragging = null;
+					this.dragWX = 0;
+					this.dragWY = 0;
+					this.isDrag = false;
+					this.panning = false;
+					this.panX = 0;
+					this.panY = 0;
+					this.panTX = 0;
+					this.panTY = 0;
+					this._showTmr = null;
+					this._hideTmr = null;
+					this.bind();
+				}
+				bind() {
+					this.el.addEventListener(
+						"wheel",
+						(e) => {
+							e.preventDefault();
+							const r = this.el.getBoundingClientRect(),
+								mx = e.clientX - r.left,
+								my = e.clientY - r.top,
+								d = -e.deltaY * (e.deltaMode === 1 ? 30 : 1),
+								f = Math.pow(1.001, d),
+								nk = Math.min(4, Math.max(0.1, this.canvas.transform.k * f)),
+								tx = mx - (mx - this.canvas.transform.x) * (nk / this.canvas.transform.k),
+								ty = my - (my - this.canvas.transform.y) * (nk / this.canvas.transform.k);
+							this.canvas.transform = d3.zoomIdentity.translate(tx, ty).scale(nk);
+							document.getElementById("s-zoom").textContent = nk.toFixed(2) + "×";
+							this.canvas.scheduleRender();
+						},
+						{ passive: false },
+					);
+					this.el.addEventListener("pointermove", (e) => this.onPtrMove(e));
+					this.el.addEventListener("pointerdown", (e) => this.onPtrDown(e));
+					this.el.addEventListener("pointerup", (e) => this.onPtrUp());
+					this.el.addEventListener("pointercancel", () => this.onPtrUp());
+					this.el.addEventListener("pointerleave", () => this.onPtrLeave());
+					this.el.addEventListener("click", (e) => this.onClick(e));
+				}
+				_isNeighbor(a, b) {
+					return this.canvas._edges.some((e) => !e.isSelfLoop && ((e.source?.id === b && e.target?.id === a) || (e.target?.id === b && e.source?.id === a)));
+				}
+				onPtrMove(e) {
+					const cv = this.canvas;
+					if (this.dragging) {
+						const [wx, wy] = cv.toWorld(e.clientX, e.clientY),
+							dx = wx - this.dragWX,
+							dy = wy - this.dragWY;
+						if (!this.isDrag && Math.sqrt(dx * dx + dy * dy) > 4) {
+							this.isDrag = true;
+							cv.sim.alphaTarget(0.3).restart();
+						}
+						if (this.isDrag) {
+							this.dragging.fx = wx;
+							this.dragging.fy = wy;
+						}
+						return;
+					}
+					if (this.panning) {
+						cv.transform = d3.zoomIdentity.translate(this.panTX + (e.clientX - this.panX), this.panTY + (e.clientY - this.panY)).scale(cv.transform.k);
+						cv.scheduleRender();
+						return;
+					}
+					const [wx, wy] = cv.toWorld(e.clientX, e.clientY),
+						nd = cv.findNodeAt(wx, wy, 18),
+						prev = this.hoveredNodeId,
+						prevE = this.hoveredEdgeIdx;
+					if (this.selectedNodeId && nd && nd.id !== this.selectedNodeId && !this._isNeighbor(nd.id, this.selectedNodeId)) this.hoveredNodeId = null;
+					else this.hoveredNodeId = nd ? nd.id : null;
+					if (!this.hoveredNodeId && this.selectedNodeId) this.hoveredNodeId = this.selectedNodeId;
+					this.hoveredEdgeIdx = !nd && !this.selectedNodeId ? cv.findEdgeAt(wx, wy) : -1;
+					this.el.style.cursor = this.hoveredNodeId || this.hoveredEdgeIdx >= 0 ? "pointer" : "default";
+					if (this.hoveredNodeId !== prev || this.hoveredEdgeIdx !== prevE) {
+						if (this.hoveredNodeId) {
+							const n = cv._nodes.find((x) => x.id === this.hoveredNodeId);
+							if (n) this.showInfo(n);
+						} else if (!this.selectedNodeId) this.hideInfo();
+						cv.scheduleRender();
+					}
+				}
+				onPtrDown(e) {
+					if (e.button !== 0) return;
+					const cv = this.canvas,
+						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
+						nd = cv.findNodeAt(wx, wy, 18);
+					if (nd) {
+						this.el.setPointerCapture(e.pointerId);
+						this.dragging = nd;
+						this.dragWX = wx;
+						this.dragWY = wy;
+						this.isDrag = false;
+						nd.fx = nd.x;
+						nd.fy = nd.y;
+					} else {
+						this.el.setPointerCapture(e.pointerId);
+						this.panning = true;
+						this.panX = e.clientX;
+						this.panY = e.clientY;
+						this.panTX = cv.transform.x;
+						this.panTY = cv.transform.y;
+						this.el.style.cursor = "grabbing";
+					}
+				}
+				onPtrUp() {
+					if (this.dragging) {
+						if (this.isDrag) this.canvas.sim.alphaTarget(0);
+						this.dragging.fx = null;
+						this.dragging.fy = null;
+						this.dragging = null;
+						this.isDrag = false;
+					}
+					if (this.panning) {
+						this.panning = false;
+						this.el.style.cursor = "default";
+					}
+				}
+				onPtrLeave() {
+					if (this.panning) {
+						this.panning = false;
+						this.el.style.cursor = "default";
+					}
+					if (this.hoveredNodeId !== null || this.hoveredEdgeIdx !== -1) {
+						this.hoveredNodeId = null;
+						this.hoveredEdgeIdx = -1;
+						this.el.style.cursor = "default";
+						if (!this.selectedNodeId) this.hideInfo();
+						this.canvas.scheduleRender();
+					}
+				}
+				onClick(e) {
+					const cv = this.canvas,
+						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
+						nd = cv.findNodeAt(wx, wy, 18);
+					if (nd) {
+						if (this.selectedNodeId === nd.id) {
+							this.clearSel();
+						} else {
+							this.selectedNodeId = nd.id;
+							this.hoveredNodeId = nd.id;
+							fillNodeForm(nd.raw);
+							this.showInfo(nd, true);
+							cv.scheduleRender();
+						}
+						return;
+					}
+					const ei = cv.findEdgeAt(wx, wy);
+					if (ei >= 0) {
+						fillRelForm(cv._edges[ei].raw);
+						cv.scheduleRender();
+						return;
+					}
+					this.selectedNodeId = null;
+					this.hideInfo(true);
+					cv.scheduleRender();
+				}
+				clearSel() {
+					this.selectedNodeId = null;
+					this.hideInfo(true);
+					this.canvas.scheduleRender();
+				}
+				showInfo(node, imm) {
+					if (this._hideTmr) {
+						clearTimeout(this._hideTmr);
+						this._hideTmr = null;
+					}
+					const doS = () => {
+						const cc = this.canvas._edges.filter((e) => !e.isSelfLoop && (e.source?.id === node.id || e.target?.id === node.id)).length;
+						document.getElementById("p-type").textContent = node.type;
+						document.getElementById("p-type").style.color = node.color;
+						document.getElementById("p-name").textContent = node.label;
+						document.getElementById("p-name").style.color = node.color;
+						document.getElementById("p-conn").textContent = cc;
+						document.getElementById("p-weight").textContent = node.weight + " / 100";
+						document.getElementById("p-id").textContent = "#" + node.id;
+						document.getElementById("info-panel").classList.add("visible");
+					};
+					if (imm) {
+						doS();
+						return;
+					}
+					if (this._showTmr) clearTimeout(this._showTmr);
+					this._showTmr = setTimeout(doS, 150);
+				}
+				hideInfo(imm) {
+					if (this._showTmr) {
+						clearTimeout(this._showTmr);
+						this._showTmr = null;
+					}
+					const doH = () => {
+						document.getElementById("info-panel").classList.remove("visible");
+					};
+					if (imm) {
+						doH();
+						return;
+					}
+					if (this._hideTmr) clearTimeout(this._hideTmr);
+					this._hideTmr = setTimeout(doH, 300);
+				}
+			}
+
+			/* ═══════════════════════════════════════════════════════════════════
+   初始化与事件绑定
+   ═══════════════════════════════════════════════════════════════════ */
+			const _store = new GraphStore(),
+				_api = new GraphAPI(_store),
+				_canvas = new GraphCanvas(_store, document.getElementById("graph-canvas")),
+				_ia = new GraphInteraction(_canvas);
+			_canvas._interaction = _ia;
+			window._graphApp = _canvas;
+
+			async function loadAndRender(gid) {
+				await _api.loadGroup(gid, (g) => {
+					_canvas.render(g.nodes, g.links);
+				});
+			}
+
+			document.getElementById("btn-zoom-in").onclick = () => _canvas.zoomTo(Math.min(4, _canvas.transform.k * 1.35));
+			document.getElementById("btn-zoom-out").onclick = () => _canvas.zoomTo(Math.max(0.1, _canvas.transform.k * 0.74));
+			document.getElementById("btn-reset").onclick = () => {
+				_canvas.transform = d3.zoomIdentity;
+				document.getElementById("s-zoom").textContent = "1.00×";
+				_canvas.scheduleRender();
+			};
+			document.getElementById("btnLoad").onclick = async () => {
+				try {
+					const gid = clean(document.getElementById("groupId").value);
+					if (!gid) {
+						setStatus("group_id 不能为空", true);
+						return;
+					}
+					await loadAndRender(gid);
+				} catch (e) {
+					setStatus(`加载失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnNodePropAdd").onclick = () => document.getElementById("nodePropsList").appendChild(createKvRow());
+			document.getElementById("btnNodeMetaAdd").onclick = () => document.getElementById("nodeMetaList").appendChild(createKvRow());
+			document.getElementById("btnRelPropAdd").onclick = () => document.getElementById("relPropsList").appendChild(createKvRow());
+			document.getElementById("btnNodeCreate").onclick = async () => {
+				try {
+					if (!confirm("确认新增节点吗？")) return;
+					await _api.mutate("/group-graph/api/node", "POST", nodePayload());
+				} catch (e) {
+					setStatus(`节点新增失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnNodeUpdate").onclick = async () => {
+				try {
+					if (!confirm("确认更新节点吗？")) return;
+					await _api.mutate("/group-graph/api/node", "PUT", nodePayload());
+				} catch (e) {
+					setStatus(`节点更新失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnNodeDelete").onclick = async () => {
+				try {
+					if (!confirm("确认删除节点吗？删除后相关关系也会受影响。")) return;
+					const p = nodePayload();
+					await _api.mutate("/group-graph/api/node", "DELETE", { group_id: p.group_id, uid: p.uid });
+				} catch (e) {
+					setStatus(`节点删除失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnRelCreate").onclick = async () => {
+				try {
+					if (!confirm("确认新增关系吗？")) return;
+					await _api.mutate("/group-graph/api/relation", "POST", relPayload());
+				} catch (e) {
+					setStatus(`关系新增失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnRelUpdate").onclick = async () => {
+				try {
+					if (!confirm("确认更新关系吗？")) return;
+					await _api.mutate("/group-graph/api/relation", "PUT", relPayload());
+				} catch (e) {
+					setStatus(`关系更新失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnRelDelete").onclick = async () => {
+				try {
+					if (!confirm("确认删除关系吗？")) return;
+					const p = relPayload();
+					await _api.mutate("/group-graph/api/relation", "DELETE", { group_id: p.group_id, source_uid: p.source_uid, target_uid: p.target_uid });
+				} catch (e) {
+					setStatus(`关系删除失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("panel-close").onclick = () => _ia.clearSel();
+
+			let _searchTmr = null;
+			document.getElementById("searchKeyword").addEventListener("input", (e) => {
+				const kw = clean(e.target.value).toLowerCase();
+				if (_searchTmr) clearTimeout(_searchTmr);
+				_searchTmr = setTimeout(() => {
+					_canvas.searchKeyword = kw;
+					_canvas.scheduleRender();
+					setStatus(kw ? `已按关键词过滤: ${kw}` : "已清除关键词过滤");
+				}, 300);
+			});
+
+			window.addEventListener("resize", () => {
+				if (!_canvas.sim) return;
+				_canvas.sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
+				_canvas.sim.alpha(0.25);
+				_canvas.initCanvas();
+				_canvas.scheduleRender();
+			});
+
+			(async () => {
+				try {
+					renderKv("nodePropsList", {});
+					renderKv("nodeMetaList", {});
+					renderKv("relPropsList", {});
+					_canvas.initCanvas();
+					const gid = clean(new URLSearchParams(window.location.search).get("group_id")),
+						demo = new URLSearchParams(window.location.search).get("demo") === "true";
+					if (gid && !demo) {
+						document.getElementById("groupId").value = gid;
+						await loadAndRender(gid);
+					} else if (demo) {
+						await _api.loadDemoPaged((g) => {
+							_canvas.render(g.nodes, g.links);
+						});
+					} else {
+						_canvas.render([], []);
+						setStatus("请输入 group_id 后加载图谱");
+					}
+				} catch (e) {
+					setStatus(`加载失败: ${e.message}`, true);
+					if (new URLSearchParams(window.location.search).get("demo") === "true") {
+						const g = await _api.loadDemoSync();
+						_canvas.render(g.nodes, g.links);
+					} else _canvas.render([], []);
+				}
+			})();
+		</script>
+	</body>
 </html>
