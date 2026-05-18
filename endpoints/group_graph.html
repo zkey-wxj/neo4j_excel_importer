@@ -442,6 +442,10 @@
 </div>
 
 <script>
+/* ═══════════════════════════════════════════════════════════════════
+   Constants & Configuration
+   ═══════════════════════════════════════════════════════════════════ */
+
 const querySearch = new URLSearchParams(window.location.search);
 const RENDER_DEMO_DATA = querySearch.get("demo") === "true";
 const INITIAL_GROUP_ID = clean(querySearch.get("group_id"));
@@ -1080,7 +1084,8 @@ function showNodeInfo(node, immediate) {
   if (_hideInfoTimer) { clearTimeout(_hideInfoTimer); _hideInfoTimer = null; }
   const doShow = () => {
     const cc = _edges.filter(ed => !ed.isSelfLoop && (ed.source?.id === node.id || ed.target?.id === node.id)).length;
-    document.getElementById("p-type").textContent = typeDisplayName(node.type);
+    console.info(node)
+    document.getElementById("p-type").textContent = node.raw.labels?.join(", ") || node.type || "";
     document.getElementById("p-type").style.color = node.color;
     document.getElementById("p-name").textContent = node.label;
     document.getElementById("p-name").style.color = node.color;
