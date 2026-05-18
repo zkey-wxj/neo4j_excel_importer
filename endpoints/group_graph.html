@@ -44,47 +44,11 @@
 
   #app { position: relative; width: 100vw; height: 100vh; }
 
-  #graph-svg {
+  #graph-canvas {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
-    cursor: grab;
+    display: block;
   }
-  #graph-svg:active { cursor: grabbing; }
-
-  .link { fill: none; transition: stroke-opacity 0.25s, stroke-width 0.25s; }
-  .link.dimmed     { stroke-opacity: 0.06 !important; }
-  .link.highlighted { stroke-width: 2.5px !important; stroke-opacity: 1 !important; }
-  .link.dimmed-arrow { marker-end: url(#arr-end-dimmed); }
-  .link.highlighted-arrow { marker-end: url(#arr-end); }
-  .link.filtered-out { opacity: 0 !important; stroke-opacity: 0 !important; pointer-events: none; }
-
-  .edge-label-group { pointer-events: auto; cursor: pointer; }
-  .edge-label-bg  { fill: var(--surface); stroke: var(--border2); stroke-width: 0.8; }
-  .edge-label-text {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; font-weight: 400; letter-spacing: 0.03em;
-    dominant-baseline: middle; text-anchor: middle;
-    fill: var(--muted);
-    pointer-events: none;
-  }
-  .edge-label-group.dimmed   { opacity: 0.05; }
-  .edge-label-group.highlighted .edge-label-text { font-weight: 600; }
-  .edge-label-group.highlighted .edge-label-bg   { stroke: var(--border2); }
-  .edge-label-group.filtered-out { opacity: 0 !important; pointer-events: none; }
-
-  .node-group { cursor: pointer; }
-  .node-ring { fill: none; }
-  .node-group.dimmed  { opacity: 0.13; }
-  .node-group.selected .node-circle { filter: drop-shadow(0 0 6px currentColor); }
-  .node-group.filtered-out { opacity: 0 !important; pointer-events: none; }
-
-  .node-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
-    dominant-baseline: middle; text-anchor: middle;
-    pointer-events: none;
-  }
-
 
   #stats {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
@@ -161,7 +125,7 @@
 
   #search-panel {
     position: absolute;
-    top: 26px;
+    top: 16px;
     right: 28px;
     width: 238px;
     z-index: 11;
@@ -225,27 +189,15 @@
   }
   #info-panel .close-btn:hover { color: var(--text); background: var(--surface2); }
 
-  #tooltip {
-    position: absolute; z-index: 20;
-    background: var(--text); color: var(--surface);
-    border-radius: 6px; padding: 5px 11px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
-    pointer-events: none; opacity: 0; transition: opacity 0.12s; white-space: nowrap;
-  }
 
   #status {
-    position: absolute;
-    left: 50%;
-    bottom: 78px;
-    transform: translateX(-50%);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
-    background: rgba(255,255,255,0.72);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 5px 10px;
-    z-index: 11;
+    border-top: 1px solid var(--border);
+    padding: 6px 4px 2px;
+    margin-top: 6px;
+    text-align: right;
   }
 
   #ops-panel {
@@ -379,7 +331,6 @@
     #search-panel { right: 10px; top: 10px; width: 300px; }
     #info-panel { right: 10px; top: 84px; }
     #controls { left: 50%; bottom: 10px; transform: translateX(-50%); }
-    #status { bottom: 58px; }
   }
 </style>
 </head>
@@ -391,27 +342,12 @@
     <div class="stat-cell"><div class="n" id="s-zoom">1.00×</div><div class="l">缩放</div></div>
   </div>
 
-  <svg id="graph-svg">
-    <defs>
-      <filter id="f-soft" x="-40%" y="-40%" width="180%" height="180%">
-        <feGaussianBlur stdDeviation="3" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arr-end" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6 Z" fill="#b0b8d0"/>
-      </marker>
-      <marker id="arr-end-dimmed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6 Z" fill="#d9deec" fill-opacity="0.25"/>
-      </marker>
-    </defs>
-    <g id="graph-root"></g>
-  </svg>
+  <canvas id="graph-canvas"></canvas>
 
   <div id="controls">
     <button class="ctrl-btn" id="btn-zoom-in">+</button>
     <button class="ctrl-btn" id="btn-zoom-out">−</button>
     <button class="ctrl-btn" id="btn-reset" style="font-size:13px">⟳</button>
-    <button class="ctrl-btn" id="btn-shuffle" style="font-size:12px">⇄</button>
   </div>
 
   <div id="legend">
@@ -426,8 +362,8 @@
 
   <div id="info-panel">
     <button class="close-btn" id="panel-close">×</button>
-    <div class="p-type" id="p-type"></div>
     <div class="p-name" id="p-name"></div>
+    <div class="p-type" id="p-type"></div>
     <div class="p-row"><span class="p-key">关联数</span><span class="p-val" id="p-conn"></span></div>
     <div class="p-row"><span class="p-key">权重</span><span class="p-val" id="p-weight"></span></div>
     <div class="p-row"><span class="p-key">编号</span><span class="p-val" id="p-id"></span></div>
@@ -499,22 +435,22 @@
         <button class="ops-btn" id="btnRelDelete">删除</button>
       </div>
     </div>
+    <div id="status"></div>
   </div>
 
-  <div id="tooltip"></div>
-  <div id="status"></div>
+
 </div>
 
 <script>
-const RENDER_DEMO_DATA = false; // 是否渲染示例数据
-const INITIAL_GROUP_ID = clean(new URLSearchParams(window.location.search).get("group_id"));
-const DEMO_PAGE_SIZE = 6;
+const querySearch = new URLSearchParams(window.location.search);
+const RENDER_DEMO_DATA = querySearch.get("demo") === "true";
+const INITIAL_GROUP_ID = clean(querySearch.get("group_id"));
+const DEMO_PAGE_SIZE = 200;
 const DEMO_PAGE_DELAY_MS = 280;
-const FORCE_CHARGE_STRENGTH = -280;
-const FORCE_LINK_BASE_DISTANCE = 52;
-const FORCE_LINK_RADIUS_FACTOR = 1.15;
-const FORCE_COLLISION_PADDING = 10;
-const FORCE_CENTER_PULL_STRENGTH = 0.035;
+const FORCE_CHARGE_STRENGTH = -400;
+const FORCE_LINK_BASE_DISTANCE = 150;
+const FORCE_COLLISION_PADDING = 6;
+const FORCE_CENTER_PULL_STRENGTH = 0.04;
 
 const TYPE_META = {
   Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 },
@@ -524,60 +460,91 @@ const TYPE_META = {
   Agent: { color: "#e8445a", bg: "rgba(232,68,90,0.10)", r: 9 },
 };
 
-const DEMO_NODES = [
-  { uid: "1", name: "Orchestrator", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 98 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "2", name: "Planner", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 91 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "3", name: "Memory", labels: ["Core"], description: "", group_id: "demo", properties: { weight: 87 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "4", name: "Retriever", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 75 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "5", name: "Embedder", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 72 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "6", name: "Reasoner", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 78 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "7", name: "VectorDB", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 65 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "8", name: "Cache", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 60 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "9", name: "DocStore", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 62 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "10", name: "API Gateway", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 83 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "11", name: "Auth", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 70 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "12", name: "Logger", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 55 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "13", name: "Executor", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 80 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "14", name: "Validator", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 68 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "15", name: "Critic", labels: ["Agent"], description: "", group_id: "demo", properties: { weight: 73 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "16", name: "Scheduler", labels: ["Module"], description: "", group_id: "demo", properties: { weight: 66 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "17", name: "EventBus", labels: ["Service"], description: "", group_id: "demo", properties: { weight: 71 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { uid: "18", name: "Metrics", labels: ["Data"], description: "", group_id: "demo", properties: { weight: 57 }, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+const DEMO_NODE_COUNT = 1000;
+
+const DEMO_NAME_POOL = [
+  "Orchestrator","Planner","Memory","Retriever","Embedder","Reasoner",
+  "VectorDB","Cache","DocStore","Gateway","Auth","Logger",
+  "Executor","Validator","Critic","Scheduler","EventBus","Metrics",
+  "Router","Parser","Encoder","Decoder","Monitor","Collector",
+  "Dispatcher","Registry","Resolver","Transformer","Aggregator","Connector",
+  "Buffer","Indexer","Crawler","Fetcher","Loader","Saver",
+  "Tracker","Analyzer","Renderer","Compiler","Interpreter","Assembler",
 ];
 
-const DEMO_LINKS = [
-  { relation_id: "demo-1-2-dispatches", source_uid: "1", target_uid: "2", rel_type: "dispatches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-1-3-reads", source_uid: "1", target_uid: "3", rel_type: "reads", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-1-10-routes", source_uid: "1", target_uid: "10", rel_type: "routes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-1-13-spawns", source_uid: "1", target_uid: "13", rel_type: "spawns", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-2-4-queries", source_uid: "2", target_uid: "4", rel_type: "queries", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-2-6-invokes", source_uid: "2", target_uid: "6", rel_type: "invokes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-2-16-schedules", source_uid: "2", target_uid: "16", rel_type: "schedules", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-3-7-indexes", source_uid: "3", target_uid: "7", rel_type: "indexes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-3-8-caches", source_uid: "3", target_uid: "8", rel_type: "caches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-4-7-fetches", source_uid: "4", target_uid: "7", rel_type: "fetches", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-4-5-embeds", source_uid: "4", target_uid: "5", rel_type: "embeds", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-5-7-stores", source_uid: "5", target_uid: "7", rel_type: "stores", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-6-15-reviews", source_uid: "6", target_uid: "15", rel_type: "reviews", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-6-14-checks", source_uid: "6", target_uid: "14", rel_type: "checks", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-10-11-verifies", source_uid: "10", target_uid: "11", rel_type: "verifies", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-10-12-logs", source_uid: "10", target_uid: "12", rel_type: "logs", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-10-17-publishes", source_uid: "10", target_uid: "17", rel_type: "publishes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-13-14-submits", source_uid: "13", target_uid: "14", rel_type: "submits", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-13-15-drafts", source_uid: "13", target_uid: "15", rel_type: "drafts", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-16-17-triggers", source_uid: "16", target_uid: "17", rel_type: "triggers", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-17-12-reports", source_uid: "17", target_uid: "12", rel_type: "reports", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-17-18-tracks", source_uid: "17", target_uid: "18", rel_type: "tracks", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-8-9-persists", source_uid: "8", target_uid: "9", rel_type: "persists", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-11-3-syncs", source_uid: "11", target_uid: "3", rel_type: "syncs", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-12-18-writes", source_uid: "12", target_uid: "18", rel_type: "writes", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-14-6-refines", source_uid: "14", target_uid: "6", rel_type: "refines", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-15-2-retries", source_uid: "15", target_uid: "2", rel_type: "retries", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-9-7-mirrors", source_uid: "9", target_uid: "7", rel_type: "mirrors", direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
-  { relation_id: "demo-missing-node-case", source_uid: "999", target_uid: "1", rel_type: "orphan-link", direction: "forward", description: "模拟缺失端点关系（source_uid=999 不存在）", weight: 1, group_id: "demo", properties: {}, meta: { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", source: "demo", version: 1 } },
+const DEMO_TYPE_KEYS = ["Core","Module","Service","Data","Agent"];
+
+const DEMO_REL_TYPES = [
+  "dispatches","reads","routes","spawns","queries","invokes",
+  "schedules","indexes","caches","fetches","embeds","stores",
+  "reviews","checks","verifies","logs","publishes","submits",
+  "drafts","triggers","reports","tracks","persists","syncs",
+  "writes","refines","retries","mirrors","calls","depends",
 ];
 
-/** 解析插件页面所在基础路径，例如 /e/{plugin_id}。 */
+function generateDemoNodes(count) {
+  const now = new Date().toISOString();
+  const meta = { created_at: now, updated_at: now, source: "demo", version: 1 };
+  const nodes = [];
+  for (let i = 0; i < count; i++) {
+    const typeKey = DEMO_TYPE_KEYS[i % DEMO_TYPE_KEYS.length];
+    const name = DEMO_NAME_POOL[i % DEMO_NAME_POOL.length];
+    nodes.push({
+      uid: String(i + 1),
+      name,
+      labels: [typeKey],
+      description: "",
+      group_id: "demo",
+      properties: { weight: Math.round(40 + Math.random() * 60) },
+      meta,
+    });
+  }
+  return nodes;
+}
+
+function generateDemoLinks(nodes) {
+  const now = new Date().toISOString();
+  const meta = { created_at: now, updated_at: now, source: "demo", version: 1 };
+  const n = nodes.length;
+  if (n < 2) return [];
+  const uids = nodes.map(nd => nd.uid);
+  const links = [];
+  const seen = new Set();
+
+  const addLink = (s, t) => {
+    const key = `${s}->${t}`;
+    if (seen.has(key) || s === t) return;
+    seen.add(key);
+    const rel = DEMO_REL_TYPES[links.length % DEMO_REL_TYPES.length];
+    links.push({
+      relation_id: `demo-${s}-${t}-${rel}`,
+      source_uid: s, target_uid: t, rel_type: rel,
+      direction: "forward", description: "", weight: 1,
+      group_id: "demo", properties: {}, meta,
+    });
+  };
+
+  // spanning tree to guarantee connectivity
+  for (let i = 1; i < n; i++) {
+    const parent = uids[Math.floor(Math.random() * i)];
+    addLink(parent, uids[i]);
+  }
+
+  // extra random edges (~1.5x node count total)
+  const extraTarget = Math.floor(n * 1.5);
+  let attempts = 0;
+  while (links.length < extraTarget && attempts < extraTarget * 4) {
+    const s = uids[Math.floor(Math.random() * n)];
+    const t = uids[Math.floor(Math.random() * n)];
+    addLink(s, t);
+    attempts++;
+  }
+
+  return links;
+}
+
+/* ── Utility functions ─────────────────────────────────────────── */
+
 function apiBase() {
   const pathname = String(window.location.pathname || "");
   const match = pathname.match(/^\/e\/[^/]+/);
@@ -585,24 +552,16 @@ function apiBase() {
 }
 const API_BASE = apiBase();
 
-/** 将相对 API 路径拼接到当前插件基路径下。 */
 function apiUrl(path) {
   const base = API_BASE.replace(/\/+$/, "");
   const suffix = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
   return `${base}${suffix}`;
 }
 
-/** 统一字符串清洗，避免 null/undefined 影响 key 匹配。 */
-function clean(v) {
-  return String(v || "").trim();
-}
+function clean(v) { return String(v || "").trim(); }
 
-/** 判断是否启用示例数据模式。 */
-function shouldRenderDemo() {
-  return RENDER_DEMO_DATA;
-}
+function shouldRenderDemo() { return RENDER_DEMO_DATA; }
 
-/** 创建属性编辑行（key/value + 删除按钮）。 */
 function createKvRow(key = "", value = "") {
   const row = document.createElement("div");
   row.className = "kv-row";
@@ -623,21 +582,14 @@ function createKvRow(key = "", value = "") {
   return row;
 }
 
-/** 把对象渲染到属性编辑列表。 */
 function renderKv(listId, obj = {}) {
   const list = document.getElementById(listId);
   list.innerHTML = "";
   const entries = Object.entries(obj || {});
-  if (!entries.length) {
-    list.appendChild(createKvRow("", ""));
-    return;
-  }
-  entries.forEach(([k, v]) => {
-    list.appendChild(createKvRow(String(k), v == null ? "" : String(v)));
-  });
+  if (!entries.length) { list.appendChild(createKvRow("", "")); return; }
+  entries.forEach(([k, v]) => list.appendChild(createKvRow(String(k), v == null ? "" : String(v))));
 }
 
-/** 从属性编辑列表收集为对象。 */
 function collectKv(listId) {
   const rows = Array.from(document.querySelectorAll(`#${listId} .kv-row`));
   const out = {};
@@ -645,13 +597,11 @@ function collectKv(listId) {
     const inputs = row.querySelectorAll("input");
     const key = clean(inputs[0]?.value);
     const val = clean(inputs[1]?.value);
-    if (!key) return;
-    out[key] = val;
+    if (key) out[key] = val;
   });
   return out;
 }
 
-/** 根据 labels/uid 推断节点类型。 */
 function parseType(labels = [], uid = "") {
   const all = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
   if (all.includes("core")) return "Core";
@@ -667,19 +617,257 @@ function parseType(labels = [], uid = "") {
   return "Agent";
 }
 
-/** 类型英文标识转中文展示名。 */
 function typeDisplayName(type) {
-  const map = {
-    Core: "核心",
-    Module: "模块",
-    Service: "服务",
-    Data: "数据",
-    Agent: "智能体",
-  };
-  return map[type] || type || "";
+  return type || "";
 }
 
-/** 渲染图例并绑定类型筛选交互。 */
+function parseWeight(node) {
+  const candidates = [node.weight, node.properties?.weight, node.properties?.score, node.meta?.score];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(1, Math.min(100, Math.round(n)));
+  }
+  return 50;
+}
+
+function nodeLabel(node) {
+  const name = clean(node.name);
+  return name || clean(node.uid) || "Node";
+}
+
+function relationLabel(rel) { return clean(rel.rel_type) || "RELATED"; }
+
+function relationKey(rel, index) {
+  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
+}
+
+/* ── Graph store ────────────────────────────────────────────────── */
+
+const graphStore = { nodeMap: new Map(), linkMap: new Map(), nodes: [], links: [] };
+
+function relationStoreKey(rel) {
+  const relationId = clean(rel.relation_id);
+  if (relationId) return `rid:${relationId}`;
+  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}`;
+}
+
+function resetGraphStore() {
+  graphStore.nodeMap.clear();
+  graphStore.linkMap.clear();
+  graphStore.nodes = [];
+  graphStore.links = [];
+}
+
+/* ── HTTP helper ────────────────────────────────────────────────── */
+
+async function request(pathOrUrl, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : apiUrl(pathOrUrl);
+  const init = { method, headers: { Accept: "application/json" } };
+  if (options.body !== undefined) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = options.body;
+  }
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let data = {};
+  if (text) { try { data = JSON.parse(text); } catch (_e) { throw new Error(`接口返回非 JSON: ${text.slice(0, 120)}`); } }
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function setStatus(text, isError = false) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.style.color = isError ? "#c53030" : "var(--muted)";
+}
+
+/* ── Data mapping (graphStore → renderable) ─────────────────────── */
+
+function mapGraphData() {
+  const nodesRaw = Array.from(graphStore.nodeMap.values());
+  const relsRaw = Array.from(graphStore.linkMap.values());
+  const nodeUidSet = new Set(graphStore.nodeMap.keys());
+  const degreeByUid = new Map();
+  const droppedRels = [];
+  const validRelsRaw = [];
+
+  relsRaw.forEach((r) => {
+    const suid = clean(r.source_uid);
+    const tuid = clean(r.target_uid);
+    if (!nodeUidSet.has(suid) || !nodeUidSet.has(tuid) || !suid || !tuid) {
+      droppedRels.push({ source_uid: suid, target_uid: tuid, rel_type: relationLabel(r) });
+      return;
+    }
+    validRelsRaw.push(r);
+    if (suid) degreeByUid.set(suid, (degreeByUid.get(suid) || 0) + 1);
+    if (tuid) degreeByUid.set(tuid, (degreeByUid.get(tuid) || 0) + 1);
+  });
+
+  const mappedNodes = nodesRaw.map((n, idx) => {
+    const type = parseType(n.labels, n.uid);
+    const meta = TYPE_META[type] || TYPE_META.Agent;
+    const uid = clean(n.uid);
+    const degree = degreeByUid.get(uid) || 0;
+    const dynamicR = Math.max(8, Math.min(26, meta.r + degree * 0.9));
+    return { id: uid || String(idx + 1), uid, label: nodeLabel(n), type, weight: parseWeight(n), color: meta.color, bg: meta.bg, r: dynamicR, raw: n };
+  });
+
+  const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
+  const mappedLinks = [];
+  validRelsRaw.forEach((r, i) => {
+    const sUid = clean(r.source_uid);
+    const tUid = clean(r.target_uid);
+    const s = idMap.get(sUid);
+    const t = idMap.get(tUid);
+    if (!s || !t) { droppedRels.push({ source_uid: sUid, target_uid: tUid, rel_type: relationLabel(r) }); return; }
+    mappedLinks.push({ source: s, target: t, relation: relationLabel(r), _key: relationStoreKey(r) || relationKey(r, i), raw: r });
+  });
+  if (droppedRels.length) console.warn("[group-graph] skip invalid relations", droppedRels.slice(0, 20));
+  graphStore.nodes = mappedNodes;
+  graphStore.links = mappedLinks;
+  return { nodes: graphStore.nodes, links: graphStore.links };
+}
+
+/* ── Data loaders ───────────────────────────────────────────────── */
+
+async function loadGraphByGroupId(groupId, onPage) {
+  resetGraphStore();
+  const pageSize = Number(clean(document.getElementById("pageSize").value) || "300");
+  let page = 1;
+  while (true) {
+    setStatus(`分页加载中: 第 ${page} 页`);
+    const data = await request(`/group-graph/api/graph?group_id=${encodeURIComponent(groupId)}&page=${page}&page_size=${encodeURIComponent(pageSize)}`);
+    for (const n of (data.nodes || [])) { const uid = clean(n.uid); if (uid) graphStore.nodeMap.set(uid, n); }
+    for (const r of (data.relations || [])) { const key = relationStoreKey(r); if (key) graphStore.linkMap.set(key, r); }
+    const graph = mapGraphData();
+    if (onPage) onPage(graph, page);
+    if (!data.nodes_has_more && !data.relations_has_more) break;
+    page += 1;
+  }
+  setStatus(`加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
+  return mapGraphData();
+}
+
+function loadDemoGraph() {
+  if (document.getElementById("groupId")) document.getElementById("groupId").value = "";
+  resetGraphStore();
+  const demoNodes = generateDemoNodes(DEMO_NODE_COUNT);
+  const demoLinks = generateDemoLinks(demoNodes);
+  demoNodes.forEach((node) => { const uid = clean(node.uid); if (uid) graphStore.nodeMap.set(uid, node); });
+  demoLinks.forEach((rel) => { const key = relationStoreKey(rel); if (key) graphStore.linkMap.set(key, rel); });
+  setStatus("已加载示例图谱");
+  return mapGraphData();
+}
+
+function sleep(ms) { return new Promise((resolve) => { window.setTimeout(resolve, ms); }); }
+
+async function loadDemoGraphByPage(onPage) {
+  resetGraphStore();
+  const demoNodes = generateDemoNodes(DEMO_NODE_COUNT);
+  const demoLinks = generateDemoLinks(demoNodes);
+  const total = Math.max(demoNodes.length, demoLinks.length);
+  let page = 1;
+  for (let start = 0; start < total; start += DEMO_PAGE_SIZE) {
+    const end = start + DEMO_PAGE_SIZE;
+    setStatus(`示例数据动态追加中: 第 ${page} 页`);
+    demoNodes.slice(start, end).forEach((node) => { const uid = clean(node.uid); if (uid) graphStore.nodeMap.set(uid, node); });
+    demoLinks.slice(start, end).forEach((rel) => { const key = relationStoreKey(rel); if (key) graphStore.linkMap.set(key, rel); });
+    const graph = mapGraphData();
+    if (onPage) onPage(graph, page);
+    page += 1;
+    await sleep(DEMO_PAGE_DELAY_MS);
+  }
+  setStatus(`示例加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
+  return mapGraphData();
+}
+
+/* ── Form helpers ───────────────────────────────────────────────── */
+
+function fillNodeForm(nodeRaw) {
+  if (!nodeRaw) return;
+  document.getElementById("nodeUid").value = clean(nodeRaw.uid);
+  document.getElementById("nodeName").value = clean(nodeRaw.name);
+  document.getElementById("nodeLabels").value = Array.isArray(nodeRaw.labels) ? nodeRaw.labels.join(",") : "";
+  document.getElementById("nodeDesc").value = clean(nodeRaw.description);
+  renderKv("nodePropsList", nodeRaw.properties || {});
+  renderKv("nodeMetaList", nodeRaw.meta || {});
+}
+
+function fillRelationForm(relRaw) {
+  if (!relRaw) return;
+  document.getElementById("relSource").value = clean(relRaw.source_uid);
+  document.getElementById("relTarget").value = clean(relRaw.target_uid);
+  document.getElementById("relType").value = relationLabel(relRaw);
+  document.getElementById("relDesc").value = clean(relRaw.description);
+  renderKv("relPropsList", relRaw.properties || {});
+}
+
+function nodePayload() {
+  const group_id = clean(document.getElementById("groupId").value);
+  const uid = clean(document.getElementById("nodeUid").value);
+  if (!group_id || !uid) throw new Error("group_id 和 uid 不能为空");
+  return {
+    group_id, uid,
+    name: clean(document.getElementById("nodeName").value),
+    labels: document.getElementById("nodeLabels").value.split(",").map((s) => clean(s)).filter(Boolean),
+    description: clean(document.getElementById("nodeDesc").value),
+    properties: collectKv("nodePropsList"),
+    meta: collectKv("nodeMetaList"),
+  };
+}
+
+function relationPayload() {
+  const group_id = clean(document.getElementById("groupId").value);
+  const source_uid = clean(document.getElementById("relSource").value);
+  const target_uid = clean(document.getElementById("relTarget").value);
+  const rel_type = clean(document.getElementById("relType").value);
+  if (!group_id || !source_uid || !target_uid || !rel_type) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
+  return {
+    group_id, source_uid, target_uid, rel_type,
+    description: clean(document.getElementById("relDesc").value),
+    properties: collectKv("relPropsList"),
+  };
+}
+
+async function mutate(path, method, payload) {
+  setStatus("执行中...");
+  await request(path, { method, body: JSON.stringify(payload) });
+  const gid = clean(document.getElementById("groupId").value);
+  if (!gid) { setStatus("操作成功"); return; }
+  await loadAndRenderGroup(gid);
+}
+
+/* ── Legend & type filtering (DOM-based) ────────────────────────── */
+
+let graphNodes = [];
+let graphLinks = [];
+let selectedLegendTypes = new Set();
+let searchKeyword = "";
+let searchDebounceTimer = null;
+
+function getNodeLabelKeys(node) {
+  const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
+  const out = [];
+  labels.forEach((label) => { const s = clean(label).toLowerCase(); if (s) out.push(s); });
+  if (!out.length) { const fallback = clean(node?.type || "Agent").toLowerCase(); if (fallback) out.push(fallback); }
+  return out;
+}
+
+function passTypeFilter(node) {
+  const hitType = !selectedLegendTypes.size || getNodeLabelKeys(node).some((k) => selectedLegendTypes.has(k));
+  if (!hitType) return false;
+  if (!searchKeyword) return true;
+  const labelList = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
+  const candidate = [
+    clean(node?.label).toLowerCase(), clean(node?.uid).toLowerCase(),
+    clean(node?.id).toLowerCase(), clean(node?.type).toLowerCase(),
+    clean(node?.raw?.name).toLowerCase(),
+    ...labelList.map((x) => clean(x).toLowerCase()),
+  ].join("|");
+  return candidate.includes(searchKeyword);
+}
+
 function renderLegend(nodes = []) {
   const legendList = document.getElementById("legendList");
   if (!legendList) return;
@@ -705,11 +893,8 @@ function renderLegend(nodes = []) {
       if (!label) return;
       const key = label.toLowerCase();
       if (byType.has(key)) return;
-
       const typeKey = toTypeKey(label);
-      const color = typeKey
-        ? (TYPE_META[typeKey]?.color || node.color || TYPE_META.Agent.color)
-        : (node.color || TYPE_META.Agent.color);
+      const color = typeKey ? (TYPE_META[typeKey]?.color || node.color || TYPE_META.Agent.color) : (node.color || TYPE_META.Agent.color);
       const display = typeKey ? typeDisplayName(typeKey) : label;
       byType.set(key, { key, display, color });
     });
@@ -720,10 +905,7 @@ function renderLegend(nodes = []) {
     item.className = "legend-item";
     item.textContent = "暂无节点";
     legendList.appendChild(item);
-    if (legendRoot) {
-      const oldActions = legendRoot.querySelector(".legend-actions");
-      if (oldActions) oldActions.remove();
-    }
+    if (legendRoot) { const oldActions = legendRoot.querySelector(".legend-actions"); if (oldActions) oldActions.remove(); }
     return;
   }
 
@@ -732,25 +914,17 @@ function renderLegend(nodes = []) {
     item.className = "legend-item";
     if (selectedLegendTypes.has(key)) item.classList.add("active");
     item.dataset.typeKey = key;
-
     const dot = document.createElement("div");
     dot.className = "legend-dot";
     dot.style.background = color;
-
     const text = document.createElement("span");
     text.textContent = display;
-
     item.appendChild(dot);
     item.appendChild(text);
     item.addEventListener("click", () => {
-      if (selectedLegendTypes.has(key)) {
-        selectedLegendTypes.delete(key);
-      } else {
-        selectedLegendTypes.add(key);
-      }
+      if (selectedLegendTypes.has(key)) selectedLegendTypes.delete(key); else selectedLegendTypes.add(key);
       renderLegend(graphNodes);
-      applyTypeFilter();
-      refreshSelectionStyles();
+      scheduleRender();
     });
     legendList.appendChild(item);
   });
@@ -768,8 +942,7 @@ function renderLegend(nodes = []) {
       if (!selectedLegendTypes.size) return;
       selectedLegendTypes.clear();
       renderLegend(graphNodes);
-      applyTypeFilter();
-      refreshSelectionStyles();
+      scheduleRender();
       setStatus("已重置类型筛选");
     });
     actions.appendChild(resetBtn);
@@ -777,547 +950,497 @@ function renderLegend(nodes = []) {
   }
 }
 
-/** 解析节点权重并收敛到 1~100。 */
-function parseWeight(node) {
-  const candidates = [node.weight, node.properties?.weight, node.properties?.score, node.meta?.score];
-  for (const value of candidates) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return Math.max(1, Math.min(100, Math.round(n)));
-  }
-  return 50;
-}
+/* ── Canvas rendering engine (ported from GraphPanel.vue) ───────── */
 
-/** 节点展示名：name > uid > Node。 */
-function nodeLabel(node) {
-  const name = clean(node.name);
-  if (name) return name;
-  return clean(node.uid) || "Node";
-}
-
-/** 关系展示名：rel_type > RELATED。 */
-function relationLabel(rel) {
-  return clean(rel.rel_type) || "RELATED";
-}
-
-/** 关系备用 key（用于缺少 relation_id 时兜底）。 */
-function relationKey(rel, index) {
-  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}:${index}`;
-}
-
-const graphStore = {
-  nodeMap: new Map(),
-  linkMap: new Map(),
-  nodes: [],
-  links: [],
-};
-
-/** 关系存储 key：优先 relation_id，其次 source/target/type。 */
-function relationStoreKey(rel) {
-  const relationId = clean(rel.relation_id);
-  if (relationId) return `rid:${relationId}`;
-  return `${clean(rel.source_uid)}=>${clean(rel.target_uid)}:${relationLabel(rel)}`;
-}
-
-/** 清空图谱缓存。 */
-function resetGraphStore() {
-  graphStore.nodeMap.clear();
-  graphStore.linkMap.clear();
-  graphStore.nodes = [];
-  graphStore.links = [];
-}
-
-/** 发起请求并统一 JSON/异常处理。 */
-async function request(pathOrUrl, options = {}) {
-  const method = (options.method || "GET").toUpperCase();
-  const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : apiUrl(pathOrUrl);
-  const init = { method, headers: { Accept: "application/json" } };
-  if (options.body !== undefined) {
-    init.headers["Content-Type"] = "application/json";
-    init.body = options.body;
-  }
-
-  const res = await fetch(url, init);
-  const text = await res.text();
-  let data = {};
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch (_e) {
-      throw new Error(`接口返回非 JSON: ${text.slice(0, 120)}`);
-    }
-  }
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
-
-/** 更新底部状态提示。 */
-function setStatus(text, isError = false) {
-  const el = document.getElementById("status");
-  el.textContent = text;
-  el.style.color = isError ? "#c53030" : "var(--muted)";
-}
-
-/** 从 graphStore 派生可渲染节点/关系，并过滤缺失端点关系。 */
-function mapGraphData() {
-  const nodesRaw = Array.from(graphStore.nodeMap.values());
-  const relsRaw = Array.from(graphStore.linkMap.values());
-  const nodeUidSet = new Set(graphStore.nodeMap.keys());
-  const degreeByUid = new Map();
-  const droppedRels = [];
-  const validRelsRaw = [];
-
-  // 只过滤关系，不过滤节点：关系两端 uid 只要有一端不在 nodeMap 中则丢弃。
-  relsRaw.forEach((r) => {
-    const suid = clean(r.source_uid);
-    const tuid = clean(r.target_uid);
-    if (!nodeUidSet.has(suid) || !nodeUidSet.has(tuid) || !suid || !tuid) {
-      droppedRels.push({ source_uid: suid, target_uid: tuid, rel_type: relationLabel(r) });
-      return;
-    }
-    validRelsRaw.push(r);
-    if (suid) degreeByUid.set(suid, (degreeByUid.get(suid) || 0) + 1);
-    if (tuid) degreeByUid.set(tuid, (degreeByUid.get(tuid) || 0) + 1);
-  });
-
-  const mappedNodes = nodesRaw.map((n, idx) => {
-    const type = parseType(n.labels, n.uid);
-    const meta = TYPE_META[type] || TYPE_META.Agent;
-    const uid = clean(n.uid);
-    const degree = degreeByUid.get(uid) || 0;
-    const dynamicR = Math.max(8, Math.min(26, meta.r + degree * 0.9));
-    return {
-      id: uid || String(idx + 1),
-      uid,
-      label: nodeLabel(n),
-      type,
-      weight: parseWeight(n),
-      color: meta.color,
-      bg: meta.bg,
-      r: dynamicR,
-      raw: n,
-    };
-  });
-
-  const idMap = new Map(mappedNodes.map((n) => [n.uid, n.id]));
-  const mappedLinks = [];
-  validRelsRaw.forEach((r, i) => {
-    const sUid = clean(r.source_uid);
-    const tUid = clean(r.target_uid);
-    const s = idMap.get(sUid);
-    const t = idMap.get(tUid);
-    if (!s || !t) {
-      droppedRels.push({ source_uid: sUid, target_uid: tUid, rel_type: relationLabel(r) });
-      return;
-    }
-    mappedLinks.push({
-      // use mapped node ids (from idMap) for source/target so D3 keys match
-      source: s,
-      target: t,
-      relation: relationLabel(r),
-      _key: relationStoreKey(r) || relationKey(r, i),
-      raw: r,
-    });
-  });
-  if (droppedRels.length) {
-    console.warn("[group-graph] skip invalid relations because endpoint node missing", droppedRels.slice(0, 20));
-  }
-  graphStore.nodes = mappedNodes;
-  graphStore.links = mappedLinks;
-  return { nodes: graphStore.nodes, links: graphStore.links };
-}
-
-/** 分页加载指定 group 的图谱数据并按页渲染。 */
-async function loadGraphByGroupId(groupId, onPage) {
-  resetGraphStore();
-  const pageSize = Number(clean(document.getElementById("pageSize").value) || "300");
-  let page = 1;
-
-  while (true) {
-    setStatus(`分页加载中: 第 ${page} 页`);
-    const data = await request(`/group-graph/api/graph?group_id=${encodeURIComponent(groupId)}&page=${page}&page_size=${encodeURIComponent(pageSize)}`);
-
-    for (const n of (data.nodes || [])) {
-      const uid = clean(n.uid);
-      if (!uid) continue;
-      graphStore.nodeMap.set(uid, n);
-    }
-
-    for (const r of (data.relations || [])) {
-      const key = relationStoreKey(r);
-      if (!key) continue;
-      graphStore.linkMap.set(key, r);
-    }
-
-    const graph = mapGraphData();
-    if (onPage) onPage(graph, page);
-
-    if (!data.nodes_has_more && !data.relations_has_more) break;
-    page += 1;
-  }
-
-  setStatus(`加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}`);
-  return mapGraphData();
-}
-
-/** 一次性加载示例数据。 */
-function loadDemoGraph() {
-  if (document.getElementById("groupId")) {
-    document.getElementById("groupId").value = "";
-  }
-  resetGraphStore();
-  DEMO_NODES.forEach((node) => {
-    const uid = clean(node.uid);
-    if (!uid) return;
-    graphStore.nodeMap.set(uid, node);
-  });
-  DEMO_LINKS.forEach((rel) => {
-    const key = relationStoreKey(rel);
-    if (!key) return;
-    graphStore.linkMap.set(key, rel);
-  });
-  setStatus("已加载示例图谱");
-  return mapGraphData();
-}
-
-/** 延时工具函数。 */
-function sleep(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-/** 按页动态追加示例数据，模拟真实分页加载。 */
-async function loadDemoGraphByPage(onPage) {
-  resetGraphStore();
-  const total = Math.max(DEMO_NODES.length, DEMO_LINKS.length);
-  let page = 1;
-  for (let start = 0; start < total; start += DEMO_PAGE_SIZE) {
-    const end = start + DEMO_PAGE_SIZE;
-    setStatus(`示例数据动态追加中: 第 ${page} 页`);
-
-    DEMO_NODES.slice(start, end).forEach((node) => {
-      const uid = clean(node.uid);
-      if (!uid) return;
-      graphStore.nodeMap.set(uid, node);
-    });
-    DEMO_LINKS.slice(start, end).forEach((rel) => {
-      const key = relationStoreKey(rel);
-      if (!key) return;
-      graphStore.linkMap.set(key, rel);
-    });
-
-    const graph = mapGraphData();
-    if (onPage) onPage(graph, page);
-    page += 1;
-    await sleep(DEMO_PAGE_DELAY_MS);
-  }
-  setStatus(`示例加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}（已过滤缺失端点关系）`);
-  return mapGraphData();
-}
-
-/** 将节点信息填充到节点编辑表单。 */
-function fillNodeForm(nodeRaw) {
-  if (!nodeRaw) return;
-  document.getElementById("nodeUid").value = clean(nodeRaw.uid);
-  document.getElementById("nodeName").value = clean(nodeRaw.name);
-  document.getElementById("nodeLabels").value = Array.isArray(nodeRaw.labels) ? nodeRaw.labels.join(",") : "";
-  document.getElementById("nodeDesc").value = clean(nodeRaw.description);
-  renderKv("nodePropsList", nodeRaw.properties || {});
-  renderKv("nodeMetaList", nodeRaw.meta || {});
-}
-
-/** 将关系信息填充到关系编辑表单。 */
-function fillRelationForm(relRaw) {
-  if (!relRaw) return;
-  document.getElementById("relSource").value = clean(relRaw.source_uid);
-  document.getElementById("relTarget").value = clean(relRaw.target_uid);
-  document.getElementById("relType").value = relationLabel(relRaw);
-  document.getElementById("relDesc").value = clean(relRaw.description);
-  renderKv("relPropsList", relRaw.properties || {});
-}
-
-/** 从节点编辑表单生成请求 payload。 */
-function nodePayload() {
-  const group_id = clean(document.getElementById("groupId").value);
-  const uid = clean(document.getElementById("nodeUid").value);
-  if (!group_id || !uid) throw new Error("group_id 和 uid 不能为空");
-  return {
-    group_id,
-    uid,
-    name: clean(document.getElementById("nodeName").value),
-    labels: document.getElementById("nodeLabels").value.split(",").map((s) => clean(s)).filter(Boolean),
-    description: clean(document.getElementById("nodeDesc").value),
-    properties: collectKv("nodePropsList"),
-    meta: collectKv("nodeMetaList"),
-  };
-}
-
-/** 从关系编辑表单生成请求 payload。 */
-function relationPayload() {
-  const group_id = clean(document.getElementById("groupId").value);
-  const source_uid = clean(document.getElementById("relSource").value);
-  const target_uid = clean(document.getElementById("relTarget").value);
-  const rel_type = clean(document.getElementById("relType").value);
-  if (!group_id || !source_uid || !target_uid || !rel_type) {
-    throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
-  }
-  return {
-    group_id,
-    source_uid,
-    target_uid,
-    rel_type,
-    description: clean(document.getElementById("relDesc").value),
-    properties: collectKv("relPropsList"),
-  };
-}
-
-/** 执行写操作并在当前 group 下自动刷新图谱。 */
-async function mutate(path, method, payload) {
-  setStatus("执行中...");
-  await request(path, { method, body: JSON.stringify(payload) });
-  const gid = clean(document.getElementById("groupId").value);
-  if (!gid) {
-    setStatus("操作成功");
-    return;
-  }
-  await loadAndRenderGroup(gid);
-}
-
-const svg = d3.select("#graph-svg");
-const root = d3.select("#graph-root");
-const defs = svg.select("defs");
-const tip = document.getElementById("tooltip");
-
+const canvasEl = document.getElementById("graph-canvas");
+let ctx = null;
+let W = 0, H = 0;
 let sim = null;
-let nodeSel = null;
-let linkSel = null;
-let edgeLabelSel = null;
-let selected = null;
-let graphNodes = [];
-let graphLinks = [];
-let linkForce = null;
-let linkLayer = null;
-let edgeLabelLayer = null;
-let nodeLayer = null;
-let selectedLegendTypes = new Set();
-let searchKeyword = "";
-let searchDebounceTimer = null;
+let quadtree = null;
+let transform = d3.zoomIdentity;
 
-/** 获取节点可用于筛选的标签 key 列表。 */
-function getNodeLabelKeys(node) {
-  const labels = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
-  const out = [];
-  labels.forEach((label) => {
-    const s = clean(label).toLowerCase();
-    if (s) out.push(s);
-  });
-  if (!out.length) {
-    const fallback = clean(node?.type || "Agent").toLowerCase();
-    if (fallback) out.push(fallback);
-  }
-  return out;
+let selectedNodeId = null;
+let hoveredNodeId = null;
+let hoveredEdgeIdx = -1;
+
+let rafId = null;
+let needRender = false;
+
+let _nodes = [];
+let _edges = [];
+
+function getColor(type) {
+  return TYPE_META[type]?.color || "#999";
 }
 
-/** 判断节点是否通过当前图例筛选。 */
-function passTypeFilter(node) {
-  const hitType = !selectedLegendTypes.size || getNodeLabelKeys(node).some((k) => selectedLegendTypes.has(k));
-  if (!hitType) return false;
-  if (!searchKeyword) return true;
-  const labelList = Array.isArray(node?.raw?.labels) ? node.raw.labels : [];
-  const candidate = [
-    clean(node?.label).toLowerCase(),
-    clean(node?.uid).toLowerCase(),
-    clean(node?.id).toLowerCase(),
-    clean(node?.type).toLowerCase(),
-    clean(node?.raw?.name).toLowerCase(),
-    ...labelList.map((x) => clean(x).toLowerCase()),
-  ].join("|");
-  return candidate.includes(searchKeyword);
-}
+/* ── Edge curvature geometry ──────────────────────────────────── */
 
-/** 应用类型筛选到节点、关系线和关系标签。 */
-function applyTypeFilter() {
-  if (!nodeSel || !linkSel || !edgeLabelSel) return;
-  const visibleNodeIds = new Set();
-  graphNodes.forEach((n) => {
-    if (passTypeFilter(n)) visibleNodeIds.add(n.id);
-  });
-  nodeSel.classed("filtered-out", (n) => !visibleNodeIds.has(n.id));
-  const isLinkVisible = (l) => {
-    const s = linkEndpointId(l.source);
-    const t = linkEndpointId(l.target);
-    return visibleNodeIds.has(s) && visibleNodeIds.has(t);
+function getEdgeControlPoint(edge) {
+  const sn = edge.source, tn = edge.target;
+  const sx = sn.x ?? 0, sy = sn.y ?? 0, tx = tn.x ?? 0, ty = tn.y ?? 0;
+  if (edge.curvature === 0) return { cx: (sx+tx)/2, cy: (sy+ty)/2 };
+  const dx = tx-sx, dy = ty-sy;
+  const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+  const ratio = 0.25 + (edge.pairTotal||1) * 0.05;
+  const offset = Math.max(35, dist * ratio);
+  return {
+    cx: (sx+tx)/2 - dy/dist * edge.curvature * offset,
+    cy: (sy+ty)/2 + dx/dist * edge.curvature * offset
   };
-  linkSel.classed("filtered-out", (l) => !isLinkVisible(l));
-  edgeLabelSel.classed("filtered-out", (l) => !isLinkVisible(l));
 }
 
-/** 确保三层画布分组存在：links / edge-labels / nodes。 */
-function ensureSceneLayers() {
-  if (!linkLayer) linkLayer = root.append("g").attr("data-layer", "links");
-  if (!edgeLabelLayer) edgeLabelLayer = root.append("g").attr("data-layer", "edge-labels");
-  if (!nodeLayer) nodeLayer = root.append("g").attr("data-layer", "nodes");
+function getEdgeMidpoint(edge) {
+  const sn = edge.source, tn = edge.target;
+  const sx = sn.x??0, sy = sn.y??0, tx = tn.x??0, ty = tn.y??0;
+  if (edge.isSelfLoop) return { x: sx + 70, y: sy };
+  const cp = getEdgeControlPoint(edge);
+  if (!cp) return { x:(sx+tx)/2, y:(sy+ty)/2 };
+  return { x: 0.25*sx + 0.5*cp.cx + 0.25*tx, y: 0.25*sy + 0.5*cp.cy + 0.25*ty };
 }
 
-/** 统一取关系端点 id（兼容对象与字符串）。 */
-function linkEndpointId(value) {
-  if (value && typeof value === "object") return value.id;
-  return value;
-}
-
-/** 基于关系 key 生成稳定渐变 id。 */
-function gradientIdFromKey(key) {
-  const text = String(key || "edge");
-  let hash = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+function sampleBezierPoint(edge, t) {
+  const sn = edge.source, tn = edge.target;
+  const sx = sn.x??0, sy = sn.y??0, tx = tn.x??0, ty = tn.y??0;
+  if (edge.isSelfLoop) {
+    const angle = t * Math.PI * 2;
+    return { x: sx + 30 * Math.cos(angle), y: sy + 30 * Math.sin(angle) - 15 };
   }
-  return `lg-${hash.toString(36)}`;
+  const cp = getEdgeControlPoint(edge);
+  if (!cp) return { x: sx + t*(tx-sx), y: sy + t*(ty-sy) };
+  const u = 1-t;
+  return { x: u*u*sx + 2*u*t*cp.cx + t*t*tx, y: u*u*sy + 2*u*t*cp.cy + t*t*ty };
 }
 
-/** 刷新选中态相关高亮/置灰样式。 */
-function refreshSelectionStyles() {
-  if (!nodeSel || !linkSel || !edgeLabelSel) return;
-  const visibleNodeIds = new Set();
-  graphNodes.forEach((n) => {
-    if (passTypeFilter(n)) visibleNodeIds.add(n.id);
-  });
-  const nodeVisible = (nodeId) => visibleNodeIds.has(nodeId);
-  const relVisible = (l) => {
-    const s = linkEndpointId(l.source);
-    const t = linkEndpointId(l.target);
-    return nodeVisible(s) && nodeVisible(t);
-  };
+/* ── Coordinate conversion & hit detection ────────────────────── */
 
-  if (!selected) {
-    nodeSel.classed("dimmed", false).classed("selected", false);
-    linkSel
-      .classed("dimmed", false)
-      .classed("highlighted", false)
-      .classed("dimmed-arrow", false)
-      .classed("highlighted-arrow", false);
-    edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
-    return;
-  }
-  if (!nodeVisible(selected)) {
-    selected = null;
-    nodeSel.classed("dimmed", false).classed("selected", false);
-    linkSel
-      .classed("dimmed", false)
-      .classed("highlighted", false)
-      .classed("dimmed-arrow", false)
-      .classed("highlighted-arrow", false);
-    edgeLabelSel.classed("dimmed", false).classed("highlighted", false);
-    document.getElementById("info-panel").classList.remove("visible");
-    return;
-  }
-
-  const neighbors = new Set([selected]);
-  graphLinks.forEach((l) => {
-    if (!relVisible(l)) return;
-    const s = linkEndpointId(l.source);
-    const t = linkEndpointId(l.target);
-    if (s === selected) neighbors.add(t);
-    if (t === selected) neighbors.add(s);
-  });
-  nodeSel.classed("dimmed", (n) => !neighbors.has(n.id)).classed("selected", (n) => n.id === selected);
-
-  const isRel = (l) => relVisible(l) && (linkEndpointId(l.source) === selected || linkEndpointId(l.target) === selected);
-  linkSel
-    .classed("dimmed", (l) => relVisible(l) && !isRel(l))
-    .classed("highlighted", isRel)
-    .classed("dimmed-arrow", (l) => relVisible(l) && !isRel(l))
-    .classed("highlighted-arrow", isRel);
-  edgeLabelSel.classed("dimmed", (l) => relVisible(l) && !isRel(l)).classed("highlighted", isRel);
+function toWorld(ex, ey) {
+  const rect = canvasEl.getBoundingClientRect();
+  return transform.invert([ex - rect.left, ey - rect.top]);
 }
 
-/** 将力导布局结果绘制到节点、边和标签。 */
-function drawPositions() {
-  if (linkSel) {
-    linkSel
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
-    linkSel.data().forEach((l) => {
-      defs.select(`#${l._gid}`)
-        .attr("x1", l.source.x)
-        .attr("y1", l.source.y)
-        .attr("x2", l.target.x)
-        .attr("y2", l.target.y);
-    });
-  }
-
-  if (edgeLabelSel) {
-    edgeLabelSel.attr("transform", (d) => {
-      const mx = (d.source.x + d.target.x) / 2;
-      const my = (d.source.y + d.target.y) / 2;
-      const dx = d.target.x - d.source.x;
-      const dy = d.target.y - d.source.y;
-      let a = Math.atan2(dy, dx) * 180 / Math.PI;
-      if (a > 90 || a < -90) a += 180;
-      return `translate(${mx},${my}) rotate(${a})`;
-    });
-  }
-
-  if (nodeSel) {
-    nodeSel.attr("transform", (d) => `translate(${d.x},${d.y})`);
-  }
+function findNodeAt(wx, wy, r = 18) {
+  return quadtree?.find(wx, wy, r) ?? null;
 }
 
-/** 清空当前选中节点。 */
-function clearSel() {
-  selected = null;
-  refreshSelectionStyles();
-  document.getElementById("info-panel").classList.remove("visible");
-}
-
-/**
- * 渲染前统一标准化节点/关系，并过滤掉端点不存在的关系。
- * 这里是最后一道防线，避免 forceLink 抛出 node not found。
- */
-function sanitizeGraphForRender(nodes, links) {
-  const normalizedNodes = (nodes || []).map((n) => {
-    const id = clean(n.id);
-    return { ...n, id };
-  });
-  const nodeById = new Map(normalizedNodes.map((n) => [n.id, n]));
-  const safeLinks = [];
-  const dropped = [];
-
-  (links || []).forEach((l, i) => {
-    const sourceId = clean(linkEndpointId(l.source));
-    const targetId = clean(linkEndpointId(l.target));
-    if (!sourceId || !targetId || !nodeById.has(sourceId) || !nodeById.has(targetId)) {
-      dropped.push({
-        source: sourceId,
-        target: targetId,
-        key: clean(l._key) || `link-${i}`,
-      });
-      return;
+function findEdgeAt(wx, wy, threshold = 8) {
+  for (let i = _edges.length - 1; i >= 0; i--) {
+    const e = _edges[i];
+    const src = e.source, tgt = e.target;
+    if (!src?.x || !tgt?.x) continue;
+    for (let t = 0; t <= 1; t += 0.05) {
+      const p = sampleBezierPoint(e, t);
+      const dx = p.x - wx, dy = p.y - wy;
+      if (Math.sqrt(dx*dx + dy*dy) < threshold) return i;
     }
-    safeLinks.push({
-      ...l,
-      source: sourceId,
-      target: targetId,
-      _key: clean(l._key) || `link-${i}`,
-    });
-  });
-
-  if (dropped.length) {
-    console.warn("[group-graph] render filter dropped invalid links", dropped.slice(0, 20));
   }
-  return { nodes: normalizedNodes, links: safeLinks };
+  return -1;
 }
 
-/** 渲染图谱主流程（包含过滤、防错、布局与交互绑定）。 */
-function render(nodes, links) {
-  ensureSceneLayers();
-  const sanitized = sanitizeGraphForRender(nodes, links);
-  const safeNodes = sanitized.nodes;
-  const safeLinks = sanitized.links;
+function buildQuadtree() {
+  quadtree = d3.quadtree().x(d => d.x ?? 0).y(d => d.y ?? 0).addAll(_nodes);
+}
 
-  const prevById = new Map((graphNodes || []).map((n) => [n.id, n]));
+/* ── RAF scheduling ───────────────────────────────────────────── */
+
+function scheduleRender() {
+  if (needRender) return;
+  needRender = true;
+  rafId = requestAnimationFrame(drawFrame);
+}
+
+/* ── Canvas init ──────────────────────────────────────────────── */
+
+function initCanvas() {
+  const container = document.getElementById("app");
+  W = container.clientWidth;
+  H = container.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  canvasEl.width = W * dpr;
+  canvasEl.height = H * dpr;
+  canvasEl.style.width = W + "px";
+  canvasEl.style.height = H + "px";
+  ctx = canvasEl.getContext("2d");
+  ctx.scale(dpr, dpr);
+}
+
+/* ── Interaction state ─────────────────────────────────────────── */
+
+let dragging = null;
+let dragStartWX = 0, dragStartWY = 0;
+let isDragging = false;
+
+let panning = false;
+let panStartX = 0, panStartY = 0;
+let panStartTX = 0, panStartTY = 0;
+
+let _showInfoTimer = null;
+let _hideInfoTimer = null;
+
+function showNodeInfo(node, immediate) {
+  if (_hideInfoTimer) { clearTimeout(_hideInfoTimer); _hideInfoTimer = null; }
+  const doShow = () => {
+    const cc = _edges.filter(ed => !ed.isSelfLoop && (ed.source?.id === node.id || ed.target?.id === node.id)).length;
+    document.getElementById("p-type").textContent = typeDisplayName(node.type);
+    document.getElementById("p-type").style.color = node.color;
+    document.getElementById("p-name").textContent = node.label;
+    document.getElementById("p-name").style.color = node.color;
+    document.getElementById("p-conn").textContent = cc;
+    document.getElementById("p-weight").textContent = node.weight + " / 100";
+    document.getElementById("p-id").textContent = "#" + node.id;
+    document.getElementById("info-panel").classList.add("visible");
+  };
+  if (immediate) { doShow(); return; }
+  if (_showInfoTimer) clearTimeout(_showInfoTimer);
+  _showInfoTimer = setTimeout(doShow, 150);
+}
+
+function hideNodeInfo(immediate) {
+  if (_showInfoTimer) { clearTimeout(_showInfoTimer); _showInfoTimer = null; }
+  const doHide = () => { document.getElementById("info-panel").classList.remove("visible"); };
+  if (immediate) { doHide(); return; }
+  if (_hideInfoTimer) clearTimeout(_hideInfoTimer);
+  _hideInfoTimer = setTimeout(doHide, 300);
+}
+
+function _isNeighbor(nodeId, selId) {
+  return _edges.some(e => !e.isSelfLoop && (
+    (e.source?.id === selId && e.target?.id === nodeId) ||
+    (e.target?.id === selId && e.source?.id === nodeId)
+  ));
+}
+
+function onPointerMove(e) {
+  if (dragging) {
+    const [wx, wy] = toWorld(e.clientX, e.clientY);
+    const dx = wx - dragStartWX, dy = wy - dragStartWY;
+    if (!isDragging && Math.sqrt(dx*dx + dy*dy) > 4) {
+      isDragging = true;
+      sim.alphaTarget(0.3).restart();
+    }
+    if (isDragging) { dragging.fx = wx; dragging.fy = wy; }
+    return;
+  }
+  if (panning) {
+    transform = d3.zoomIdentity
+      .translate(panStartTX + (e.clientX - panStartX), panStartTY + (e.clientY - panStartY))
+      .scale(transform.k);
+    scheduleRender();
+    return;
+  }
+  const [wx, wy] = toWorld(e.clientX, e.clientY);
+  const node = findNodeAt(wx, wy, 18);
+  const prevHovN = hoveredNodeId;
+  const prevHovE = hoveredEdgeIdx;
+  if (selectedNodeId && node && node.id !== selectedNodeId && !_isNeighbor(node.id, selectedNodeId)) {
+    hoveredNodeId = null;
+  } else {
+    hoveredNodeId = node ? node.id : null;
+  }
+  if(!hoveredNodeId && selectedNodeId){
+    hoveredNodeId = selectedNodeId;
+  }
+  hoveredEdgeIdx = (!node && !selectedNodeId) ? findEdgeAt(wx, wy) : -1;
+  canvasEl.style.cursor = (hoveredNodeId || hoveredEdgeIdx >= 0) ? "pointer" : "default";
+  if (hoveredNodeId !== prevHovN || hoveredEdgeIdx !== prevHovE) {
+    if (hoveredNodeId) {
+      const n = _nodes.find(nd => nd.id === hoveredNodeId);
+      if (n) showNodeInfo(n);
+    } else if (!selectedNodeId) {
+      hideNodeInfo();
+    }
+    scheduleRender();
+  }
+}
+
+function onPointerDown(e) {
+  if (e.button !== 0) return;
+  const [wx, wy] = toWorld(e.clientX, e.clientY);
+  const node = findNodeAt(wx, wy, 18);
+  if (node) {
+    canvasEl.setPointerCapture(e.pointerId);
+    dragging = node;
+    dragStartWX = wx; dragStartWY = wy;
+    isDragging = false;
+    dragging.fx = dragging.x; dragging.fy = dragging.y;
+  } else {
+    canvasEl.setPointerCapture(e.pointerId);
+    panning = true;
+    panStartX = e.clientX; panStartY = e.clientY;
+    panStartTX = transform.x; panStartTY = transform.y;
+    canvasEl.style.cursor = "grabbing";
+  }
+}
+
+function onPointerUp(e) {
+  if (dragging) {
+    if (isDragging) sim.alphaTarget(0);
+    dragging.fx = null; dragging.fy = null;
+    dragging = null; isDragging = false;
+  }
+  if (panning) { panning = false; canvasEl.style.cursor = "default"; }
+}
+
+function onPointerLeave() {
+  if (panning) { panning = false; canvasEl.style.cursor = "default"; }
+  if (hoveredNodeId !== null || hoveredEdgeIdx !== -1) {
+    hoveredNodeId = null; hoveredEdgeIdx = -1;
+    canvasEl.style.cursor = "default";
+    if (!selectedNodeId) hideNodeInfo();
+    scheduleRender();
+  }
+}
+
+function onClick(e) {
+  const [wx, wy] = toWorld(e.clientX, e.clientY);
+  const node = findNodeAt(wx, wy, 18);
+  if (node) {
+    if (selectedNodeId === node.id) {
+      clearSel();
+    } else {
+      selectedNodeId = node.id;
+      fillNodeForm(node.raw);
+      showNodeInfo(node, true);
+      scheduleRender();
+    }
+    return;
+  }
+  const edgeIdx = findEdgeAt(wx, wy);
+  if (edgeIdx >= 0) {
+    fillRelationForm(_edges[edgeIdx].raw);
+    scheduleRender();
+    return;
+  }
+  selectedNodeId = null;
+  hideNodeInfo(true);
+  scheduleRender();
+}
+
+function clearSel() {
+  selectedNodeId = null;
+  hideNodeInfo(true);
+  scheduleRender();
+}
+
+/* ── Zoom (wheel only, pan via pointer) ──────────────────────── */
+
+canvasEl.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const rect = canvasEl.getBoundingClientRect();
+  const mx = event.clientX - rect.left;
+  const my = event.clientY - rect.top;
+  const delta = -event.deltaY * (event.deltaMode === 1 ? 30 : 1);
+  const factor = Math.pow(1.001, delta);
+  const newK = Math.min(4, Math.max(0.1, transform.k * factor));
+  const tx = mx - (mx - transform.x) * (newK / transform.k);
+  const ty = my - (my - transform.y) * (newK / transform.k);
+  transform = d3.zoomIdentity.translate(tx, ty).scale(newK);
+  document.getElementById("s-zoom").textContent = newK.toFixed(2) + "×";
+  scheduleRender();
+}, { passive: false });
+
+canvasEl.addEventListener("pointermove", onPointerMove);
+canvasEl.addEventListener("pointerdown", onPointerDown);
+canvasEl.addEventListener("pointerup", onPointerUp);
+canvasEl.addEventListener("pointercancel", onPointerUp);
+canvasEl.addEventListener("pointerleave", onPointerLeave);
+canvasEl.addEventListener("click", onClick);
+
+/* ── Canvas draw ───────────────────────────────────────────────── */
+
+function drawFrame() {
+  needRender = false;
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(transform.x, transform.y);
+  ctx.scale(transform.k, transform.k);
+
+  const k = transform.k;
+  const vx0 = (-transform.x) / k - 100;
+  const vy0 = (-transform.y) / k - 100;
+  const vx1 = (W - transform.x) / k + 100;
+  const vy1 = (H - transform.y) / k + 100;
+
+  const hasHover = hoveredNodeId !== null || hoveredEdgeIdx >= 0;
+  const focusNodeId = hoveredNodeId || (hasHover ? null : selectedNodeId);
+  const activeEdgeIdx = hoveredEdgeIdx >= 0 ? hoveredEdgeIdx : (hasHover ? -1 : -1);
+  const focusEdgeObj = !focusNodeId && activeEdgeIdx >= 0 ? (_edges[activeEdgeIdx] ?? null) : null;
+  const focusEdgeNodeIds = focusEdgeObj
+    ? new Set([focusEdgeObj.source?.id, focusEdgeObj.target?.id].filter(Boolean))
+    : null;
+
+  drawEdges(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds, activeEdgeIdx);
+  drawNodes(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds);
+
+  ctx.restore();
+}
+
+function drawEdges(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds, activeEdgeIdx) {
+  const hasFocus = !!(focusNodeId || focusEdgeObj);
+  const visibleNodeIds = new Set();
+  graphNodes.forEach((n) => { if (passTypeFilter(n)) visibleNodeIds.add(n.id); });
+
+  _edges.forEach((edge, i) => {
+    const sn = edge.source, tn = edge.target;
+    if (!sn?.x || !tn?.x) return;
+    const sx = sn.x, sy = sn.y, tx = tn.x, ty = tn.y;
+    if (Math.max(sx,tx)<vx0 || Math.min(sx,tx)>vx1 || Math.max(sy,ty)<vy0 || Math.min(sy,ty)>vy1) return;
+    if (!visibleNodeIds.has(sn.id) || !visibleNodeIds.has(tn.id)) return;
+
+    const isThisEdge = i === activeEdgeIdx;
+    const isNodeLinked = focusNodeId && (sn.id === focusNodeId || tn.id === focusNodeId);
+    const isActive = isThisEdge || isNodeLinked;
+
+    ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.10) : 0.55;
+    ctx.beginPath();
+    ctx.lineWidth = isActive ? 2.5/k : 1.6/k;
+    ctx.strokeStyle = isThisEdge ? '#3498db' : isNodeLinked ? '#9b59b6' : '#C0C0C0';
+
+    if (edge.isSelfLoop) {
+      ctx.arc(sx + 20, sy - 20, 22, 0, Math.PI * 2);
+    } else {
+      const cp = getEdgeControlPoint(edge);
+      ctx.moveTo(sx, sy);
+      if (cp && edge.curvature !== 0) {
+        ctx.quadraticCurveTo(cp.cx, cp.cy, tx, ty);
+      } else {
+        ctx.lineTo(tx, ty);
+      }
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    if (edge.name) {
+      if (hasFocus && !isActive) return;
+      const mid = getEdgeMidpoint(edge);
+      const label = edge.name.length > 14 ? edge.name.slice(0, 14) + '…' : edge.name;
+      const fs = Math.max(9, 9/k);
+      ctx.font = `${fs}px 'JetBrains Mono', monospace`;
+      const tw = ctx.measureText(label).width;
+      const th = fs * 1.4;
+      const isHighlightedLabel = isThisEdge || isNodeLinked;
+
+      ctx.fillStyle = isHighlightedLabel ? 'rgba(155,89,182,0.12)' : 'rgba(255,255,255,0.95)';
+      ctx.beginPath();
+      ctx.roundRect(mid.x - tw/2 - 4, mid.y - th/2 - 2, tw + 8, th + 4, 3/k);
+      ctx.fill();
+
+      ctx.fillStyle = isThisEdge ? '#3498db' : isNodeLinked ? '#9b59b6' : '#666';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, mid.x, mid.y);
+    }
+  });
+}
+
+function drawNodes(vx0, vy0, vx1, vy1, k, focusNodeId, focusEdgeObj, focusEdgeNodeIds) {
+  const hasFocus = !!(focusNodeId || focusEdgeObj);
+  const visibleNodeIds = new Set();
+  graphNodes.forEach((n) => { if (passTypeFilter(n)) visibleNodeIds.add(n.id); });
+
+  _nodes.forEach(node => {
+    const x = node.x ?? 0, y = node.y ?? 0;
+    if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
+    if (!visibleNodeIds.has(node.id)) return;
+
+    const BASE_R = node.r ?? 10;
+    const isNodeFocus = node.id === focusNodeId;
+    const isNodeNeighbor = focusNodeId && !isNodeFocus && _edges.some(e =>
+      !e.isSelfLoop && (
+        (e.source?.id === focusNodeId && e.target?.id === node.id) ||
+        (e.target?.id === focusNodeId && e.source?.id === node.id)
+      )
+    );
+    const isEdgeFocusNode = focusEdgeNodeIds?.has(node.id);
+    const isSelectedNode = node.id === selectedNodeId;
+    const isFocus = isNodeFocus || isEdgeFocusNode || isSelectedNode;
+    const isActive = hasFocus ? (isFocus || isNodeNeighbor) : true;
+    const r = isFocus ? BASE_R * 1.3 : BASE_R;
+
+    ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.15) : 1;
+
+    if (isFocus) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 5/k, 0, Math.PI*2);
+      ctx.strokeStyle = node.color;
+      ctx.lineWidth = 2.5/k;
+      ctx.globalAlpha = 0.35;
+      ctx.stroke();
+      ctx.globalAlpha = hasFocus ? (isActive ? 1 : 0.15) : 1;
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = node.color;
+    ctx.fill();
+
+    ctx.strokeStyle = isFocus ? '#333' : '#fff';
+    ctx.lineWidth = (isFocus ? 3 : 2.5) / k;
+    ctx.stroke();
+
+    if (k > 0.6) {
+      const showFull = isActive;
+      const rawName = node.name || node.label || '';
+      const label = showFull
+        ? (rawName.length > 16 ? rawName.slice(0, 16) + '…' : rawName)
+        : (rawName.length > 8 ? rawName.slice(0, 8) + '…' : rawName);
+      const fs = showFull ? Math.max(12, 12/k) : Math.max(11, 11/k);
+      const weight = showFull ? '600' : '500';
+
+      ctx.font = `${weight} ${fs}px 'JetBrains Mono', monospace`;
+      const lx = x + r + 5/k;
+      const ly = y;
+
+      if (showFull) {
+        ctx.globalAlpha = 1;
+        const tw = ctx.measureText(label).width;
+        const pad = 5/k;
+        const bh = (fs + 8) / k;
+        ctx.shadowColor = 'rgba(0,0,0,0.18)';
+        ctx.shadowBlur = 6/k;
+        ctx.shadowOffsetY = 2/k;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.roundRect(lx - pad, ly - bh/2, tw + pad*2, bh, bh/2);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = node.color;
+        ctx.lineWidth = 1.5/k;
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = showFull ? '#111' : '#555';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx, ly);
+    }
+    ctx.globalAlpha = 1;
+  });
+}
+
+/* ── Main render: build edges, setup simulation, draw ────────────── */
+
+function render(nodes, links) {
+  initCanvas();
+
+  const safeNodes = (nodes || []).map((n, i) => ({ ...n, id: clean(n.id) || String(i + 1) }));
+  const nodeById = new Map(safeNodes.map((n) => [n.id, n]));
+
+  const safeLinks = (links || []).filter((l) => {
+    const s = clean(typeof l.source === "object" ? l.source?.id : l.source);
+    const t = clean(typeof l.target === "object" ? l.target?.id : l.target);
+    return s && t && nodeById.has(s) && nodeById.has(t);
+  }).map((l) => ({
+    ...l,
+    source: clean(typeof l.source === "object" ? l.source?.id : l.source),
+    target: clean(typeof l.target === "object" ? l.target?.id : l.target),
+  }));
+
+  // Preserve positions from previous frame
+  const prevById = new Map((_nodes || []).map((n) => [n.id, n]));
   safeNodes.forEach((n) => {
     const prev = prevById.get(n.id);
     if (!prev) return;
@@ -1325,342 +1448,161 @@ function render(nodes, links) {
     if (Number.isFinite(prev.y)) n.y = prev.y;
     if (Number.isFinite(prev.vx)) n.vx = prev.vx;
     if (Number.isFinite(prev.vy)) n.vy = prev.vy;
-    if (Number.isFinite(prev.fx)) n.fx = prev.fx;
-    if (Number.isFinite(prev.fy)) n.fy = prev.fy;
   });
 
   graphNodes = safeNodes;
-  graphLinks = safeLinks.map((l) => ({
-    ...l,
-    source: linkEndpointId(l.source),
-    target: linkEndpointId(l.target),
-  }));
+  graphLinks = safeLinks;
 
   document.getElementById("s-nodes").textContent = safeNodes.length;
-  document.getElementById("s-links").textContent = graphLinks.length;
+  document.getElementById("s-links").textContent = safeLinks.length;
   renderLegend(safeNodes);
 
-  const nodeById = new Map(safeNodes.map((n) => [n.id, n]));
-  graphLinks.forEach((l) => {
-    l._gid = gradientIdFromKey(l._key);
+  // ── Build _edges with curvature (from Vue component) ──
+  const edgePairCount = {};
+  const tempEdges = safeLinks;
+  tempEdges.forEach(e => {
+    const pk = [e.source, e.target].sort().join('_');
+    edgePairCount[pk] = (edgePairCount[pk] || 0) + 1;
   });
 
-  defs.selectAll("linearGradient.edge-gradient").remove();
-  linkLayer.selectAll("*").remove();
-  edgeLabelLayer.selectAll("*").remove();
-  nodeLayer.selectAll("*").remove();
-
-  graphLinks.forEach(function (d) {
-    const g = defs.append("linearGradient").attr("class", "edge-gradient").attr("id", d._gid).attr("gradientUnits", "userSpaceOnUse");
-    g.append("stop").attr("class", "from-stop").attr("offset", "0%").attr("stop-opacity", 0.6);
-    g.append("stop").attr("class", "to-stop").attr("offset", "100%").attr("stop-opacity", 0.6);
-    const sid = linkEndpointId(d.source);
-    const tid = linkEndpointId(d.target);
-    const sn = nodeById.get(sid);
-    const tn = nodeById.get(tid);
-    g.select("stop.from-stop").attr("stop-color", sn ? sn.color : "#7a82a0");
-    g.select("stop.to-stop").attr("stop-color", tn ? tn.color : "#7a82a0");
+  const edgePairIndex = {};
+  _edges = tempEdges.map((e, i) => {
+    const pk = [e.source, e.target].sort().join('_');
+    const total = edgePairCount[pk];
+    const idx = edgePairIndex[pk] || 0;
+    edgePairIndex[pk] = idx + 1;
+    const isReversed = e.source > e.target;
+    let curvature = 0;
+    if (total > 1) {
+      const range = Math.min(1.2, 0.6 + total * 0.15);
+      curvature = ((idx / (total - 1)) - 0.5) * range * 2;
+      if (isReversed) curvature = -curvature;
+    }
+    return {
+      source: e.source, target: e.target,
+      name: e.relation || 'RELATED',
+      curvature, isSelfLoop: false,
+      pairIndex: idx, pairTotal: total,
+      raw: e.raw,
+    };
   });
 
-  if (!linkForce) linkForce = d3.forceLink().id((d) => clean(d.id));
-  linkForce.id((d) => clean(d.id));
-
-  // 必须先更新 simulation nodes，再挂载 links，避免 forceLink 在旧节点上下文抛 node not found。
-  if (!sim) {
-    sim = d3.forceSimulation(safeNodes)
-      .force("charge", d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH))
-      .force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2))
-      .force("x", d3.forceX(window.innerWidth / 2).strength(FORCE_CENTER_PULL_STRENGTH))
-      .force("y", d3.forceY(window.innerHeight / 2).strength(FORCE_CENTER_PULL_STRENGTH))
-      .force("collision", d3.forceCollide().radius((d) => d.r + FORCE_COLLISION_PADDING));
-  } else {
-    sim.nodes(safeNodes);
-    sim.force("charge", d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH));
-    sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-    sim.force("x", d3.forceX(window.innerWidth / 2).strength(FORCE_CENTER_PULL_STRENGTH));
-    sim.force("y", d3.forceY(window.innerHeight / 2).strength(FORCE_CENTER_PULL_STRENGTH));
-    sim.force("collision", d3.forceCollide().radius((d) => d.r + FORCE_COLLISION_PADDING));
-  }
-
-  linkForce.distance((d) => {
-    const sid = linkEndpointId(d.source);
-    const tid = linkEndpointId(d.target);
-    const s = nodeById.get(sid);
-    const t = nodeById.get(tid);
-    return FORCE_LINK_BASE_DISTANCE + ((s?.r ?? 10) + (t?.r ?? 10)) * FORCE_LINK_RADIUS_FACTOR;
+  // ── Degree → node radius (log scale from Vue) ──
+  const degreeMap = {};
+  _edges.forEach(e => {
+    degreeMap[e.source] = (degreeMap[e.source] || 0) + 1;
+    degreeMap[e.target] = (degreeMap[e.target] || 0) + 1;
   });
-  try {
-    linkForce.links(graphLinks);
-  } catch (e) {
-    const nodeIdSample = Array.from(nodeById.keys()).slice(0, 20);
-    const badLinks = graphLinks
-      .filter((l) => !nodeById.has(clean(linkEndpointId(l.source))) || !nodeById.has(clean(linkEndpointId(l.target))))
-      .slice(0, 20)
-      .map((l) => ({
-        key: l._key,
-        source: clean(linkEndpointId(l.source)),
-        target: clean(linkEndpointId(l.target)),
-      }));
-    console.error("[group-graph] forceLink init failed", { message: e?.message, badLinks, nodeIdSample });
-    throw e;
-  }
-  sim.force("link", linkForce);
+  const maxDegree = Math.max(1, ...Object.values(degreeMap));
+  _nodes = safeNodes.map(n => ({
+    ...n,
+    degree: degreeMap[n.id] || 0,
+    r: 6 + Math.log1p(degreeMap[n.id] || 0) / Math.log1p(maxDegree) * 18,
+    name: n.label,
+  }));
 
-  graphLinks.forEach(function (d) {
-    linkLayer.append("line").attr("class", "link").datum(d);
-  });
-  linkSel = linkLayer.selectAll("line.link")
-    .attr("stroke", (d) => `url(#${d._gid})`)
-    .attr("stroke-width", 1.6)
-    .attr("stroke-opacity", 0.55)
-    .attr("marker-end", "url(#arr-end)")
-    .on("click", (e, d) => {
-      e.stopPropagation();
-      fillRelationForm(d.raw);
-    });
+  // ── Force simulation ──
+  sim?.stop();
+  sim = d3.forceSimulation(_nodes)
+    .force('link', d3.forceLink(_edges).id(d => d.id)
+      .distance(d => FORCE_LINK_BASE_DISTANCE + ((d.pairTotal || 1) - 1) * 50)
+      .iterations(1))
+    .force('charge', d3.forceManyBody().strength(FORCE_CHARGE_STRENGTH).distanceMax(300))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collide', d3.forceCollide(d => (d.r ?? 10) + FORCE_COLLISION_PADDING))
+    .force('x', d3.forceX(W / 2).strength(FORCE_CENTER_PULL_STRENGTH))
+    .force('y', d3.forceY(H / 2).strength(FORCE_CENTER_PULL_STRENGTH))
+    .alphaDecay(0.03)
+    .velocityDecay(0.4)
+    // .alphaDecay(0.005)
+    // .velocityDecay(0.2)
+    .on('tick', () => { buildQuadtree(); scheduleRender(); });
+    // .stop();
 
-  graphLinks.forEach(function (d) {
-    const g = edgeLabelLayer.append("g").attr("class", "edge-label-group").datum(d);
-    g.append("rect").attr("class", "edge-label-bg").attr("height", 13).attr("rx", 3).attr("opacity", 0.9);
-    g.append("text").attr("class", "edge-label-text");
-  });
-  edgeLabelSel = edgeLabelLayer.selectAll("g.edge-label-group").on("click", (e, d) => {
-    e.stopPropagation();
-    fillRelationForm(d.raw);
-  });
-  edgeLabelSel.select("text.edge-label-text").text((d) => d.relation);
-  edgeLabelSel.each(function (d) {
-    const g = d3.select(this);
-    const sid = linkEndpointId(d.source);
-    const sn = nodeById.get(sid);
-    g.select("text").attr("fill", sn ? sn.color : "#7a82a0");
-    const tw = g.select("text").node().getBBox().width + 8;
-    g.select("rect").attr("width", tw).attr("x", -tw / 2).attr("y", -6.5);
-  });
+  // for (let i = 0; i < 300; i++) sim.tick();
 
-  safeNodes.forEach(function (d) {
-    const g = nodeLayer.append("g").attr("class", "node-group").datum(d);
-    g.append("circle").attr("class", "node-ring");
-    g.append("circle").attr("class", "node-outer");
-    g.append("circle").attr("class", "node-circle");
-    g.append("circle").attr("class", "node-inner");
-    g.append("text").attr("class", "node-label");
-  });
-  nodeSel = nodeLayer.selectAll("g.node-group");
-
-  nodeSel.select("circle.node-ring")
-    .attr("r", (d) => d.r + 5)
-    .attr("stroke", (d) => d.color).attr("stroke-width", 1.5)
-    .attr("fill", "none").attr("opacity", 0.35)
-    .style("animation-delay", (_d, i) => `${(i * 0.19) % 2.6}s`);
-
-  nodeSel.select("circle.node-outer").attr("r", (d) => d.r + 1).attr("fill", (d) => d.color).attr("fill-opacity", 0.12);
-  nodeSel.select("circle.node-circle")
-    .attr("r", (d) => d.r)
-    .attr("fill", (d) => d.bg)
-    .attr("stroke", (d) => d.color).attr("stroke-width", 2)
-    .attr("filter", "url(#f-soft)");
-  nodeSel.select("circle.node-inner").attr("r", (d) => d.r * 0.3).attr("fill", (d) => d.color);
-  nodeSel.select("text.node-label").attr("y", (d) => d.r + 15).attr("fill", (d) => d.color).text((d) => d.label);
-
-  nodeSel.call(d3.drag()
-    .on("start", (e, d) => {
-      if (!e.active) sim.alpha(0.2).restart();
-      d.fx = d.x;
-      d.fy = d.y;
-    })
-    .on("drag", (e, d) => {
-      d.fx = e.x;
-      d.fy = e.y;
-      drawPositions();
-    })
-    .on("end", (e, d) => {
-      if (!e.active) sim.alpha(0);
-      d.fx = null;
-      d.fy = null;
-      sim.stop();
-      drawPositions();
-    }));
-
-  sim.on("tick", drawPositions);
-  sim.alpha(0.9);
-  for (let i = 0; i < 120; i += 1) {
-    sim.tick();
-  }
-  drawPositions();
-  sim.stop();
-
-  nodeSel.on("click", (e, d) => {
-    e.stopPropagation();
-    if (!passTypeFilter(d)) return;
-    fillNodeForm(d.raw);
-
-    if (selected === d.id) { clearSel(); return; }
-    selected = d.id;
-    const nb = new Set([d.id]);
-    graphLinks.forEach((l) => {
-      const s = linkEndpointId(l.source);
-      const t = linkEndpointId(l.target);
-      if (s === d.id) nb.add(t);
-      if (t === d.id) nb.add(s);
-    });
-    nodeSel.classed("dimmed", (n) => !nb.has(n.id)).classed("selected", (n) => n.id === d.id);
-    const isRel = (l) => linkEndpointId(l.source) === d.id || linkEndpointId(l.target) === d.id;
-    linkSel
-      .classed("dimmed", (l) => !isRel(l))
-      .classed("highlighted", isRel)
-      .classed("dimmed-arrow", (l) => !isRel(l))
-      .classed("highlighted-arrow", isRel);
-    edgeLabelSel.classed("dimmed", (l) => !isRel(l)).classed("highlighted", isRel);
-
-    const cc = graphLinks.filter(isRel).length;
-    document.getElementById("p-type").textContent = typeDisplayName(d.type);
-    document.getElementById("p-type").style.color = d.color;
-    document.getElementById("p-name").textContent = d.label;
-    document.getElementById("p-name").style.color = d.color;
-    document.getElementById("p-conn").textContent = cc;
-    document.getElementById("p-weight").textContent = d.weight + " / 100";
-    document.getElementById("p-id").textContent = "#" + d.id;
-    document.getElementById("info-panel").classList.add("visible");
-  });
-
-  nodeSel
-    .on("mouseenter", (_e, d) => { tip.style.opacity = "1"; tip.style.background = d.color; tip.textContent = `${d.label} · ${d.type} · weight ${d.weight}`; })
-    .on("mousemove", (e) => { tip.style.left = `${e.clientX + 14}px`; tip.style.top = `${e.clientY - 10}px`; })
-    .on("mouseleave", () => { tip.style.opacity = "0"; });
-
-  applyTypeFilter();
-  refreshSelectionStyles();
+  buildQuadtree();
+  scheduleRender();
 }
 
-const zoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
-  root.attr("transform", e.transform);
-  document.getElementById("s-zoom").textContent = e.transform.k.toFixed(2) + "×";
+/* ── Event bindings ─────────────────────────────────────────────── */
+
+function zoomTo(newK) {
+  const cx = W / 2, cy = H / 2;
+  const tx = cx - (cx - transform.x) * (newK / transform.k);
+  const ty = cy - (cy - transform.y) * (newK / transform.k);
+  transform = d3.zoomIdentity.translate(tx, ty).scale(newK);
+  document.getElementById("s-zoom").textContent = newK.toFixed(2) + "×";
+  scheduleRender();
+}
+
+document.getElementById("btn-zoom-in").addEventListener("click", () => zoomTo(Math.min(4, transform.k * 1.35)));
+document.getElementById("btn-zoom-out").addEventListener("click", () => zoomTo(Math.max(0.1, transform.k * 0.74)));
+document.getElementById("btn-reset").addEventListener("click", () => {
+  transform = d3.zoomIdentity;
+  document.getElementById("s-zoom").textContent = "1.00×";
+  scheduleRender();
 });
-svg.call(zoom);
-svg.on("click", () => clearSel());
-document.getElementById("panel-close").addEventListener("click", clearSel);
 
-/** 保留按钮语义：当前版本不启用随机移动。 */
-function shuffleGraph() {
-  setStatus("自动移动动画已关闭");
-}
-
-/** 加载并渲染指定 group（分页追加）。 */
 async function loadAndRenderGroup(groupId) {
-  await loadGraphByGroupId(groupId, (paged) => {
-    render(paged.nodes, paged.links);
-  });
+  await loadGraphByGroupId(groupId, (paged) => { render(paged.nodes, paged.links); });
 }
-
-document.getElementById("btn-zoom-in").addEventListener("click", () => svg.transition().duration(280).call(zoom.scaleBy, 1.35));
-document.getElementById("btn-zoom-out").addEventListener("click", () => svg.transition().duration(280).call(zoom.scaleBy, 0.74));
-document.getElementById("btn-reset").addEventListener("click", () => svg.transition().duration(460).call(zoom.transform, d3.zoomIdentity));
-document.getElementById("btn-shuffle").addEventListener("click", shuffleGraph);
 
 document.getElementById("btnLoad").addEventListener("click", async () => {
   try {
     const groupId = clean(document.getElementById("groupId").value);
-    if (!groupId) {
-      setStatus("group_id 不能为空", true);
-      return;
-    }
+    if (!groupId) { setStatus("group_id 不能为空", true); return; }
     await loadAndRenderGroup(groupId);
-  } catch (e) {
-    setStatus(`加载失败: ${e.message}`, true);
-  }
+  } catch (e) { setStatus(`加载失败: ${e.message}`, true); }
 });
 
-document.getElementById("btnNodePropAdd").addEventListener("click", () => {
-  document.getElementById("nodePropsList").appendChild(createKvRow("", ""));
-});
-
-document.getElementById("btnNodeMetaAdd").addEventListener("click", () => {
-  document.getElementById("nodeMetaList").appendChild(createKvRow("", ""));
-});
-
-document.getElementById("btnRelPropAdd").addEventListener("click", () => {
-  document.getElementById("relPropsList").appendChild(createKvRow("", ""));
-});
+document.getElementById("btnNodePropAdd").addEventListener("click", () => document.getElementById("nodePropsList").appendChild(createKvRow("", "")));
+document.getElementById("btnNodeMetaAdd").addEventListener("click", () => document.getElementById("nodeMetaList").appendChild(createKvRow("", "")));
+document.getElementById("btnRelPropAdd").addEventListener("click", () => document.getElementById("relPropsList").appendChild(createKvRow("", "")));
 
 document.getElementById("btnNodeCreate").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认新增节点吗？")) return;
-    await mutate("/group-graph/api/node", "POST", nodePayload());
-  } catch (e) {
-    setStatus(`节点新增失败: ${e.message}`, true);
-  }
+  try { if (!window.confirm("确认新增节点吗？")) return; await mutate("/group-graph/api/node", "POST", nodePayload()); }
+  catch (e) { setStatus(`节点新增失败: ${e.message}`, true); }
 });
-
 document.getElementById("btnNodeUpdate").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认更新节点吗？")) return;
-    await mutate("/group-graph/api/node", "PUT", nodePayload());
-  } catch (e) {
-    setStatus(`节点更新失败: ${e.message}`, true);
-  }
+  try { if (!window.confirm("确认更新节点吗？")) return; await mutate("/group-graph/api/node", "PUT", nodePayload()); }
+  catch (e) { setStatus(`节点更新失败: ${e.message}`, true); }
 });
-
 document.getElementById("btnNodeDelete").addEventListener("click", async () => {
   try {
     if (!window.confirm("确认删除节点吗？删除后相关关系也会受影响。")) return;
     const payload = nodePayload();
     await mutate("/group-graph/api/node", "DELETE", { group_id: payload.group_id, uid: payload.uid });
-  } catch (e) {
-    setStatus(`节点删除失败: ${e.message}`, true);
-  }
+  } catch (e) { setStatus(`节点删除失败: ${e.message}`, true); }
 });
 
 document.getElementById("btnRelCreate").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认新增关系吗？")) return;
-    await mutate("/group-graph/api/relation", "POST", relationPayload());
-  } catch (e) {
-    setStatus(`关系新增失败: ${e.message}`, true);
-  }
+  try { if (!window.confirm("确认新增关系吗？")) return; await mutate("/group-graph/api/relation", "POST", relationPayload()); }
+  catch (e) { setStatus(`关系新增失败: ${e.message}`, true); }
 });
-
 document.getElementById("btnRelUpdate").addEventListener("click", async () => {
-  try {
-    if (!window.confirm("确认更新关系吗？")) return;
-    const payload = relationPayload();
-    await mutate("/group-graph/api/relation", "PUT", payload);
-  } catch (e) {
-    setStatus(`关系更新失败: ${e.message}`, true);
-  }
+  try { if (!window.confirm("确认更新关系吗？")) return; await mutate("/group-graph/api/relation", "PUT", relationPayload()); }
+  catch (e) { setStatus(`关系更新失败: ${e.message}`, true); }
 });
-
 document.getElementById("btnRelDelete").addEventListener("click", async () => {
   try {
     if (!window.confirm("确认删除关系吗？")) return;
     const payload = relationPayload();
-    await mutate("/group-graph/api/relation", "DELETE", {
-      group_id: payload.group_id,
-      source_uid: payload.source_uid,
-      target_uid: payload.target_uid,
-    });
-  } catch (e) {
-    setStatus(`关系删除失败: ${e.message}`, true);
-  }
+    await mutate("/group-graph/api/relation", "DELETE", { group_id: payload.group_id, source_uid: payload.source_uid, target_uid: payload.target_uid });
+  } catch (e) { setStatus(`关系删除失败: ${e.message}`, true); }
 });
 
-/** 模糊检索输入监听：前端本地过滤 + 防抖限流，避免输入时频繁执行筛选。 */
+document.getElementById("panel-close").addEventListener("click", clearSel);
+
 const searchInput = document.getElementById("searchKeyword");
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     const nextKeyword = clean(searchInput.value).toLowerCase();
-    if (searchDebounceTimer) {
-      window.clearTimeout(searchDebounceTimer);
-    }
+    if (searchDebounceTimer) window.clearTimeout(searchDebounceTimer);
     searchDebounceTimer = window.setTimeout(() => {
       searchKeyword = nextKeyword;
-      applyTypeFilter();
-      refreshSelectionStyles();
-      if (searchKeyword) {
-        setStatus(`已按关键词过滤: ${searchKeyword}`);
-      } else {
-        setStatus("已清除关键词过滤");
-      }
+      scheduleRender();
+      if (searchKeyword) setStatus(`已按关键词过滤: ${searchKeyword}`); else setStatus("已清除关键词过滤");
     }, 300);
   });
 }
@@ -1668,45 +1610,35 @@ if (searchInput) {
 window.addEventListener("resize", () => {
   if (!sim) return;
   sim.force("center", d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-  if (!linkForce) return;
   sim.alpha(0.25);
-  for (let i = 0; i < 60; i += 1) {
-    sim.tick();
-  }
-  drawPositions();
-  sim.stop();
+  initCanvas();
+  scheduleRender();
 });
+
+/* ── Init ────────────────────────────────────────────────────────── */
 
 (async function init() {
   try {
     renderKv("nodePropsList", {});
     renderKv("nodeMetaList", {});
     renderKv("relPropsList", {});
+    initCanvas();
     const groupId = clean(INITIAL_GROUP_ID);
     if (groupId && !shouldRenderDemo()) {
       document.getElementById("groupId").value = groupId;
       await loadAndRenderGroup(groupId);
+    } else if (shouldRenderDemo()) {
+      await loadDemoGraphByPage((graph) => { render(graph.nodes, graph.links); });
     } else {
-      if (shouldRenderDemo()) {
-        await loadDemoGraphByPage((graph) => {
-          render(graph.nodes, graph.links);
-        });
-      } else {
-        render([], []);
-        setStatus("请输入 group_id 后加载图谱");
-      }
+      render([], []);
+      setStatus("请输入 group_id 后加载图谱");
     }
   } catch (e) {
     setStatus(`加载失败: ${e.message}`, true);
-    if (shouldRenderDemo()) {
-      const graph = loadDemoGraph();
-      render(graph.nodes, graph.links);
-    } else {
-      render([], []);
-    }
+    if (shouldRenderDemo()) { const graph = loadDemoGraph(); render(graph.nodes, graph.links); }
+    else { render([], []); }
   }
 })();
 </script>
 </body>
 </html>
-
