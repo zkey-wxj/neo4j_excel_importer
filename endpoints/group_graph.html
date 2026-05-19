@@ -540,8 +540,9 @@
 					<div class="ops-title">图谱加载</div>
 					<div class="ops-grid">
 						<div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo" /></div>
-						<div class="ops-row"><label>分页大小（page_size）</label><input id="pageSize" value="300" /></div>
+						<div class="ops-row"><label>每页条数（page_size）</label><input id="pageSize" value="300" /></div>
 					</div>
+					<div class="ops-row" style="margin-top: 6px"><label>批量页数（单次加载页数，1~20）</label><input id="batchPages" value="5" /></div>
 					<div class="ops-actions" style="grid-template-columns: 1fr">
 						<button class="ops-btn primary" id="btnLoad">加载图谱</button>
 					</div>
@@ -573,6 +574,17 @@
 						<button class="ops-btn primary" id="btnNodeCreate">新增</button>
 						<button class="ops-btn" id="btnNodeUpdate">更新</button>
 						<button class="ops-btn" id="btnNodeDelete">删除</button>
+					</div>
+				</div>
+
+				<div class="ops-card">
+					<div class="ops-title">节点关系替换</div>
+					<div class="ops-grid">
+						<div class="ops-row"><label>旧节点ID（old_uid）</label><input id="replaceOldUid" placeholder="原节点 uid（所有关系将被转移）" /></div>
+						<div class="ops-row"><label>新节点ID（new_uid）</label><input id="replaceNewUid" placeholder="目标节点 uid" /></div>
+					</div>
+					<div class="ops-actions" style="grid-template-columns: 1fr">
+						<button class="ops-btn primary" id="btnReplaceRelations">替换全部关系</button>
 					</div>
 				</div>
 
@@ -1019,16 +1031,23 @@
 				async loadGroup(gid, onPage) {
 					this.store.reset();
 					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
-					let pg = 1;
+					const bp = Math.max(1, Math.min(20, Number(clean(document.getElementById("batchPages").value) || "5")));
+					let batchStart = 1;
 					while (true) {
-						setStatus(`分页加载中: 第 ${pg} 页`);
-						const d = await this.req(`/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`);
-						this.store.addNodes(d.nodes || []);
-						this.store.addLinks(d.relations || []);
+						setStatus(`分页加载中: 第 ${batchStart}~${batchStart + bp - 1} 页（并发）`);
+						const pages = Array.from({ length: bp }, (_, i) => batchStart + i);
+						const url = (pg) => `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`;
+						const results = await Promise.all(pages.map((pg) => this.req(url(pg))));
+						let hasMore = false;
+						for (const d of results) {
+							this.store.addNodes(d.nodes || []);
+							this.store.addLinks(d.relations || []);
+							if (d.nodes_has_more || d.relations_has_more) hasMore = true;
+						}
 						const g = this.store.mapGraphData();
-						if (onPage) onPage(g, pg);
-						if (!d.nodes_has_more && !d.relations_has_more) break;
-						pg++;
+						if (onPage) onPage(g, batchStart);
+						if (!hasMore) break;
+						batchStart += bp;
 					}
 					setStatus(`加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();
@@ -1895,6 +1914,21 @@
 					await _api.mutate("/group-graph/api/relation", "DELETE", { group_id: p.group_id, source_uid: p.source_uid, target_uid: p.target_uid });
 				} catch (e) {
 					setStatus(`关系删除失败: ${e.message}`, true);
+				}
+			};
+			document.getElementById("btnReplaceRelations").onclick = async () => {
+				try {
+					const g = clean(document.getElementById("groupId").value);
+					const oldUid = clean(document.getElementById("replaceOldUid").value);
+					const newUid = clean(document.getElementById("replaceNewUid").value);
+					if (!g) { setStatus("group_id 不能为空", true); return; }
+					if (!oldUid || !newUid) { setStatus("old_uid 和 new_uid 不能为空", true); return; }
+					if (oldUid === newUid) { setStatus("old_uid 和 new_uid 不能相同", true); return; }
+					if (!confirm(`确认将节点 ${oldUid} 的全部关系转移至 ${newUid} 吗？`)) return;
+					await _api.mutate("/group-graph/api/replace-node-relations", "POST", { group_id: g, old_uid: oldUid, new_uid: newUid });
+					setStatus(`关系替换完成: ${oldUid} → ${newUid}`);
+				} catch (e) {
+					setStatus(`关系替换失败: ${e.message}`, true);
 				}
 			};
 			document.getElementById("panel-close").onclick = () => _ia.clearSel();

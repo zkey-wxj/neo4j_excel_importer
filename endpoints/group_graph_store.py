@@ -91,6 +91,30 @@ DELETE r
 RETURN count(*) AS deleted
 """
 
+    _REDIRECT_OUTGOING_RELS = """
+MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+WHERE tgt.uid <> $new_uid OR tgt.group_id <> $group_id
+WITH old, tgt, r, properties(r) AS rProps
+DELETE r
+WITH old, tgt, rProps
+MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+CREATE (new)-[nr:RELATED]->(tgt)
+SET nr = rProps
+RETURN count(*) AS redirected
+"""
+
+    _REDIRECT_INCOMING_RELS = """
+MATCH (src:KnowledgeNode)-[r:RELATED]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+WHERE src.uid <> $new_uid OR src.group_id <> $group_id
+WITH src, old, r, properties(r) AS rProps
+DELETE r
+WITH src, old, rProps
+MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+CREATE (src)-[nr:RELATED]->(new)
+SET nr = rProps
+RETURN count(*) AS redirected
+"""
+
     def __init__(self, settings: Mapping[str, Any]):
         """初始化连接配置。"""
         self.uri = clean_text(settings.get("neo4j_uri"))
@@ -227,6 +251,17 @@ RETURN count(*) AS deleted
             write=True,
         )
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
+
+    def replace_node_relations(self, group_id: str, old_uid: str, new_uid: str) -> int:
+        """将 old_uid 节点的全部关系转移至 new_uid 节点，返回转移的关系数。"""
+        if old_uid == new_uid:
+            return 0
+        params = {"group_id": group_id, "old_uid": old_uid, "new_uid": new_uid}
+        out_rows = self._run(self._REDIRECT_OUTGOING_RELS, params, write=True)
+        in_rows = self._run(self._REDIRECT_INCOMING_RELS, params, write=True)
+        out_count = int((out_rows[0] if out_rows else {}).get("redirected", 0) or 0)
+        in_count = int((in_rows[0] if in_rows else {}).get("redirected", 0) or 0)
+        return out_count + in_count
 
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = node_payload_to_cypher_row(

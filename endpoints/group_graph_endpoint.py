@@ -55,6 +55,9 @@ class GroupGraphEndpoint(Endpoint):
                 return self._update_relation(r, store)
             if path == "/group-graph/api/relation" and method == "DELETE":
                 return self._delete_relation(r, store)
+
+            if path == "/group-graph/api/replace-node-relations" and method == "POST":
+                return self._replace_node_relations(r, store)
         except Exception as exc:
             logger.exception("endpoint invoke failed")
             return self._json_response({"error": str(exc)}, 500)
@@ -75,7 +78,7 @@ class GroupGraphEndpoint(Endpoint):
         if not group_id:
             return self._json_response({"error": "group_id 不能为空"}, 400)
         page = self._positive_int(r.args.get("page"), default=1)
-        page_size = self._limit(r.args.get("page_size"), default=300, max_value=1000)
+        page_size = self._limit(r.args.get("page_size"), default=300, max_value=5000)
         return self._json_response(store.query_graph(group_id, page, page_size), 200)
 
     def _create_node(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
@@ -153,6 +156,20 @@ class GroupGraphEndpoint(Endpoint):
         if deleted <= 0:
             return self._json_response({"error": "未找到可删除关系"}, 404)
         return self._json_response({"ok": True, "deleted": deleted}, 200)
+
+    def _replace_node_relations(self, r: Request, store: GroupGraphStore) -> Response:
+        """将 old_uid 节点的全部关系转移至 new_uid 节点。"""
+        body = self._body_json(r)
+        err = self._validate_required(body, ["group_id", "old_uid", "new_uid"])
+        if err:
+            return self._json_response({"error": err}, 400)
+        group_id = clean_text(body["group_id"])
+        old_uid = clean_text(body["old_uid"])
+        new_uid = clean_text(body["new_uid"])
+        if old_uid == new_uid:
+            return self._json_response({"error": "old_uid 和 new_uid 不能相同"}, 400)
+        redirected = store.replace_node_relations(group_id, old_uid, new_uid)
+        return self._json_response({"ok": True, "redirected": redirected}, 200)
 
     def _body_json(self, r: Request) -> dict[str, Any]:
         """读取 JSON body，空 body 返回空对象。"""

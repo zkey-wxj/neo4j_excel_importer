@@ -52,3 +52,4 @@ endpoints:
   - endpoints/group_graph_relation_create.yaml
   - endpoints/group_graph_relation_update.yaml
   - endpoints/group_graph_relation_delete.yaml
+  - endpoints/group_graph_replace_node_relations.yaml
