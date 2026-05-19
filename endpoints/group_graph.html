@@ -81,6 +81,8 @@
 				overflow: hidden;
 				font-family: "JetBrains Mono", monospace;
 				box-shadow: 0 1px 4px rgba(80, 100, 160, 0.1);
+				max-width: calc(100vw - 760px);
+				flex-wrap: nowrap;
 			}
 			.stat-cell {
 				background: var(--surface);
@@ -133,18 +135,53 @@
 				box-shadow: 0 2px 8px rgba(59, 110, 245, 0.15);
 			}
 
-			#legend {
+			#legend-wrap {
 				position: absolute;
 				bottom: 28px;
 				right: 28px;
+				display: flex;
+				gap: 8px;
+				z-index: 10;
+			}
+			.legend-box {
 				background: var(--surface);
 				border: 1px solid var(--border2);
 				border-radius: 12px;
-				padding: 14px 18px;
-				z-index: 10;
+				padding: 12px 14px;
 				box-shadow: 0 2px 8px rgba(80, 100, 160, 0.08);
+				min-width: 140px;
+				max-width: 200px;
+				display: flex;
+				flex-direction: column;
 			}
-			#legend h3 {
+			.legend-box .legend-content {
+				overflow-y: auto;
+				flex: 1;
+			}
+			.legend-box .legend-actions {
+				flex-shrink: 0;
+			}
+			.legend-box > h5 {
+				cursor: pointer;
+				user-select: none;
+			}
+			.legend-box > h5::after {
+				content: " ▾";
+				font-size: 9px;
+				color: var(--faint);
+			}
+      .legend-box.collapsed{
+        padding-bottom: 0px;
+      }
+			.legend-box.collapsed > h5::after {
+				content: " ▸";
+			}
+			.legend-box.collapsed .legend-content,
+			.legend-box.collapsed .legend-actions,
+			#minimap.collapsed .minimap-content {
+				display: none;
+			}
+			.legend-box h5 {
 				font-family: "JetBrains Mono", monospace;
 				font-size: 9.5px;
 				letter-spacing: 0.1em;
@@ -152,23 +189,26 @@
 				text-transform: uppercase;
 				margin-bottom: 10px;
 			}
-			#legendList {
-				max-height: 280px;
+			#legendList, #relLegendListInner {
+				max-height: 220px;
 				overflow-y: auto;
-				padding-right: 6px;
-				margin-right: -6px;
+				padding-right: 4px;
 			}
-			#legendList::-webkit-scrollbar {
+			#legendList::-webkit-scrollbar,
+			#relLegendListInner::-webkit-scrollbar {
 				width: 4px;
 			}
-			#legendList::-webkit-scrollbar-track {
+			#legendList::-webkit-scrollbar-track,
+			#relLegendListInner::-webkit-scrollbar-track {
 				background: transparent;
 			}
-			#legendList::-webkit-scrollbar-thumb {
+			#legendList::-webkit-scrollbar-thumb,
+			#relLegendListInner::-webkit-scrollbar-thumb {
 				background: var(--border2);
 				border-radius: 4px;
 			}
-			#legendList::-webkit-scrollbar-thumb:hover {
+			#legendList::-webkit-scrollbar-thumb:hover,
+			#relLegendListInner::-webkit-scrollbar-thumb:hover {
 				background: var(--muted);
 			}
 			.legend-item {
@@ -225,8 +265,8 @@
 			#search-panel {
 				position: absolute;
 				top: 16px;
-				right: 28px;
-				width: 238px;
+				left: 364px;
+				width: 220px;
 				z-index: 11;
 				background: var(--surface);
 				border: 1px solid var(--border2);
@@ -252,81 +292,6 @@
 				font-size: 11px;
 				background: #fff;
 				color: var(--text);
-			}
-
-			#info-panel {
-				position: absolute;
-				top: 110px;
-				right: 28px;
-				width: 238px;
-				background: var(--surface);
-				border: 1px solid var(--border2);
-				border-radius: 14px;
-				padding: 20px;
-				z-index: 10;
-				opacity: 0;
-				pointer-events: none;
-				transform: translateX(12px);
-				transition:
-					opacity 0.22s ease,
-					transform 0.22s ease;
-				box-shadow: 0 4px 18px rgba(80, 100, 160, 0.1);
-			}
-			#info-panel.visible {
-				opacity: 1;
-				pointer-events: auto;
-				transform: translateX(0);
-			}
-			#info-panel .p-type {
-				font-family: "JetBrains Mono", monospace;
-				font-size: 9.5px;
-				letter-spacing: 0.12em;
-				text-transform: uppercase;
-				margin-bottom: 7px;
-			}
-			#info-panel .p-name {
-				font-size: 20px;
-				font-weight: 700;
-				line-height: 1.15;
-				margin-bottom: 14px;
-				color: var(--text);
-			}
-			#info-panel .p-row {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				padding: 6px 0;
-				border-bottom: 1px solid var(--border);
-				font-family: "JetBrains Mono", monospace;
-				font-size: 11.5px;
-			}
-			#info-panel .p-row:last-child {
-				border-bottom: none;
-			}
-			#info-panel .p-key {
-				color: var(--muted);
-			}
-			#info-panel .p-val {
-				font-weight: 600;
-				color: var(--text);
-			}
-			#info-panel .close-btn {
-				position: absolute;
-				top: 13px;
-				right: 13px;
-				background: none;
-				border: none;
-				color: var(--faint);
-				font-size: 17px;
-				cursor: pointer;
-				font-family: "Syne", sans-serif;
-				line-height: 1;
-				padding: 2px 5px;
-				border-radius: 4px;
-			}
-			#info-panel .close-btn:hover {
-				color: var(--text);
-				background: var(--surface2);
 			}
 
 			#status {
@@ -462,6 +427,84 @@
 				color: #2454cf;
 			}
 
+			/* ── 小地图 ── */
+			#minimap {
+				position: absolute;
+				bottom: 16px;
+				left: 364px;
+				width: 180px;
+				background: rgba(255,255,255,0.88);
+				border: 1px solid var(--border2);
+				border-radius: 10px;
+				z-index: 10;
+				overflow: hidden;
+				box-shadow: 0 2px 8px rgba(80,100,160,0.1);
+			}
+			.minimap-content { height: 130px; }
+			#minimap canvas { width: 100%; height: 100%; display: block; }
+			#minimap .mm-viewport {
+				position: absolute;
+				border: 2px solid var(--blue);
+				border-radius: 2px;
+				pointer-events: none;
+				opacity: 0.6;
+			}
+
+			/* ── 增强详情面板 ── */
+			#detail-panel {
+				position: absolute;
+				top: 16px;
+				right: 28px;
+				width: 280px;
+				max-height: calc(100vh - 32px);
+				overflow-y: auto;
+				background: var(--surface);
+				border: 1px solid var(--border2);
+				border-radius: 14px;
+				padding: 18px;
+				z-index: 11;
+				opacity: 0;
+				pointer-events: none;
+				transform: translateX(12px);
+				transition: opacity 0.22s ease, transform 0.22s ease;
+				box-shadow: 0 4px 18px rgba(80,100,160,0.1);
+				font-family: "JetBrains Mono", monospace;
+			}
+			#detail-panel.visible { opacity: 1; pointer-events: auto; transform: translateX(0); }
+			#detail-panel .d-close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--faint); font-size: 17px; cursor: pointer; padding: 2px 5px; border-radius: 4px; }
+			#detail-panel .d-close:hover { color: var(--text); background: var(--surface2); }
+			#detail-panel .d-type { font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+			#detail-panel .d-name { font-size: 18px; font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+			#detail-panel .d-uid { font-size: 10px; color: var(--muted); margin-bottom: 14px; word-break: break-all; }
+			#detail-panel .d-section { margin-bottom: 12px; }
+			#detail-panel .d-section-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+			#detail-panel .d-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+			#detail-panel .d-key { color: var(--muted); }
+			#detail-panel .d-val { font-weight: 600; text-align: right; max-width: 60%; word-break: break-all; }
+			#detail-panel .d-nei-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
+			#detail-panel .d-nei-item:hover { background: var(--surface2); }
+			#detail-panel .d-nei-rt { color: var(--muted); font-size: 9.5px; }
+			#detail-panel .d-actions { display: flex; gap: 6px; margin-top: 8px; }
+			#detail-panel .d-actions .ops-btn { flex: 1; }
+
+
+
+			/* ── 关系类型筛选 ── */
+			/* rel legend items */
+			.rel-legend-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text); margin-bottom: 4px; padding: 2px 6px; border-radius: 4px; cursor: pointer; user-select: none; transition: all 0.12s; }
+			.rel-legend-item:hover { background: var(--surface2); }
+			.rel-legend-item.active { background: rgba(124,84,232,0.08); border: 1px solid rgba(124,84,232,0.3); }
+			.rel-legend-dot { width: 16px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+
+			/* ── ops-panel 可折叠 ── */
+			.ops-card .ops-title { cursor: pointer; user-select: none; }
+			.ops-card .ops-title::after { content: " ▾"; font-size: 10px; color: var(--faint); }
+			.ops-card.collapsed .ops-title::after { content: " ▸"; }
+			.ops-card.collapsed .ops-grid,
+			.ops-card.collapsed .ops-row,
+			.ops-card.collapsed .ops-actions,
+			.ops-card.collapsed .kv-list { display: none; }
+
 			@media (max-width: 1100px) {
 				#ops-panel {
 					width: 300px;
@@ -469,18 +512,22 @@
 					left: 10px;
 					max-height: calc(100vh - 20px);
 				}
-				#legend {
+				#legend-wrap {
 					right: 10px;
 					bottom: 10px;
 				}
 				#search-panel {
+					left: 310px;
+					top: 10px;
+					width: 200px;
+				}
+				#minimap {
+					left: 300px;
+				}
+				#detail-panel {
 					right: 10px;
 					top: 10px;
-					width: 300px;
-				}
-				#info-panel {
-					right: 10px;
-					top: 84px;
+					width: 260px;
 				}
 				#controls {
 					left: 50%;
@@ -493,47 +540,62 @@
 	<body>
 		<div id="app">
 			<div id="stats">
-				<div class="stat-cell">
-					<div class="n" id="s-nodes">0</div>
-					<div class="l">节点</div>
-				</div>
-				<div class="stat-cell">
-					<div class="n" id="s-links">0</div>
-					<div class="l">关系</div>
-				</div>
-				<div class="stat-cell">
-					<div class="n" id="s-zoom">1.00×</div>
-					<div class="l">缩放</div>
-				</div>
+				<div class="stat-cell"><div class="n" id="s-nodes">0</div><div class="l">节点</div></div>
+				<div class="stat-cell"><div class="n" id="s-links">0</div><div class="l">关系</div></div>
+				<div class="stat-cell"><div class="n" id="s-orphans">-</div><div class="l">孤立</div></div>
+				<div class="stat-cell"><div class="n" id="s-node-types">-</div><div class="l">节点类型</div></div>
+				<div class="stat-cell"><div class="n" id="s-rel-types">-</div><div class="l">关系类型</div></div>
+				<div class="stat-cell"><div class="n" id="s-zoom">1.00×</div><div class="l">缩放</div></div>
 			</div>
 
 			<canvas id="graph-canvas"></canvas>
 
 			<div id="controls">
-				<button class="ctrl-btn" id="btn-zoom-in">+</button>
-				<button class="ctrl-btn" id="btn-zoom-out">−</button>
-				<button class="ctrl-btn" id="btn-reset" style="font-size: 13px">⟳</button>
+				<button class="ctrl-btn" id="btn-zoom-in" title="放大"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="11" y1="11" x2="14" y2="14"/><line x1="5" y1="7" x2="9" y2="7"/><line x1="7" y1="5" x2="7" y2="9"/></svg></button>
+				<button class="ctrl-btn" id="btn-zoom-out" title="缩小"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="11" y1="11" x2="14" y2="14"/><line x1="5" y1="7" x2="9" y2="7"/></svg></button>
+				<button class="ctrl-btn" id="btn-reset" title="重置视图"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.3-4.2"/><path d="M14 8a6 6 0 0 1-10.3 4.2"/><polyline points="2 2 2 5 5 5"/><polyline points="14 14 14 11 11 11"/></svg></button>
+				<button class="ctrl-btn" id="btnMinimap" title="小地图"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="3" ry="6"/><line x1="2" y1="6" x2="14" y2="6"/><line x1="2" y1="10" x2="14" y2="10"/></svg></button>
+				<button class="ctrl-btn" id="btnExportJSON" title="导出 JSON"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2C3 2 2 3 2 4v2c0 1-1 1-1 2s1 1 1 2v2c0 1 1 2 2 2"/><path d="M12 2c1 0 2 1 2 2v2c0 1 1 1 1 2s-1 1-1 2v2c0 1-1 2-2 2"/></svg></button>
+				<button class="ctrl-btn" id="btnExportPNG" title="导出 PNG"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.5"/><path d="M14 10l-3-3-7 7"/></svg></button>
 			</div>
 
-			<div id="legend">
-				<h3>节点类型</h3>
-				<div id="legendList"></div>
+			<div id="legend-wrap">
+				<div class="legend-box collapsed" id="node-legend-box">
+					<h5 id="node-legend-toggle">节点类型</h5>
+					<div class="legend-content" id="legendList"></div>
+				</div>
+				<div class="legend-box collapsed" id="rel-legend-box">
+					<h5 id="rel-legend-toggle">关系类型</h5>
+					<div class="legend-content" id="relLegendListInner"></div>
+				</div>
 			</div>
 
 			<div id="search-panel">
-				<label for="searchKeyword">模糊检索</label>
 				<input id="searchKeyword" placeholder="名称 / uid / 标签" />
 			</div>
 
-			<div id="info-panel">
-				<button class="close-btn" id="panel-close">×</button>
-				<div class="p-name" id="p-name"></div>
-				<div class="p-type" id="p-type"></div>
-				<div class="p-row"><span class="p-key">关联数</span><span class="p-val" id="p-conn"></span></div>
-				<div class="p-row"><span class="p-key">权重</span><span class="p-val" id="p-weight"></span></div>
-				<div class="p-row"><span class="p-key">编号</span><span class="p-val" id="p-id"></span></div>
-				<div class="p-row"><span class="p-key">状态</span><span class="p-val" style="color: #0fa96b">● 活跃</span></div>
+			<div id="detail-panel">
+				<button class="d-close" id="detail-close">×</button>
+				<div class="d-type" id="d-type"></div>
+				<div class="d-name" id="d-name"></div>
+				<div class="d-uid" id="d-uid"></div>
+				<div class="d-section" id="d-props-section">
+					<div class="d-section-title">属性 / 描述</div>
+					<div id="d-props"></div>
+				</div>
+				<div class="d-section" id="d-nei-section">
+					<div class="d-section-title">关联节点 <span id="d-nei-count" style="float:right"></span></div>
+					<div id="d-nei-list" style="max-height:200px;overflow-y:auto"></div>
+				</div>
+				<div class="d-actions">
+					<button class="ops-btn primary" id="btnExpandNei">展开邻居</button>
+					<button class="ops-btn" id="btnFillNodeForm">编辑</button>
+				</div>
 			</div>
+
+			<div id="minimap" class="collapsed"><div class="minimap-content"><canvas id="minimap-canvas"></canvas><div class="mm-viewport" id="mm-viewport"></div></div></div>
+
+
 
 			<div id="ops-panel">
 				<div class="ops-card">
@@ -577,7 +639,7 @@
 					</div>
 				</div>
 
-				<div class="ops-card" style="margin-bottom: 0">
+				<div class="ops-card">
 					<div class="ops-title">关系操作</div>
 					<div class="ops-grid">
 						<div class="ops-row">
@@ -605,6 +667,23 @@
 						<button class="ops-btn primary" id="btnRelCreate">新增</button>
 						<button class="ops-btn" id="btnRelUpdate">更新</button>
 						<button class="ops-btn" id="btnRelDelete">删除</button>
+					</div>
+				</div>
+
+				<div class="ops-card">
+					<div class="ops-title">路径查询</div>
+					<div class="ops-grid">
+						<div class="ops-row">
+							<label>起点（source_uid）</label>
+							<div style="display:flex;gap:4px"><input id="pathSource" placeholder="起始节点" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="pathSource" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
+						<div class="ops-row">
+							<label>终点（target_uid）</label>
+							<div style="display:flex;gap:4px"><input id="pathTarget" placeholder="目标节点" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="pathTarget" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
+					</div>
+					<div class="ops-actions" style="grid-template-columns: 1fr">
+						<button class="ops-btn primary" id="btnFindPath">查找最短路径</button>
 					</div>
 				</div>
 
@@ -728,9 +807,8 @@
 				return clean(r.rel_type) || "RELATED";
 			}
 			function relStoreKey(r) {
-				const id = clean(r.relation_id);
 				// 将节点原始数据填充到左侧编辑表单，用于查看和编辑
-				return id ? `rid:${id}` : `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}`;
+				return `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}`;
 			}
 			function fillNodeForm(n) {
 				if (!n) return;
@@ -795,7 +873,7 @@
 					const k = `${s}->${t}`;
 					if (seen.has(k) || s === t) return;
 					seen.add(k);
-					links.push({ relation_id: `demo-${s}-${t}-${DEMO_RELS[links.length % DEMO_RELS.length]}`, source_uid: s, target_uid: t, rel_type: DEMO_RELS[links.length % DEMO_RELS.length], direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: m });
+					links.push({ source_uid: s, target_uid: t, rel_type: DEMO_RELS[links.length % DEMO_RELS.length], direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: m });
 				};
 				for (let i = 1; i < n; i++) add(uids[Math.floor(Math.random() * i)], uids[i]);
 				const tgt = Math.floor(n * 1.5);
@@ -822,6 +900,7 @@
 					this.linkMap = new Map();
 					this.nodes = [];
 					this.links = [];
+					this.stats = { orphanCount: 0, nodeTypeCount: 0, relTypeCount: 0 };
 				}
 				// 重置存储：清空所有节点和关系的原始数据及渲染数据
 				reset() {
@@ -881,7 +960,24 @@
 					// ── 计算复合节点权重 ──
 					// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
 					this.computeNodeWeights();
+					this.computeStats();
 					return { nodes: this.nodes, links: this.links };
+				}
+				computeStats() {
+					const connectedUids = new Set();
+					this.links.forEach(l => {
+						connectedUids.add(clean(typeof l.source === "object" ? l.source?.id : l.source));
+						connectedUids.add(clean(typeof l.target === "object" ? l.target?.id : l.target));
+					});
+					const nodeTypes = new Set();
+					this.nodes.forEach(n => (n.raw?.labels || [n.type]).forEach(l => { const t = clean(l); if (t) nodeTypes.add(t); }));
+					const relTypes = new Set();
+					this.links.forEach(l => { const t = clean(l.relation); if (t) relTypes.add(t); });
+					this.stats = {
+						orphanCount: Math.max(0, this.nodes.length - connectedUids.size),
+						nodeTypeCount: nodeTypes.size,
+						relTypeCount: relTypes.size,
+					};
 				}
 				// 计算复合权重：融合 PageRank(25%)、Hub(40%)、度中心性(15%)、Authority(12%)、加权度(8%)
 				// 通过多种图算法综合评估每个节点在图中的重要性
@@ -1107,9 +1203,10 @@
 						setStatus("操作成功");
 						return;
 					}
-					return this.loadGroup(gid, (g) => {
+					const result = await this.loadGroup(gid, (g) => {
 						window._graphApp.render(g.nodes, g.links);
 					});
+					return result;
 				}
 			}
 
@@ -1137,8 +1234,10 @@
 					this.graphNodes = [];
 					this.graphLinks = [];
 					this.selectedLegendTypes = new Set();
+					this.selectedRelTypes = new Set();
 					this.searchKeyword = "";
 					this.needRender = false;
+					this._pathHighlight = null;
 				}
 				// 初始化画布：计算视口大小、设置 2D 上下文、适配 DPR（设备像素比）
 				initCanvas() {
@@ -1251,12 +1350,18 @@
 					const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
 					return [clean(n?.label).toLowerCase(), clean(n?.uid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
 				}
+				passEdgeFilter(edge) {
+					if (!this.selectedRelTypes.size) return true;
+					return this.selectedRelTypes.has(clean(edge.name).toLowerCase());
+				}
 				// 渲染图例：鱅欄竞毗中列举何节点类型、颜色、是否此时处于筛选或隐藏状态
 				renderLegend() {
-					const ll = document.getElementById("legendList"),
-						lr = document.getElementById("legend");
+					const ll = document.getElementById("legendList");
 					if (!ll) return;
+					const box = ll.parentElement;
 					ll.innerHTML = "";
+					const oldActions = box.querySelector(".legend-actions");
+					if (oldActions) oldActions.remove();
 					const byType = new Map();
 					(this.graphNodes || []).forEach((n) => {
 						const ls = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
@@ -1267,54 +1372,77 @@
 							const k = l.toLowerCase();
 							if (byType.has(k)) return;
 							const meta = getTypeMeta(l);
-							const c = meta.color || n.color || "#ccc";
-							byType.set(k, { key: k, display: l, color: c });
+							byType.set(k, { key: k, display: l, color: meta.color || n.color || "#ccc" });
 						});
 					});
-					if (!byType.size) {
-						const i = document.createElement("div");
-						i.className = "legend-item";
-						i.textContent = "暂无节点";
-						ll.appendChild(i);
-						const a = lr.querySelector(".legend-actions");
-						if (a) a.remove();
-						return;
-					}
+					if (!byType.size) { ll.innerHTML = '<div class="legend-item">暂无节点</div>'; return; }
 					byType.forEach(({ key, display, color }) => {
-						const i = document.createElement("div");
-						i.className = "legend-item";
-						if (this.selectedLegendTypes.has(key)) i.classList.add("active");
-						const d = document.createElement("div");
-						d.className = "legend-dot";
-						d.style.background = color;
-						const t = document.createElement("span");
-						t.textContent = display;
-						i.append(d, t);
-						i.addEventListener("click", () => {
-							if (this.selectedLegendTypes.has(key)) this.selectedLegendTypes.delete(key);
-							else this.selectedLegendTypes.add(key);
+						const item = document.createElement("div");
+						item.className = "legend-item" + (this.selectedLegendTypes.has(key) ? " active" : "");
+						const dot = document.createElement("div");
+						dot.className = "legend-dot";
+						dot.style.background = color;
+						const span = document.createElement("span");
+						span.textContent = display;
+						item.append(dot, span);
+						item.addEventListener("click", () => {
+							this.selectedLegendTypes.has(key) ? this.selectedLegendTypes.delete(key) : this.selectedLegendTypes.add(key);
 							this.renderLegend();
 							this.scheduleRender();
 						});
-						ll.appendChild(i);
+						ll.appendChild(item);
 					});
-					const a = lr.querySelector(".legend-actions");
-					if (a) a.remove();
 					const act = document.createElement("div");
 					act.className = "legend-actions";
 					const btn = document.createElement("button");
 					btn.type = "button";
 					btn.className = "legend-reset-btn";
-					btn.textContent = "重置筛选";
-					btn.onclick = () => {
-						if (!this.selectedLegendTypes.size) return;
-						this.selectedLegendTypes.clear();
-						this.renderLegend();
-						this.scheduleRender();
-						setStatus("已重置类型筛选");
-					};
+					btn.textContent = "重置节点筛选";
+					btn.onclick = () => { this.selectedLegendTypes.clear(); this.renderLegend(); this.scheduleRender(); };
 					act.appendChild(btn);
-					lr.appendChild(act);
+					box.appendChild(act);
+				}
+				renderRelLegend() {
+					const container = document.getElementById("relLegendListInner");
+					if (!container) return;
+					const box = container.parentElement;
+					container.innerHTML = "";
+					const oldActions = box.querySelector(".legend-actions");
+					if (oldActions) oldActions.remove();
+					const byType = new Map();
+					(this.graphLinks || []).forEach((l) => {
+						const rt = clean(l.relation);
+						if (!rt || byType.has(rt.toLowerCase())) return;
+						byType.set(rt.toLowerCase(), rt);
+					});
+					if (!byType.size) { container.innerHTML = '<div style="font-size:10px;color:var(--faint)">暂无关系</div>'; return; }
+					const colors = d3.scaleOrdinal(d3.schemePastel1);
+					let ci = 0;
+					byType.forEach((display, key) => {
+						const item = document.createElement("div");
+						item.className = "rel-legend-item" + (this.selectedRelTypes.has(key) ? " active" : "");
+						const dot = document.createElement("div");
+						dot.className = "rel-legend-dot";
+						dot.style.background = colors(ci++);
+						const label = document.createElement("span");
+						label.textContent = display;
+						item.append(dot, label);
+						item.addEventListener("click", () => {
+							this.selectedRelTypes.has(key) ? this.selectedRelTypes.delete(key) : this.selectedRelTypes.add(key);
+							this.renderRelLegend();
+							this.scheduleRender();
+						});
+						container.appendChild(item);
+					});
+					const act = document.createElement("div");
+					act.className = "legend-actions";
+					const btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "legend-reset-btn";
+					btn.textContent = "重置关系筛选";
+					btn.onclick = () => { this.selectedRelTypes.clear(); this.renderRelLegend(); this.scheduleRender(); };
+					act.appendChild(btn);
+					box.appendChild(act);
 				}
 				zoomTo(k) {
 					const cx = this.W / 2,
@@ -1350,7 +1478,13 @@
 					this.graphLinks = safeL;
 					document.getElementById("s-nodes").textContent = safeN.length;
 					document.getElementById("s-links").textContent = safeL.length;
+
+          _store.graphNodes = safeN;
+          _store.graphLinks = safeL;
+
+          refreshStats();
 					this.renderLegend();
+					this.renderRelLegend();
 					const pc = {};
 					safeL.forEach((e) => {
 						const pk = [e.source, e.target].sort().join("_");
@@ -1430,6 +1564,38 @@
 					// 节点绘制：按权重升序（权重大的在上层）→ 视口裁剪 → 焦点光晕 → 圆形填充 → 标签
 					this._drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn);
 					c.restore();
+					this.drawMinimap();
+				}
+				drawMinimap() {
+					const mc = document.getElementById("minimap-canvas");
+					if (!mc || !this._nodes.length) return;
+					const mw = 180, mh = 130, dpr = window.devicePixelRatio || 1;
+					mc.width = mw * dpr; mc.height = mh * dpr;
+					mc.style.width = mw + "px"; mc.style.height = mh + "px";
+					const mctx = mc.getContext("2d");
+					mctx.scale(dpr, dpr);
+					mctx.clearRect(0, 0, mw, mh);
+					let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+					this._nodes.forEach(n => { if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x; if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y; });
+					const pad = 40;
+					minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+					const scaleX = mw / (maxX - minX || 1), scaleY = mh / (maxY - minY || 1);
+					const scale = Math.min(scaleX, scaleY);
+					const ox = (mw - (maxX - minX) * scale) / 2, oy = (mh - (maxY - minY) * scale) / 2;
+					const mapX = x => ox + (x - minX) * scale, mapY = y => oy + (y - minY) * scale;
+					mctx.globalAlpha = 0.3;
+					this._edges.forEach(e => { const s = e.source, t = e.target; if (!s?.x || !t?.x) return; mctx.beginPath(); mctx.moveTo(mapX(s.x), mapY(s.y)); mctx.lineTo(mapX(t.x), mapY(t.y)); mctx.strokeStyle = "#aaa"; mctx.lineWidth = 0.5; mctx.stroke(); });
+					mctx.globalAlpha = 1;
+					this._nodes.forEach(n => { mctx.beginPath(); mctx.arc(mapX(n.x ?? 0), mapY(n.y ?? 0), 2, 0, Math.PI * 2); mctx.fillStyle = n.color || "#999"; mctx.fill(); });
+					const t = this.transform;
+					const vx0 = -t.x / t.k, vy0 = -t.y / t.k, vx1 = (this.W - t.x) / t.k, vy1 = (this.H - t.y) / t.k;
+					const vp = document.getElementById("mm-viewport");
+					if (vp) {
+						vp.style.left = mapX(vx0) + "px";
+						vp.style.top = mapY(vy0) + "px";
+						vp.style.width = Math.max(4, (vx1 - vx0) * scale) + "px";
+						vp.style.height = Math.max(4, (vy1 - vy0) * scale) + "px";
+					}
 				}
 				// 边绘制：视口裁剪 → 焦点高亮/置灰 → 直线/曲线/自环 → 箭头 → 标签
 				_drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, sn) {
@@ -1447,7 +1613,7 @@
 							tx = t.x,
 							ty = t.y;
 						if (Math.max(sx, tx) < vx0 || Math.min(sx, tx) > vx1 || Math.max(sy, ty) < vy0 || Math.min(sy, ty) > vy1) return;
-						if (!vis.has(s.id) || !vis.has(t.id)) return;
+						if (!vis.has(s.id) || !vis.has(t.id) || !this.passEdgeFilter(edge)) return;
 						const isE = i === ae,
 							isNL = focusN && (s.id === focusN || t.id === focusN),
 							act = isE || isNL;
@@ -1826,25 +1992,44 @@
 				}
 				// 信息面板显示：计算关联数，填充类型/名称/权重/编号，支持防抖
 				showInfo(node, imm) {
-					if (this._hideTmr) {
-						clearTimeout(this._hideTmr);
-						this._hideTmr = null;
-					}
+					if (this._hideTmr) { clearTimeout(this._hideTmr); this._hideTmr = null; }
+					const cv = this.canvas;
 					const doS = () => {
-						const cc = this.canvas._edges.filter((e) => !e.isSelfLoop && (e.source?.id === node.id || e.target?.id === node.id)).length;
-						document.getElementById("p-type").textContent = node.type;
-						document.getElementById("p-type").style.color = node.color;
-						document.getElementById("p-name").textContent = node.label;
-						document.getElementById("p-name").style.color = node.color;
-						document.getElementById("p-conn").textContent = cc;
-						document.getElementById("p-weight").textContent = node.weight + " / 100";
-						document.getElementById("p-id").textContent = "#" + node.id;
-						document.getElementById("info-panel").classList.add("visible");
+						const raw = node.raw || {};
+						document.getElementById("d-type").textContent = node.type;
+						document.getElementById("d-type").style.color = node.color;
+						document.getElementById("d-name").textContent = node.label;
+						document.getElementById("d-name").style.color = node.color;
+						document.getElementById("d-uid").textContent = "uid: " + clean(raw.uid);
+						const propsEl = document.getElementById("d-props");
+						propsEl.innerHTML = "";
+						if (raw.description) propsEl.innerHTML += `<div class="d-row"><span class="d-key">描述</span><span class="d-val">${clean(raw.description).slice(0,80)}</span></div>`;
+						const props = raw.properties || {};
+						Object.entries(props).forEach(([k, v]) => { if (v != null && String(v).trim()) propsEl.innerHTML += `<div class="d-row"><span class="d-key">${clean(k)}</span><span class="d-val">${String(v).slice(0,60)}</span></div>`; });
+						propsEl.innerHTML += `<div class="d-row"><span class="d-key">权重</span><span class="d-val">${node.weight} / 100</span></div>`;
+						const neiList = document.getElementById("d-nei-list");
+						neiList.innerHTML = "";
+						const neighbors = [];
+						cv._edges.forEach(e => {
+							if (e.isSelfLoop) return;
+							const isSrc = e.source?.id === node.id, isTgt = e.target?.id === node.id;
+							if (!isSrc && !isTgt) return;
+							const otherId = isSrc ? e.target?.id : e.source?.id;
+							const otherNode = cv._nodes.find(n => n.id === otherId);
+							if (otherNode) neighbors.push({ node: otherNode, rel: clean(e.name), dir: isSrc ? "→" : "←" });
+						});
+						document.getElementById("d-nei-count").textContent = neighbors.length;
+						neighbors.slice(0, 30).forEach(nb => {
+							const item = document.createElement("div");
+							item.className = "d-nei-item";
+							item.innerHTML = `<span>${nb.dir} ${nb.node.label}</span><span class="d-nei-rt">${nb.rel}</span>`;
+							item.onclick = () => { cv._interaction.selectedNodeId = nb.node.id; cv._interaction.showInfo(nb.node, true); fillNodeForm(nb.node.raw); cv.scheduleRender(); };
+							neiList.appendChild(item);
+						});
+						document.getElementById("detail-panel").classList.add("visible");
+						document.getElementById("d-nei-section").style.display = "";
 					};
-					if (imm) {
-						doS();
-						return;
-					}
+					if (imm) { doS(); return; }
 					if (this._showTmr) clearTimeout(this._showTmr);
 					this._showTmr = setTimeout(doS, 150);
 				}
@@ -1855,7 +2040,7 @@
 						this._showTmr = null;
 					}
 					const doH = () => {
-						document.getElementById("info-panel").classList.remove("visible");
+						document.getElementById("detail-panel").classList.remove("visible");
 					};
 					if (imm) {
 						doH();
@@ -1979,7 +2164,93 @@
 					setStatus(`关系替换失败: ${e.message}`, true);
 				}
 			};
-			document.getElementById("panel-close").onclick = () => _ia.clearSel();
+			document.getElementById("detail-close").onclick = () => _ia.clearSel();
+
+			document.getElementById("btnFillNodeForm").onclick = () => {
+				const sn = _ia.selectedNodeId;
+				if (!sn) return;
+				const n = _canvas._nodes.find(x => x.id === sn);
+				if (n) fillNodeForm(n.raw);
+			};
+
+			document.getElementById("btnExpandNei").onclick = async () => {
+				try {
+					const gid = clean(document.getElementById("groupId").value);
+					const sn = _ia.selectedNodeId;
+					if (!gid || !sn) { setStatus("请先加载图谱并选中节点", true); return; }
+					setStatus("展开邻居中...");
+					const d = await _api.req(`/group-graph/api/neighbors?group_id=${encodeURIComponent(gid)}&uid=${encodeURIComponent(sn)}&depth=1`);
+					_store.addNodes(d.nodes || []);
+					_store.addLinks(d.relations || []);
+					const g = _store.mapGraphData();
+					_canvas.render(g.nodes, g.links);
+					setStatus(`邻居展开完成: 新增 ${(d.nodes||[]).length} 节点, ${(d.relations||[]).length} 关系`);
+				} catch (e) { setStatus(`邻居展开失败: ${e.message}`, true); }
+			};
+
+			document.getElementById("btnFindPath").onclick = async () => {
+				try {
+					const gid = clean(document.getElementById("groupId").value);
+					const src = clean(document.getElementById("pathSource").value);
+					const tgt = clean(document.getElementById("pathTarget").value);
+					if (!gid) { setStatus("请先加载图谱", true); return; }
+					if (!src || !tgt) { setStatus("请输入起点和终点 uid", true); return; }
+					setStatus("查找路径中...");
+					const d = await _api.req(`/group-graph/api/path?group_id=${encodeURIComponent(gid)}&source_uid=${encodeURIComponent(src)}&target_uid=${encodeURIComponent(tgt)}`);
+					if (d.path_length < 0) { setStatus("未找到路径", true); return; }
+					_store.addNodes(d.nodes || []);
+					_store.addLinks(d.relations || []);
+					const g = _store.mapGraphData();
+					_canvas._pathHighlight = new Set([...(d.nodes||[]).map(n => clean(n.uid)), ...(d.relations||[]).map(r => `${clean(r.source_uid)}=>${clean(r.target_uid)}`)]);
+					_canvas.render(g.nodes, g.links);
+					setStatus(`路径找到: ${d.path_length} 跳, ${(d.nodes||[]).length} 节点`);
+					setTimeout(() => { _canvas._pathHighlight = null; }, 8000);
+				} catch (e) { setStatus(`路径查询失败: ${e.message}`, true); }
+			};
+
+			function refreshStats() {
+				const s = _store.stats;
+				document.getElementById("s-orphans").textContent = s.orphanCount;
+				document.getElementById("s-node-types").textContent = s.nodeTypeCount;
+				document.getElementById("s-rel-types").textContent = s.relTypeCount;
+			}
+
+			document.getElementById("btnExportJSON").onclick = () => {
+				const data = { nodes: _store.nodes.map(n => n.raw), relations: _store.links.map(l => l.raw) };
+				const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+				const a = document.createElement("a");
+				a.href = URL.createObjectURL(blob);
+				a.download = `graph_${clean(document.getElementById("groupId").value) || "export"}.json`;
+				a.click();
+				setStatus("JSON 已导出");
+			};
+
+			document.getElementById("btnExportPNG").onclick = () => {
+				const canvas = document.getElementById("graph-canvas");
+				canvas.toBlob(blob => {
+					const a = document.createElement("a");
+					a.href = URL.createObjectURL(blob);
+					a.download = `graph_${clean(document.getElementById("groupId").value) || "export"}.png`;
+					a.click();
+					setStatus("PNG 已导出");
+				});
+			};
+
+			document.querySelectorAll(".ops-card .ops-title").forEach(title => {
+				title.addEventListener("click", () => title.parentElement.classList.toggle("collapsed"));
+			});
+			document.querySelectorAll("#node-legend-toggle, #rel-legend-toggle").forEach(h => {
+				h.addEventListener("click", () => {
+					document.getElementById("node-legend-box").classList.toggle("collapsed");
+					document.getElementById("rel-legend-box").classList.toggle("collapsed");
+				});
+			});
+			document.getElementById("btnMinimap").addEventListener("click", () => {
+				const mm = document.getElementById("minimap");
+				mm.classList.toggle("collapsed");
+				document.getElementById("btnMinimap").style.borderColor = mm.classList.contains("collapsed") ? "" : "var(--blue)";
+				document.getElementById("btnMinimap").style.color = mm.classList.contains("collapsed") ? "" : "var(--blue)";
+			});
 
 			let _searchTmr = null;
 			// 模糊搜索：300ms 防抖，匹配节点名称/uid/类型/标签

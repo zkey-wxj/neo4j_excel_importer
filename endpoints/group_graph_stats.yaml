@@ -1,0 +1,5 @@
+path: "/group-graph/api/stats"
+method: "GET"
+extra:
+  python:
+    source: "endpoints/group_graph_endpoint.py"

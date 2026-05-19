@@ -361,6 +361,161 @@ RETURN count(*) AS redirected
                 result.consume()
             return rows
 
+    _NEIGHBORS_QUERY = """
+MATCH (start:KnowledgeNode {uid: $uid, group_id: $group_id})
+CALL {
+  WITH start
+  MATCH path = (start)-[*1..""" + str(5) + """]->(n:KnowledgeNode)
+  WHERE coalesce(n.group_id, '') = $group_id
+  RETURN nodes(path) AS path_nodes, relationships(path) AS path_rels
+  UNION
+  WITH start
+  MATCH path = (n:KnowledgeNode)-[*1..""" + str(5) + """]->(start)
+  WHERE coalesce(n.group_id, '') = $group_id
+  RETURN nodes(path) AS path_nodes, relationships(path) AS path_rels
+}
+UNWIND path_nodes AS pn
+UNWIND path_rels AS pr
+RETURN collect(DISTINCT pn) AS nodes, collect(DISTINCT pr) AS rels
+"""
+
+    _PATH_QUERY = """
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id}),
+      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH path = shortestPath((src)-[*..15]-(tgt))
+RETURN [n IN nodes(path) | n] AS nodes,
+       [r IN relationships(path) | r] AS rels,
+       length(path) AS path_length
+"""
+
+    _STATS_QUERY = """
+MATCH (n:KnowledgeNode)
+WHERE coalesce(n.group_id, '') = $group_id
+WITH collect(DISTINCT n) AS all_nodes, count(n) AS node_count
+OPTIONAL MATCH (a:KnowledgeNode)-[r]->(b:KnowledgeNode)
+WHERE coalesce(r.group_id, '') = $group_id
+  OR (coalesce(a.group_id, '') = $group_id AND coalesce(b.group_id, '') = $group_id)
+WITH all_nodes, node_count,
+     collect(DISTINCT r) AS all_rels,
+     count(DISTINCT r) AS rel_count
+RETURN node_count, rel_count,
+       [n IN all_nodes | {uid: n.uid, name: n.name, labels: n.labels}] AS node_samples,
+       [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).uid, target: endNode(r).uid}] AS rel_samples
+"""
+
+    _CLEAR_GROUP = """
+MATCH (n:KnowledgeNode {group_id: $group_id})
+DETACH DELETE n
+RETURN count(*) AS deleted
+"""
+
+    def expand_neighbors(self, group_id: str, uid: str, depth: int = 1) -> dict[str, Any]:
+        """查询指定节点的 N 跳邻居（双向）。"""
+        safe_depth = max(1, min(depth, 5))
+        query = self._NEIGHBORS_QUERY
+        rows = self._run(query, {"group_id": group_id, "uid": uid})
+        if not rows:
+            return {"nodes": [], "relations": []}
+        row = rows[0]
+        nodes = [self._serialize_node(n) for n in (row.get("nodes") or [])]
+        rels = []
+        for r in (row.get("rels") or []):
+            data = self._mapping(r)
+            src_uid = ""
+            tgt_uid = ""
+            try:
+                src_uid = clean_text(getattr(r, "start_node", lambda: None)().get("uid", ""))
+                tgt_uid = clean_text(getattr(r, "end_node", lambda: None)().get("uid", ""))
+            except Exception:
+                pass
+            rels.append({
+                "id": clean_text(getattr(r, "element_id", "")),
+                "source_uid": src_uid,
+                "target_uid": tgt_uid,
+                "rel_type": clean_text(data.get("rel_type")) or DEFAULT_REL_TYPE,
+                "group_id": clean_text(data.get("group_id")),
+                "description": clean_text(data.get("description")),
+                "properties": {},
+            })
+        return {"nodes": [n for n in nodes if n], "relations": rels}
+
+    def find_path(self, group_id: str, source_uid: str, target_uid: str) -> dict[str, Any]:
+        """查找两节点间最短路径。"""
+        rows = self._run(self._PATH_QUERY, {
+            "group_id": group_id,
+            "source_uid": source_uid,
+            "target_uid": target_uid,
+        })
+        if not rows or not rows[0].get("nodes"):
+            return {"nodes": [], "relations": [], "path_length": -1}
+        row = rows[0]
+        nodes = [self._serialize_node(n) for n in (row.get("nodes") or [])]
+        rels = []
+        raw_rels = row.get("rels") or []
+        raw_nodes = row.get("nodes") or []
+        for i, r in enumerate(raw_rels):
+            data = self._mapping(r)
+            src_uid = ""
+            tgt_uid = ""
+            if i < len(raw_nodes):
+                src_uid = clean_text(self._mapping(raw_nodes[i]).get("uid"))
+            if i + 1 < len(raw_nodes):
+                tgt_uid = clean_text(self._mapping(raw_nodes[i + 1]).get("uid"))
+            rels.append({
+                "id": clean_text(getattr(r, "element_id", "")),
+                "source_uid": src_uid,
+                "target_uid": tgt_uid,
+                "rel_type": clean_text(data.get("rel_type")) or DEFAULT_REL_TYPE,
+                "group_id": clean_text(data.get("group_id")),
+                "description": clean_text(data.get("description")),
+                "properties": {},
+            })
+        return {
+            "nodes": [n for n in nodes if n],
+            "relations": rels,
+            "path_length": int(row.get("path_length", -1) or -1),
+        }
+
+    def get_stats(self, group_id: str) -> dict[str, Any]:
+        """获取图谱统计摘要。"""
+        rows = self._run(self._STATS_QUERY, {"group_id": group_id})
+        if not rows:
+            return {"node_count": 0, "rel_count": 0, "node_types": {}, "rel_types": {}, "orphan_count": 0}
+        row = rows[0]
+        node_count = int(row.get("node_count", 0) or 0)
+        rel_count = int(row.get("rel_count", 0) or 0)
+        node_types: dict[str, int] = {}
+        for n in (row.get("node_samples") or []):
+            for label in (n.get("labels") or []):
+                label = clean_text(label)
+                if label:
+                    node_types[label] = node_types.get(label, 0) + 1
+        rel_types: dict[str, int] = {}
+        connected_uids: set[str] = set()
+        for r in (row.get("rel_samples") or []):
+            rt = clean_text(r.get("rel_type"))
+            if rt:
+                rel_types[rt] = rel_types.get(rt, 0) + 1
+            s = clean_text(r.get("source"))
+            t = clean_text(r.get("target"))
+            if s:
+                connected_uids.add(s)
+            if t:
+                connected_uids.add(t)
+        orphan_count = max(0, node_count - len(connected_uids))
+        return {
+            "node_count": node_count,
+            "rel_count": rel_count,
+            "node_types": node_types,
+            "rel_types": rel_types,
+            "orphan_count": orphan_count,
+        }
+
+    def clear_group(self, group_id: str) -> int:
+        """删除指定 group_id 下的全部节点和关系。"""
+        rows = self._run(self._CLEAR_GROUP, {"group_id": group_id}, write=True)
+        return int((rows[0] if rows else {}).get("deleted", 0) or 0)
+
     def close(self) -> None:
         """关闭 Neo4j driver。"""
         if self._driver is not None:

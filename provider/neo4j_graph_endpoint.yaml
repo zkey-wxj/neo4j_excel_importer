@@ -53,3 +53,7 @@ endpoints:
   - endpoints/group_graph_relation_update.yaml
   - endpoints/group_graph_relation_delete.yaml
   - endpoints/group_graph_replace_node_relations.yaml
+  - endpoints/group_graph_neighbors.yaml
+  - endpoints/group_graph_path.yaml
+  - endpoints/group_graph_stats.yaml
+  - endpoints/group_graph_clear.yaml

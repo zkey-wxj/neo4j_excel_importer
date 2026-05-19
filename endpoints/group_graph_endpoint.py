@@ -58,6 +58,15 @@ class GroupGraphEndpoint(Endpoint):
 
             if path == "/group-graph/api/replace-node-relations" and method == "POST":
                 return self._replace_node_relations(r, store)
+
+            if path == "/group-graph/api/neighbors" and method == "GET":
+                return self._expand_neighbors(r, store)
+            if path == "/group-graph/api/path" and method == "GET":
+                return self._find_path(r, store)
+            if path == "/group-graph/api/stats" and method == "GET":
+                return self._get_stats(r, store)
+            if path == "/group-graph/api/group" and method == "DELETE":
+                return self._clear_group(r, store)
         except Exception as exc:
             logger.exception("endpoint invoke failed")
             return self._json_response({"error": str(exc)}, 500)
@@ -170,6 +179,44 @@ class GroupGraphEndpoint(Endpoint):
             return self._json_response({"error": "old_uid 和 new_uid 不能相同"}, 400)
         redirected = store.replace_node_relations(group_id, old_uid, new_uid)
         return self._json_response({"ok": True, "redirected": redirected}, 200)
+
+    def _expand_neighbors(self, r: Request, store: GroupGraphStore) -> Response:
+        """查询节点的 N 跳邻居。"""
+        group_id = clean_text(r.args.get("group_id"))
+        uid = clean_text(r.args.get("uid"))
+        if not group_id or not uid:
+            return self._json_response({"error": "group_id 和 uid 不能为空"}, 400)
+        depth = self._limit(r.args.get("depth"), default=1, max_value=5)
+        result = store.expand_neighbors(group_id, uid, depth)
+        return self._json_response(result, 200)
+
+    def _find_path(self, r: Request, store: GroupGraphStore) -> Response:
+        """查找两节点间最短路径。"""
+        group_id = clean_text(r.args.get("group_id"))
+        source_uid = clean_text(r.args.get("source_uid"))
+        target_uid = clean_text(r.args.get("target_uid"))
+        if not group_id or not source_uid or not target_uid:
+            return self._json_response({"error": "group_id、source_uid、target_uid 不能为空"}, 400)
+        result = store.find_path(group_id, source_uid, target_uid)
+        return self._json_response(result, 200)
+
+    def _get_stats(self, r: Request, store: GroupGraphStore) -> Response:
+        """获取图谱统计摘要。"""
+        group_id = clean_text(r.args.get("group_id"))
+        if not group_id:
+            return self._json_response({"error": "group_id 不能为空"}, 400)
+        result = store.get_stats(group_id)
+        return self._json_response(result, 200)
+
+    def _clear_group(self, r: Request, store: GroupGraphStore) -> Response:
+        """清空指定 group_id 的全部数据。"""
+        body = self._body_json(r)
+        err = self._validate_required(body, ["group_id"])
+        if err:
+            return self._json_response({"error": err}, 400)
+        group_id = clean_text(body["group_id"])
+        deleted = store.clear_group(group_id)
+        return self._json_response({"ok": True, "deleted": deleted}, 200)
 
     def _body_json(self, r: Request) -> dict[str, Any]:
         """读取 JSON body，空 body 返回空对象。"""

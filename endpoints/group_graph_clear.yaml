@@ -1,0 +1,5 @@
+path: "/group-graph/api/group"
+method: "DELETE"
+extra:
+  python:
+    source: "endpoints/group_graph_endpoint.py"
