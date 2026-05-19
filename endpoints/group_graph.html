@@ -577,25 +577,20 @@
 					</div>
 				</div>
 
-				<div class="ops-card">
-					<div class="ops-title">节点关系替换</div>
-					<div class="ops-grid">
-						<div class="ops-row"><label>旧节点ID（old_uid）</label><input id="replaceOldUid" placeholder="原节点 uid（所有关系将被转移）" /></div>
-						<div class="ops-row"><label>新节点ID（new_uid）</label><input id="replaceNewUid" placeholder="目标节点 uid" /></div>
-					</div>
-					<div class="ops-actions" style="grid-template-columns: 1fr">
-						<button class="ops-btn primary" id="btnReplaceRelations">替换全部关系</button>
-					</div>
-				</div>
-
 				<div class="ops-card" style="margin-bottom: 0">
 					<div class="ops-title">关系操作</div>
 					<div class="ops-grid">
-						<div class="ops-row"><label>源节点ID（source_uid）</label><input id="relSource" placeholder="源节点 uid（点击关系自动填充）" /></div>
-						<div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED" /></div>
+						<div class="ops-row">
+							<label>源节点ID（source_uid）</label>
+							<div style="display:flex;gap:4px"><input id="relSource" placeholder="源节点 uid" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="relSource" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
+						<div class="ops-row">
+							<label>目标节点ID（target_uid）</label>
+							<div style="display:flex;gap:4px"><input id="relTarget" placeholder="目标节点 uid" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="relTarget" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
 					</div>
 					<div class="ops-grid" style="margin-top: 6px">
-						<div class="ops-row"><label>目标节点ID（target_uid）</label><input id="relTarget" placeholder="目标节点 uid（点击关系自动填充）" /></div>
+						<div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED" /></div>
 						<div class="ops-row"><label>说明</label><input value="按 source_uid + target_uid 编辑/删除关系" readonly /></div>
 					</div>
 					<div class="ops-row" style="margin-top: 6px"><label>描述（description）</label><input id="relDesc" placeholder="关系描述" /></div>
@@ -610,6 +605,23 @@
 						<button class="ops-btn primary" id="btnRelCreate">新增</button>
 						<button class="ops-btn" id="btnRelUpdate">更新</button>
 						<button class="ops-btn" id="btnRelDelete">删除</button>
+					</div>
+				</div>
+
+				<div class="ops-card">
+					<div class="ops-title">节点关系替换</div>
+					<div class="ops-grid">
+						<div class="ops-row">
+							<label>旧节点ID（old_uid）</label>
+							<div style="display:flex;gap:4px"><input id="replaceOldUid" placeholder="原节点 uid" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="replaceOldUid" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
+						<div class="ops-row">
+							<label>新节点ID（new_uid）</label>
+							<div style="display:flex;gap:4px"><input id="replaceNewUid" placeholder="目标节点 uid" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="replaceNewUid" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
+						</div>
+					</div>
+					<div class="ops-actions" style="grid-template-columns: 1fr">
+						<button class="ops-btn primary" id="btnReplaceRelations">替换全部关系</button>
 					</div>
 				</div>
 				<div id="status"></div>
@@ -1602,6 +1614,8 @@
 					this.canvas = canvas;
 					this.el = canvas.el;
 					this.selectedNodeId = null;
+					this._pickTarget = null;
+					this._pickBtn = null;
 					this.hoveredNodeId = null;
 					this.hoveredEdgeIdx = -1;
 					this.dragging = null;
@@ -1752,6 +1766,12 @@
 						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
 						nd = cv.findNodeAt(wx, wy, 18);
 					if (nd) {
+						if (this._pickTarget) {
+							document.getElementById(this._pickTarget).value = clean(nd.raw.uid);
+							this._exitPickMode();
+							setStatus(`已抓取节点: ${clean(nd.raw.uid)}`);
+							return;
+						}
 						if (this.selectedNodeId === nd.id) {
 							this.clearSel();
 						} else {
@@ -1779,8 +1799,30 @@
 				clearSel() {
 					this.selectedNodeId = null;
           this.hoveredNodeId = null;
+					this._exitPickMode();
 					this.hideInfo(true);
 					this.canvas.scheduleRender();
+				}
+				_enterPickMode(inputId, btn) {
+					this._exitPickMode();
+					this._pickTarget = inputId;
+					this._pickBtn = btn;
+					btn.style.borderColor = "var(--blue)";
+					btn.style.color = "var(--blue)";
+					btn.style.background = "#eef4ff";
+					this.canvas.el.style.cursor = "crosshair";
+					setStatus("抓取模式: 点击图中节点填充，ESC 取消");
+				}
+				_exitPickMode() {
+					if (!this._pickTarget) return;
+					if (this._pickBtn) {
+						this._pickBtn.style.borderColor = "";
+						this._pickBtn.style.color = "";
+						this._pickBtn.style.background = "";
+					}
+					this._pickTarget = null;
+					this._pickBtn = null;
+					this.canvas.el.style.cursor = "default";
 				}
 				// 信息面板显示：计算关联数，填充类型/名称/权重/编号，支持防抖
 				showInfo(node, imm) {
@@ -1866,6 +1908,12 @@
 			document.getElementById("btnNodePropAdd").onclick = () => document.getElementById("nodePropsList").appendChild(createKvRow());
 			document.getElementById("btnNodeMetaAdd").onclick = () => document.getElementById("nodeMetaList").appendChild(createKvRow());
 			document.getElementById("btnRelPropAdd").onclick = () => document.getElementById("relPropsList").appendChild(createKvRow());
+			document.getElementById("ops-panel").addEventListener("click", (e) => {
+				const btn = e.target.closest("[data-pick-input]");
+				if (!btn) return;
+				const inputId = btn.dataset.pickInput;
+				_ia._pickTarget === inputId ? _ia._exitPickMode() : _ia._enterPickMode(inputId, btn);
+			});
 			document.getElementById("btnNodeCreate").onclick = async () => {
 				try {
 					if (!confirm("确认新增节点吗？")) return;
@@ -1943,6 +1991,13 @@
 					_canvas.scheduleRender();
 					setStatus(kw ? `已按关键词过滤: ${kw}` : "已清除关键词过滤");
 				}, 300);
+			});
+
+			document.addEventListener("keydown", (e) => {
+				if (e.key === "Escape" && _ia._pickTarget) {
+					_ia._exitPickMode();
+					setStatus("已退出抓取模式");
+				}
 			});
 
 			window.addEventListener("resize", () => {
