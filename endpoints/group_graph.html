@@ -152,6 +152,25 @@
 				text-transform: uppercase;
 				margin-bottom: 10px;
 			}
+			#legendList {
+				max-height: 280px;
+				overflow-y: auto;
+				padding-right: 6px;
+				margin-right: -6px;
+			}
+			#legendList::-webkit-scrollbar {
+				width: 4px;
+			}
+			#legendList::-webkit-scrollbar-track {
+				background: transparent;
+			}
+			#legendList::-webkit-scrollbar-thumb {
+				background: var(--border2);
+				border-radius: 4px;
+			}
+			#legendList::-webkit-scrollbar-thumb:hover {
+				background: var(--muted);
+			}
 			.legend-item {
 				display: flex;
 				align-items: center;
@@ -182,7 +201,9 @@
 				flex-shrink: 0;
 			}
 			.legend-actions {
-				margin-top: 6px;
+				margin-top: 8px;
+				padding-top: 10px;
+				border-top: 1px solid var(--border);
 			}
 			.legend-reset-btn {
 				width: 100%;
@@ -778,24 +799,31 @@
 					this.nodes = [];
 					this.links = [];
 				}
+				// 重置存储：清空所有节点和关系的原始数据及渲染数据
 				reset() {
 					this.nodeMap.clear();
 					this.linkMap.clear();
 					this.nodes = [];
 					this.links = [];
 				}
+				// 添加节点：按 uid 去重存储原始节点对象
+				// @param arr 节点数组 {uid, name, labels, description, properties, meta, ...}
 				addNodes(arr) {
 					for (const n of arr) {
 						const uid = clean(n.uid);
 						if (uid) this.nodeMap.set(uid, n);
 					}
 				}
+				// 添加关系：按关系键（source_uid=>target_uid:rel_type）去重存储原始关系对象
+				// @param arr 关系数组 {source_uid, target_uid, rel_type, properties, meta, ...}
 				addLinks(arr) {
 					for (const r of arr) {
 						const k = relStoreKey(r);
 						if (k) this.linkMap.set(k, r);
 					}
 				}
+				// 将原始数据映射为渲染数据：验证关系连通性、提取节点类型/颜色、计算复合权重
+				// @return {nodes, links} 经过转换和加工后的渲染数据结构
 				mapGraphData() {
 					const raw = Array.from(this.nodeMap.values()),
 						rels = Array.from(this.linkMap.values()),
@@ -831,7 +859,8 @@
 					this.computeNodeWeights();
 					return { nodes: this.nodes, links: this.links };
 				}
-				// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
+				// 计算复合权重：融合 PageRank(25%)、Hub(40%)、度中心性(15%)、Authority(12%)、加权度(8%)
+				// 通过多种图算法综合评估每个节点在图中的重要性
 				computeNodeWeights() {
 					const N = this.nodes.length;
 					if (!N) return;
@@ -959,6 +988,10 @@
 				url(p) {
 					return this.base.replace(/\/+$/, "") + (String(p).startsWith("/") ? p : `/${p}`);
 				}
+				// 统一 HTTP 请求封装：自动拼接基路径、处理 JSON 序列化、错误提示
+				// @param path 请求路径
+				// @param opt {method, body} 请求选项
+				// @return Promise<Object> JSON 响应数据
 				async req(path, opt = {}) {
 					const m = (opt.method || "GET").toUpperCase(),
 						u = /^https?:\/\//.test(path) ? path : this.url(path),
@@ -979,6 +1012,10 @@
 					if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
 					return d;
 				}
+				// 按分组分页加载图谱：支持增量渲染，自动分页直到全量加载完毕
+				// @param gid 分组 ID
+				// @param onPage(data, pageNum) 每页完成后的回调函数
+				// @return Promise<{nodes, links}> 完整的渲染数据
 				async loadGroup(gid, onPage) {
 					this.store.reset();
 					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
@@ -1004,6 +1041,9 @@
 					setStatus("已加载示例图谱");
 					return this.store.mapGraphData();
 				}
+				// 分页加载演示数据：用于无后端时的本地演示，模拟真实的分页加载过程
+				// @param onPage(data, pageNum) 每页完成后的回调函数
+				// @return Promise<{nodes, links}> 完整的演示数据
 				async loadDemoPaged(onPage) {
 					this.store.reset();
 					const dn = genDemoNodes(1000),
@@ -1023,6 +1063,11 @@
 					setStatus(`示例加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();
 				}
+				// 执行 CRUD 操作后自动刷新图谱：发送变更请求，重新加载当前分组的全部数据
+				// @param path API 路径
+				// @param method HTTP 方法（POST/PUT/DELETE）
+				// @param payload 请求体数据
+				// @return Promise<{nodes, links}> 变更后的最新渲染数据
 				async mutate(path, method, payload) {
 					setStatus("执行中...");
 					await this.req(path, { method, body: JSON.stringify(payload) });
@@ -1064,6 +1109,7 @@
 					this.searchKeyword = "";
 					this.needRender = false;
 				}
+				// 初始化画布：计算视口大小、设置 2D 上下文、适配 DPR（设备像素比）
 				initCanvas() {
 					const c = document.getElementById("app");
 					this.W = c.clientWidth;
@@ -1076,11 +1122,13 @@
 					this.ctx = this.el.getContext("2d");
 					this.ctx.scale(dpr, dpr);
 				}
+				// 调度渲染：通过 requestAnimationFrame 异步触发绘制，避免过度渲染
 				scheduleRender() {
 					if (this.needRender) return;
 					this.needRender = true;
 					requestAnimationFrame(() => this.drawFrame());
 				}
+				// 构建四叉树空间索引：用于快速的节点悬浮/点击判定
 				buildQuadtree() {
 					this.quadtree = d3
 						.quadtree()
@@ -1088,13 +1136,24 @@
 						.y((d) => d.y ?? 0)
 						.addAll(this._nodes);
 				}
+				// 屏幕坐标转换为世界坐标：根据当前的缩放和平移状态逆向计算
+				// @param ex, ey 屏幕坐标
+				// @return [wx, wy] 世界坐标
 				toWorld(ex, ey) {
 					const r = this.el.getBoundingClientRect();
 					return this.transform.invert([ex - r.left, ey - r.top]);
 				}
+				// 查找世界坐标处的节点：使用四叉树快速查询
+				// @param wx, wy 世界坐标
+				// @param r 查询半径
+				// @return Node | null 找到的节点或 null
 				findNodeAt(wx, wy, r = 18) {
 					return this.quadtree?.find(wx, wy, r) ?? null;
 				}
+				// 查找世界坐标处的边：沿着贝塞尔曲线采样判断碰撞
+				// @param wx, wy 世界坐标
+				// @param th 碰撞阈值
+				// @return number 边的索引或 -1（未找到）
 				findEdgeAt(wx, wy, th = 8) {
 					for (let i = this._edges.length - 1; i >= 0; i--) {
 						const e = this._edges[i],
@@ -1161,6 +1220,7 @@
 					const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
 					return [clean(n?.label).toLowerCase(), clean(n?.uid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
 				}
+				// 渲染图例：鱅欄竞毗中列举何节点类型、颜色、是否此时处于筛选或隐藏状态
 				renderLegend() {
 					const ll = document.getElementById("legendList"),
 						lr = document.getElementById("legend");
@@ -1567,6 +1627,7 @@
 				_isNeighbor(a, b) {
 					return this.canvas._edges.some((e) => !e.isSelfLoop && ((e.source?.id === b && e.target?.id === a) || (e.target?.id === b && e.source?.id === a)));
 				}
+				// 指针移动事件处理：管理节点拖拽、画布平移、悬浮高亮、信息面板防抖
 				onPtrMove(e) {
 					const cv = this.canvas;
 					if (this.dragging) {
@@ -1605,12 +1666,17 @@
 						cv.scheduleRender();
 					}
 				}
+				// 指针按下事件处理：区分节点拖拽、画布平移、保存下指位置突启动拖拽
+				// @param e PointerEvent
 				onPtrDown(e) {
 					if (e.button !== 0) return;
+					this.downX = e.clientX;
+					this.downY = e.clientY;
 					const cv = this.canvas,
 						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
 						nd = cv.findNodeAt(wx, wy, 18);
-					if (nd) {
+					// 有节点且当前没有选中节点时才能拖动节点，否则全都视为拖动画布（平移）
+					if (nd && !this.selectedNodeId) {
 						this.el.setPointerCapture(e.pointerId);
 						this.dragging = nd;
 						this.dragWX = wx;
@@ -1628,6 +1694,7 @@
 						this.el.style.cursor = "grabbing";
 					}
 				}
+				// 指针离传打破事件处理：清理拖拽、平移、低毗力模拟控制
 				onPtrUp() {
 					if (this.dragging) {
 						if (this.isDrag) this.canvas.sim.alphaTarget(0);
@@ -1655,7 +1722,13 @@
 					}
 				}
 				// 点击处理：节点切换选中/取消，边填充关系表单，空白处取消选中
+				// 点击处理：节点选中/取消、边填充表单、空白取消选中；验证拖拽低于阈值涉允点击
+				// @param e MouseEvent
 				onClick(e) {
+					// 区分拖拽和平移，超过一定位移不触发点击
+					if (Math.abs(e.clientX - (this.downX || 0)) > 5 || Math.abs(e.clientY - (this.downY || 0)) > 5) {
+						return;
+					}
 					const cv = this.canvas,
 						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
 						nd = cv.findNodeAt(wx, wy, 18);
@@ -1673,16 +1746,20 @@
 					}
 					const ei = cv.findEdgeAt(wx, wy);
 					if (ei >= 0) {
-						fillRelForm(cv._edges[ei].raw);
-						cv.scheduleRender();
-						return;
+						const edge = cv._edges[ei];
+						const isHighlighted = !this.selectedNodeId || edge.source?.id === this.selectedNodeId || edge.target?.id === this.selectedNodeId;
+						if (isHighlighted) {
+							fillRelForm(edge.raw);
+							cv.scheduleRender();
+							return;
+						}
 					}
-					this.selectedNodeId = null;
-					this.hideInfo(true);
-					cv.scheduleRender();
+					this.clearSel();
 				}
+				// 清除选中：整法取消节点选中、隠藏信息面板、刷新渲染
 				clearSel() {
 					this.selectedNodeId = null;
+          this.hoveredNodeId = null;
 					this.hideInfo(true);
 					this.canvas.scheduleRender();
 				}
