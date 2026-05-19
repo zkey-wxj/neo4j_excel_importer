@@ -136,7 +136,7 @@ def run_cypher_query(
                 parameters=safe_parameters,
                 allow_write=allow_write,
             )
-            result = session.run(query, safe_parameters)
+            result = session.run(query, safe_parameters)  # type: ignore[arg-type]
             return [record.data() for record in itertools.islice(result, limit)]
     finally:
         driver.close()

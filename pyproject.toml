@@ -1,0 +1,39 @@
+[project]
+name = "neo4j-excel-importer"
+version = "0.0.35"
+description = "Dify plugin: Import Excel knowledge graphs into Neo4j, query nodes and relations, and manage group graph data."
+requires-python = ">=3.12"
+dependencies = [
+    "dify_plugin==0.8.0",
+    "pandas==3.0.3",
+    "openpyxl==3.1.5",
+    "neo4j==6.2.0",
+    "networkx==3.6.1",
+    "matplotlib==3.10.9",
+    "python-dotenv==1.2.2",
+    "openai==2.36.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.11.0",
+    "pyright>=1.1.400",
+    "pytest>=8.0.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]

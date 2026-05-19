@@ -4,7 +4,7 @@ import json
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from werkzeug import Request, Response
 
@@ -16,7 +16,7 @@ from core.embedding_common import (
     generate_embeddings,
     has_embedding_model,
 )
-from core.types import normalize_node, utc_now_iso
+from core.types import NodePayload, normalize_node, utc_now_iso
 from endpoints.group_graph_store import GroupGraphStore
 
 logger = logging.getLogger(__name__)
@@ -216,7 +216,8 @@ class GroupGraphEndpoint(Endpoint):
         if not self._clean(node_payload.get("name")):
             node_payload["name"] = self._clean(node_payload.get("uid"))
 
-        normalized_meta = dict(node_payload.get("meta") or {})
+        raw_meta = node_payload.get("meta")
+        normalized_meta = dict(raw_meta) if isinstance(raw_meta, dict) else {}
         for meta_key, meta_value in merged_meta.items():
             if meta_key not in {"created_at", "updated_at", "source", "version"}:
                 normalized_meta[meta_key] = meta_value
@@ -237,7 +238,7 @@ class GroupGraphEndpoint(Endpoint):
         if not has_embedding_model(embedding_model):
             return normalized
 
-        embedding_text = build_node_embedding_text(normalized)
+        embedding_text = build_node_embedding_text(cast(NodePayload, normalized))
         if not embedding_text:
             return normalized
 

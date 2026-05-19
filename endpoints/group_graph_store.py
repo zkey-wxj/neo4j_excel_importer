@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
-from neo4j import GraphDatabase
+from neo4j import Driver, GraphDatabase
 
 from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
-from core.types import NODE_PAYLOAD_FIELDS, RELATION_PAYLOAD_FIELDS
+from core.types import NODE_PAYLOAD_FIELDS, RELATION_PAYLOAD_FIELDS, NodePayload, RelationPayload
 
 
 class GroupGraphStore:
@@ -101,7 +101,7 @@ RETURN count(*) AS deleted
         self.database = self._clean(settings.get("neo4j_database"))
         if not self.uri or not self.user or not self.password:
             raise ValueError("Endpoint settings 缺少 neo4j_uri/neo4j_user/neo4j_password")
-        self._driver = None
+        self._driver: Driver | None = None
         self._ensure_driver()
 
     def _ensure_driver(self) -> None:
@@ -122,6 +122,7 @@ RETURN count(*) AS deleted
         kwargs: dict[str, Any] = {}
         if self.database:
             kwargs["database"] = self.database
+        assert self._driver is not None
         with self._driver.session(**kwargs) as session:
             # 只在第一页查询 total，避免每次分页都全量 count。
             if page == 1:
@@ -231,7 +232,7 @@ RETURN count(*) AS deleted
 
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = node_payload_to_cypher_row(
-            {
+            cast(NodePayload, {
                 "uid": self._clean(payload.get("uid")),
                 "name": self._clean(payload.get("name")) or self._clean(payload.get("uid")),
                 "labels": self._str_list(payload.get("labels")) or ["Node"],
@@ -239,7 +240,7 @@ RETURN count(*) AS deleted
                 "group_id": self._clean(payload.get("group_id")),
                 "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
                 "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
-            }
+            })
         )
         return {
             "group_id": row["group_id"],
@@ -253,7 +254,7 @@ RETURN count(*) AS deleted
 
     def _relation_create_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = relation_payload_to_cypher_row(
-            {
+            cast(RelationPayload, {
                 "source_uid": self._clean(payload.get("source_uid")),
                 "target_uid": self._clean(payload.get("target_uid")),
                 "rel_type": self._clean(payload.get("rel_type")) or "RELATED",
@@ -262,7 +263,7 @@ RETURN count(*) AS deleted
                 "description": self._clean(payload.get("description")),
                 "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
                 "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
-            }
+            })
         )
         return {
             "source_uid": row["source_uid"],
@@ -293,7 +294,7 @@ RETURN count(*) AS deleted
             weight = None
 
         row = relation_payload_to_cypher_row(
-            {
+            cast(RelationPayload, {
                 "source_uid": source_uid,
                 "target_uid": target_uid,
                 "rel_type": rel_type,
@@ -303,7 +304,7 @@ RETURN count(*) AS deleted
                 "weight": weight,
                 "properties": input_props if isinstance(input_props, Mapping) else {},
                 "meta": input_meta if isinstance(input_meta, Mapping) else {},
-            }
+            })
         )
         return {
             "source_uid": source_uid,
@@ -319,8 +320,9 @@ RETURN count(*) AS deleted
         kwargs: dict[str, Any] = {}
         if self.database:
             kwargs["database"] = self.database
+        assert self._driver is not None
         with self._driver.session(**kwargs) as session:
-            result = session.run(query, parameters)
+            result = session.run(query, parameters)  # type: ignore[arg-type]
             rows = [record.data() for record in result]
             if write:
                 result.consume()

@@ -27,8 +27,8 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from collections.abc import Generator
-from typing import Any
+from collections.abc import Generator, Mapping
+from typing import Any, cast
 
 import pandas as pd
 from dify_plugin import Tool
@@ -45,6 +45,7 @@ from core.graph_write_common import (
     write_relations,
 )
 from core.types import (
+    GraphMeta,
     NodePayload,
     RelationPayload,
     ensure_mapping,
@@ -282,21 +283,21 @@ class ImportGraphTool(Tool):
             return f"TITLE_{'_'.join(segments)}"
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        tool_parameters = ensure_mapping(tool_parameters, field_name="tool_parameters")
-        credentials = ensure_mapping(self.runtime.credentials, field_name="runtime.credentials")
+        params: Mapping[str, Any] = ensure_mapping(tool_parameters, field_name="tool_parameters")
+        credentials: Mapping[str, Any] = ensure_mapping(self.runtime.credentials, field_name="runtime.credentials")
 
         # ── 1. 参数读取 ──────────────────────────────────────────────────
-        excel_url   = str(tool_parameters.get("excel_url") or "").strip()
-        excel_text  = str(tool_parameters.get("excel_text") or "").strip()
-        batch_size  = max(1, int(tool_parameters.get("batch_size") or 500))
-        embedding_batch_size = int(tool_parameters.get("embedding_batch_size") or 50)
+        excel_url   = str(params.get("excel_url") or "").strip()
+        excel_text  = str(params.get("excel_text") or "").strip()
+        batch_size  = max(1, int(params.get("batch_size") or 500))
+        embedding_batch_size = int(params.get("embedding_batch_size") or 50)
         if embedding_batch_size <= 0:
             embedding_batch_size = 50
-        clear_first = bool(tool_parameters.get("clear_before_import", False))
-        input_group_id = str(tool_parameters.get("group_id") or "").strip()
-        embedding_model = tool_parameters.get("embedding_model")
+        clear_first = bool(params.get("clear_before_import", False))
+        input_group_id = str(params.get("group_id") or "").strip()
+        embedding_model = params.get("embedding_model")
         group_id    = input_group_id
-        mapping     = self._resolve_mapping(tool_parameters.get("mapping"))
+        mapping     = self._resolve_mapping(params.get("mapping"))
 
         if not group_id:
             group_id = self._load_last_group_id_from_session()
@@ -409,7 +410,7 @@ class ImportGraphTool(Tool):
         self,
         excel_text: str,
         mapping: dict[str, Any],
-    ) -> tuple[list[NodePayload], list[RelationPayload]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         rows = self._split_markdown_rows(excel_text)
         blocks = self._split_rows_into_blocks(rows)
         if not blocks:
@@ -423,7 +424,7 @@ class ImportGraphTool(Tool):
         excel_bytes: bytes,
         mapping: dict[str, Any],
         source_name: str,
-    ) -> tuple[list[NodePayload], list[RelationPayload]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
         逐行扫描，识别节点表头和关系表头，收集所有行。
         """
@@ -672,9 +673,9 @@ class ImportGraphTool(Tool):
         blocks: list[list[list[str]]],
         mapping: dict[str, Any],
         source_name: str,
-    ) -> tuple[list[NodePayload], list[RelationPayload]]:
-        node_rows: list[NodePayload] = []
-        rel_rows: list[RelationPayload] = []
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        node_rows: list[dict[str, Any]] = []
+        rel_rows: list[dict[str, Any]] = []
         title_uid_allocator = self._TitleUidAllocator()
         title_first_node_map: dict[str, tuple[str, str]] = {}
 
@@ -1087,8 +1088,8 @@ class ImportGraphTool(Tool):
     # ── 内部：写入 Neo4j ─────────────────────────────────────────────────
     def _write_to_neo4j(
         self,
-        parsed_nodes_input: list[NodePayload],
-        parsed_relations_input: list[RelationPayload],
+        parsed_nodes_input: list[dict[str, Any]],
+        parsed_relations_input: list[dict[str, Any]],
         uri: str,
         user: str,
         pwd: str,
@@ -1146,7 +1147,7 @@ class ImportGraphTool(Tool):
                         ),
                         group_id=group_id,
                         properties=properties,
-                        meta=ensure_mapping(row_data.get("meta"), field_name="node.meta") or _build_meta(),
+                        meta=cast("GraphMeta", ensure_mapping(row_data.get("meta"), field_name="node.meta") or _build_meta()),
                     )
                 )
 
@@ -1219,7 +1220,7 @@ class ImportGraphTool(Tool):
                         ),
                         group_id=group_id,
                         properties=properties,
-                        meta=ensure_mapping(row_data.get("meta"), field_name="relation.meta") or _build_meta(),
+                        meta=cast("GraphMeta", ensure_mapping(row_data.get("meta"), field_name="relation.meta") or _build_meta()),
                     )
                 )
 

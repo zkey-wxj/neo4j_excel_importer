@@ -1,7 +1,29 @@
-__pycache__
+# Python
+__pycache__/
 **/__pycache__/**
-temp/
+*.py[cod]
+*.egg-info/
+dist/
+build/
 
+# Virtual environment
+.venv/
+venv/
+
+# Environment variables
 .env
-.claude
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Project
+temp/
+.claude/
+.copilot/
 CLAUDE.md
+
+# OS
+Thumbs.db
+.DS_Store

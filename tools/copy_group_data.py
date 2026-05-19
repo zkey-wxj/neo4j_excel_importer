@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Generator, Mapping
-from typing import Any
+from typing import Any, cast
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from core.graph_query_common import as_mapping, run_read_query
 from core.graph_write_common import get_credentials, write_nodes, write_relations
-from core.types import NodePayload, RelationPayload, clean_text
+from core.types import GraphMeta, NodePayload, RelationPayload, clean_text
 
 
 class CopyGroupDataTool(Tool):
@@ -223,7 +223,7 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
             "description": clean_text(node_map.get("description")),
             "group_id": target_group_id,
             "properties": clean_props,
-            "meta": meta,
+            "meta": cast(GraphMeta, meta),
         }
         embedding = node_map.get("embedding")
         if isinstance(embedding, list) and embedding:
@@ -274,7 +274,7 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
             "description": description,
             "group_id": target_group_id,
             "properties": merged_props,
-            "meta": merged_meta,
+            "meta": cast(GraphMeta, merged_meta),
         }
 
         target_embedding = target_node_map.get("embedding")
