@@ -41,7 +41,7 @@ LIMIT $limit
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE coalesce(r.group_id, '') = $group_id
    OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
-RETURN src, labels(src) AS src_labels, r, tgt, labels(tgt) AS tgt_labels
+RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
 ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, type(r), '')
 SKIP $offset
 LIMIT $limit
@@ -161,7 +161,7 @@ RETURN count(*) AS deleted
                 nodes[src["uid"]] = src
             if tgt:
                 nodes[tgt["uid"]] = tgt
-            rel = self._serialize_relation(row.get("r"), src, tgt)
+            rel = self._serialize_relation(row.get("r"), src, tgt, explicit_type=row.get("r_type"), explicit_id=row.get("r_id"))
             if rel:
                 rels.append(rel)
 
@@ -367,14 +367,25 @@ RETURN count(*) AS deleted
         rel_obj: Any,
         src_node: dict[str, Any] | None,
         tgt_node: dict[str, Any] | None,
+        explicit_type: Any = None,
+        explicit_id: Any = None,
     ) -> dict[str, Any] | None:
         if rel_obj is None or src_node is None or tgt_node is None:
             return None
         data = self._mapping(rel_obj)
         rel_type = self._clean(data.get("rel_type"))
-        if not rel_type and hasattr(rel_obj, "type"):
-            rel_type = self._clean(getattr(rel_obj, "type"))
-        rel_id = self._clean(getattr(rel_obj, "element_id", ""))
+        
+        if not rel_type or rel_type == "RELATED":
+            neo_type = self._clean(explicit_type) if explicit_type else ""
+            if not neo_type and hasattr(rel_obj, "type"):
+                neo_type = self._clean(getattr(rel_obj, "type"))
+            if neo_type and neo_type != "RELATED":
+                rel_type = neo_type
+
+        rel_id = self._clean(explicit_id) if explicit_id else ""
+        if not rel_id and hasattr(rel_obj, "element_id"):
+            rel_id = self._clean(getattr(rel_obj, "element_id", ""))
+            
         return {
             "id": rel_id,
             "source_uid": src_node.get("uid"),

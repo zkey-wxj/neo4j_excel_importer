@@ -585,21 +585,36 @@
 
 		<script>
 			/* ═══════════════════════════════════════════════════════════════════
-   全局常量配置
-   ═══════════════════════════════════════════════════════════════════ */
+			 全局常量配置
+			 ═══════════════════════════════════════════════════════════════════ */
+			// 力导引布局：斥力推开节点防堆叠，连线距离控制相连节点间距，碰撞间距防止重叠，中心引力保持图谱居中
 			const FORCE_CHARGE = -800,
 				FORCE_LINK_DIST = 200,
 				FORCE_COLLISION = 14,
 				FORCE_PULL = 0.01;
-			const TYPE_META = { Core: { color: "#0ea5c8", bg: "rgba(14,165,200,0.10)", r: 16 }, Module: { color: "#7c54e8", bg: "rgba(124,84,232,0.10)", r: 13 }, Service: { color: "#0fa96b", bg: "rgba(15,169,107,0.10)", r: 11 }, Data: { color: "#d97706", bg: "rgba(217,119,6,0.10)", r: 10 }, Agent: { color: "#e8445a", bg: "rgba(232,68,90,0.10)", r: 9 } };
+			// 节点类型视觉映射：动态生成颜色和半径
+			const TYPE_COLORS = d3.scaleOrdinal(d3.schemeCategory10);
+			const TYPE_META = new Map();
 			const DEMO_NAMES = ["Orchestrator", "Planner", "Memory", "Retriever", "Embedder", "Reasoner", "VectorDB", "Cache", "DocStore", "Gateway", "Auth", "Logger", "Executor", "Validator", "Critic", "Scheduler", "EventBus", "Metrics", "Router", "Parser", "Encoder", "Decoder", "Monitor", "Collector", "Dispatcher", "Registry", "Resolver", "Transformer", "Aggregator", "Connector", "Buffer", "Indexer", "Crawler", "Fetcher", "Loader", "Saver", "Tracker", "Analyzer", "Renderer", "Compiler", "Interpreter", "Assembler"];
-			const DEMO_TYPES = ["Core", "Module", "Service", "Data", "Agent"];
+			const DEMO_TYPES = ["System", "Component", "Database", "Model", "Task"];
+			// 示例数据名称池、类型池、关系类型池：无后端时循环取值生成演示图谱
 			const DEMO_RELS = ["dispatches", "reads", "routes", "spawns", "queries", "invokes", "schedules", "indexes", "caches", "fetches", "embeds", "stores", "reviews", "checks", "verifies", "logs", "publishes", "submits", "drafts", "triggers", "reports", "tracks", "persists", "syncs", "writes", "refines", "retries", "mirrors", "calls", "depends"];
 
 			/* ═══════════════════════════════════════════════════════════════════
-   工具函数
-   ═══════════════════════════════════════════════════════════════════ */
+			 工具函数
+			 ═══════════════════════════════════════════════════════════════════ */
+
+			function getTypeMeta(type) {
+				if (!TYPE_META.has(type)) {
+					const c = TYPE_COLORS(type);
+					const rgba = d3.color(c).rgb();
+					const bg = `rgba(${rgba.r},${rgba.g},${rgba.b},0.10)`;
+					TYPE_META.set(type, { color: c, bg: bg, r: Math.floor(10 + Math.random() * 4) });
+				}
+				return TYPE_META.get(type);
+			}
 			function clean(v) {
+				// 字符串清洗：null/undefined 安全转换为 trimmed 字符串
 				return String(v || "").trim();
 			}
 			function sleep(ms) {
@@ -647,12 +662,12 @@
 				});
 				return o;
 			}
+			// 节点类型解析：优先取第一个标签，否则默认 Node
 			function parseType(labels, uid) {
-				const a = Array.isArray(labels) ? labels.map((x) => clean(x).toLowerCase()) : [];
-				for (const k of ["core", "module", "service", "data", "agent"]) if (a.includes(k)) return k[0].toUpperCase() + k.slice(1);
-				const s = clean(uid).toLowerCase();
-				for (const k of ["core", "service", "module", "data"]) if (s.includes(k)) return k[0].toUpperCase() + k.slice(1);
-				return "Agent";
+				const a = Array.isArray(labels) ? labels.map((x) => clean(x)).filter(Boolean) : [];
+				if (a.length > 0) return a[0];
+				return "Node";
+				// 属性权重提取：依次尝试 weight/score 字段，收敛到 1-100 区间
 			}
 			function parseWeight(n) {
 				for (const v of [n.weight, n.properties?.weight, n.properties?.score, n.meta?.score]) {
@@ -669,6 +684,7 @@
 			}
 			function relStoreKey(r) {
 				const id = clean(r.relation_id);
+				// 将节点原始数据填充到左侧编辑表单，用于查看和编辑
 				return id ? `rid:${id}` : `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}`;
 			}
 			function fillNodeForm(n) {
@@ -677,6 +693,7 @@
 				document.getElementById("nodeName").value = clean(n.name);
 				document.getElementById("nodeLabels").value = Array.isArray(n.labels) ? n.labels.join(",") : "";
 				document.getElementById("nodeDesc").value = clean(n.description);
+				// 将关系原始数据填充到关系编辑表单
 				renderKv("nodePropsList", n.properties || {});
 				renderKv("nodeMetaList", n.meta || {});
 			}
@@ -684,6 +701,7 @@
 				if (!r) return;
 				document.getElementById("relSource").value = clean(r.source_uid);
 				document.getElementById("relTarget").value = clean(r.target_uid);
+				// 从节点编辑表单收集数据，构建 API 请求体
 				document.getElementById("relType").value = relLabel(r);
 				document.getElementById("relDesc").value = clean(r.description);
 				renderKv("relPropsList", r.properties || {});
@@ -701,17 +719,18 @@
 						.value.split(",")
 						.map((s) => clean(s))
 						.filter(Boolean),
-					description: clean(document.getElementById("nodeDesc").value),
+					description: clean(document.getElementById("nodeDesc").value), // 从关系编辑表单收集数据，构建 API 请求体
 					properties: collectKv("nodePropsList"),
 					meta: collectKv("nodeMetaList"),
 				};
 			}
 			function relPayload() {
-				const g = clean(document.getElementById("groupId").value),
-					s = clean(document.getElementById("relSource").value),
-					t = clean(document.getElementById("relTarget").value),
-					rt = clean(document.getElementById("relType").value);
+				const g = clean(document.getElementById("groupId").value);
+				const s = clean(document.getElementById("relSource").value);
+				const t = clean(document.getElementById("relTarget").value);
+				const rt = clean(document.getElementById("relType").value);
 				if (!g || !s || !t || !rt) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
+				// 生成示例关系：先构建生成树保证连通性，再随机添加额外边达到 1.5 倍节点数
 				return { group_id: g, source_uid: s, target_uid: t, rel_type: rt, description: clean(document.getElementById("relDesc").value), properties: collectKv("relPropsList") };
 			}
 			function genDemoNodes(c) {
@@ -744,8 +763,14 @@
 			}
 
 			/* ═══════════════════════════════════════════════════════════════════
-   GraphStore — 图数据存储
-   ═══════════════════════════════════════════════════════════════════ */
+			 GraphStore — 图数据存储
+			 - nodeMap/linkMap：原始数据去重存储（uid → 节点，relationKey → 关系）
+			 - mapGraphData()：将原始数据转换为渲染所需的节点/关系数组
+			 - computeNodeWeights()：基于图结构算法计算复合权重
+			 ═══════════════════════════════════════════════════════════════════ */
+			// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
+			// 图数据存储层：管理节点/关系的去重存储和数据转换
+			// nodeMap 按 uid 去重，linkMap 按 relationKey 去重，支持增量追加
 			class GraphStore {
 				constructor() {
 					this.nodeMap = new Map();
@@ -787,7 +812,7 @@
 					}
 					this.nodes = raw.map((n, i) => {
 						const type = parseType(n.labels, n.uid),
-							m = TYPE_META[type] || TYPE_META.Agent,
+							m = getTypeMeta(type),
 							uid = clean(n.uid),
 							deg = degMap.get(uid) || 0;
 						return { id: uid || String(i + 1), uid, label: nodeLabel(n), type, weight: parseWeight(n), color: m.color, bg: m.bg, r: Math.max(8, Math.min(26, m.r + deg * 0.9)), raw: n };
@@ -802,9 +827,11 @@
 						})
 						.filter(Boolean);
 					// ── 计算复合节点权重 ──
+					// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
 					this.computeNodeWeights();
 					return { nodes: this.nodes, links: this.links };
 				}
+				// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
 				computeNodeWeights() {
 					const N = this.nodes.length;
 					if (!N) return;
@@ -908,15 +935,21 @@
 					// 加权合成：Hub（知识延伸）40%、PageRank 25%、度中心性 15%、Authority 12%、加权度 8%
 					for (let i = 0; i < N; i++) {
 						const raw = parseWeight(this.nodes[i].raw);
-						const graph = (scoreHub[i] * 0.40 + scorePR[i] * 0.25 + scoreDeg[i] * 0.15 + scoreAuth[i] * 0.12 + scoreWD[i] * 0.08) * 100;
+						const graph = (scoreHub[i] * 0.4 + scorePR[i] * 0.25 + scoreDeg[i] * 0.15 + scoreAuth[i] * 0.12 + scoreWD[i] * 0.08) * 100;
 						this.nodes[i].weight = Math.round(Math.max(1, Math.min(100, raw * 0.25 + graph * 0.75)));
 					}
 				}
 			}
 
 			/* ═══════════════════════════════════════════════════════════════════
-   GraphAPI — HTTP 请求与数据加载
-   ═══════════════════════════════════════════════════════════════════ */
+			 GraphAPI — HTTP 请求与数据加载
+			 - req()：统一 HTTP 请求，自动拼接插件基路径
+			 - loadGroup()：按分组分页加载图谱，支持增量渲染
+			 - loadDemoPaged()：模拟分页加载示例数据，用于无后端时的演示
+			 - mutate()：执行 CRUD 操作后自动刷新当前图谱
+			 ═══════════════════════════════════════════════════════════════════ */
+			// API 通信层：封装 HTTP 请求、分页加载、CRUD 操作
+			// 自动拼接插件基路径 /e/{plugin_id}，支持分页增量渲染
 			class GraphAPI {
 				constructor(store) {
 					this.store = store;
@@ -1005,8 +1038,14 @@
 			}
 
 			/* ═══════════════════════════════════════════════════════════════════
-   GraphCanvas — Canvas 画布渲染引擎
-   ═══════════════════════════════════════════════════════════════════ */
+			 GraphCanvas — Canvas 画布渲染引擎
+			 - _nodes/_edges：经过 d3 力模拟处理后的节点/边数组，包含 x/y 坐标
+			 - graphNodes/graphLinks：原始渲染数据，用于过滤和图例
+			 - transform：缩放/平移状态（d3.zoomIdentity）
+			 - selectedLegendTypes/searchKeyword：过滤条件
+			 ═══════════════════════════════════════════════════════════════════ */
+			// Canvas 渲染引擎：管理画布生命周期、力模拟、视口裁剪、交互绘制
+			// 使用 d3.forceSimulation 驱动布局，Canvas 2D API 绘制
 			class GraphCanvas {
 				constructor(store, el) {
 					this.store = store;
@@ -1114,7 +1153,7 @@
 				_getNodeLabelKeys(n) {
 					const l = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
 					const o = l.map((x) => clean(x).toLowerCase()).filter(Boolean);
-					return o.length ? o : [clean(n?.type || "Agent").toLowerCase()];
+					return o.length ? o : [clean(n?.type || "Node").toLowerCase()];
 				}
 				passFilter(n) {
 					if (this.selectedLegendTypes.size && !this._getNodeLabelKeys(n).some((k) => this.selectedLegendTypes.has(k))) return false;
@@ -1127,22 +1166,18 @@
 						lr = document.getElementById("legend");
 					if (!ll) return;
 					ll.innerHTML = "";
-					const byType = new Map(),
-						tk = (l) => {
-							const k = clean(l).toLowerCase();
-							return { core: "Core", module: "Module", service: "Service", data: "Data", agent: "Agent" }[k] || "";
-						};
+					const byType = new Map();
 					(this.graphNodes || []).forEach((n) => {
 						const ls = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
-						const el = ls.length ? ls : [n.type || "Agent"];
+						const el = ls.filter(Boolean).length ? ls : [n.type || "Node"];
 						el.forEach((rl) => {
 							const l = clean(rl);
 							if (!l) return;
 							const k = l.toLowerCase();
 							if (byType.has(k)) return;
-							const t = tk(l),
-								c = t ? TYPE_META[t]?.color || n.color || TYPE_META.Agent.color : n.color || TYPE_META.Agent.color;
-							byType.set(k, { key: k, display: t || l, color: c });
+							const meta = getTypeMeta(l);
+							const c = meta.color || n.color || "#ccc";
+							byType.set(k, { key: k, display: l, color: c });
 						});
 					});
 					if (!byType.size) {
@@ -1199,6 +1234,7 @@
 					document.getElementById("s-zoom").textContent = k.toFixed(2) + "×";
 					this.scheduleRender();
 				}
+				// 主渲染入口：清洗数据 → 保留上帧位置 → 构建边曲率 → 计算节点半径 → 创建力模拟 → 触发绘制
 				render(nodes, links) {
 					this.initCanvas();
 					const safeN = (nodes || []).map((n, i) => ({ ...n, id: clean(n.id) || String(i + 1) }));
@@ -1263,10 +1299,7 @@
 						)
 						.force("charge", d3.forceManyBody().strength(FORCE_CHARGE).distanceMax(600))
 						.force("center", d3.forceCenter(this.W / 2, this.H / 2))
-						.force(
-							"collide",
-							d3.forceCollide((d) => (d.r ?? 10) + FORCE_COLLISION).iterations(3),
-						)
+						.force("collide", d3.forceCollide((d) => (d.r ?? 10) + FORCE_COLLISION).iterations(3))
 						.force("x", d3.forceX(this.W / 2).strength(FORCE_PULL))
 						.force("y", d3.forceY(this.H / 2).strength(FORCE_PULL))
 						.alphaDecay(0.02)
@@ -1278,6 +1311,7 @@
 					this.buildQuadtree();
 					this.scheduleRender();
 				}
+				// 每帧绘制：清空画布 → 应用缩放变换 → 视口裁剪 → 确定焦点状态 → 绘制边 → 绘制节点
 				drawFrame() {
 					this.needRender = false;
 					if (!this.ctx) return;
@@ -1300,10 +1334,13 @@
 						ae = fe >= 0 ? fe : -1;
 					const feObj = ae >= 0 ? (this._edges[ae] ?? null) : null,
 						feIds = feObj ? new Set([feObj.source?.id, feObj.target?.id].filter(Boolean)) : null;
+					// 边绘制：视口裁剪 → 焦点高亮/置灰 → 直线/曲线/自环 → 箭头 → 标签
 					this._drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, sn);
+					// 节点绘制：按权重升序（权重大的在上层）→ 视口裁剪 → 焦点光晕 → 圆形填充 → 标签
 					this._drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn);
 					c.restore();
 				}
+				// 边绘制：视口裁剪 → 焦点高亮/置灰 → 直线/曲线/自环 → 箭头 → 标签
 				_drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, sn) {
 					const hasF = !!(focusN || feObj),
 						vis = new Set();
@@ -1341,23 +1378,36 @@
 							const tr = t.r ?? 10;
 							let ax, ay, angle;
 							if (edge.curvature) {
-								const cp = this._bezCp(edge), u = 0.92, w = 1 - u;
+								const cp = this._bezCp(edge),
+									u = 0.92,
+									w = 1 - u;
 								ax = w * w * sx + 2 * w * u * cp.cx + u * u * tx;
 								ay = w * w * sy + 2 * w * u * cp.cy + u * u * ty;
-								const u2 = 0.93, w2 = 1 - u2;
+								const u2 = 0.93,
+									w2 = 1 - u2;
 								const bx = w2 * w2 * sx + 2 * w2 * u2 * cp.cx + u2 * u2 * tx;
 								const by = w2 * w2 * sy + 2 * w2 * u2 * cp.cy + u2 * u2 * ty;
 								angle = Math.atan2(by - ay, bx - ax);
 							} else {
-								const dx = tx - sx, dy = ty - sy, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+								const dx = tx - sx,
+									dy = ty - sy,
+									dist = Math.sqrt(dx * dx + dy * dy) || 1;
 								ax = tx - (dx / dist) * tr;
 								ay = ty - (dy / dist) * tr;
 								angle = Math.atan2(dy, dx);
 							}
 							const sz = Math.max(6, 8 / k);
-							c.save(); c.translate(ax, ay); c.rotate(angle);
-							c.beginPath(); c.moveTo(0, 0); c.lineTo(-sz, -sz * 0.5); c.lineTo(-sz, sz * 0.5); c.closePath();
-							c.fillStyle = c.strokeStyle; c.fill(); c.restore();
+							c.save();
+							c.translate(ax, ay);
+							c.rotate(angle);
+							c.beginPath();
+							c.moveTo(0, 0);
+							c.lineTo(-sz, -sz * 0.5);
+							c.lineTo(-sz, sz * 0.5);
+							c.closePath();
+							c.fillStyle = c.strokeStyle;
+							c.fill();
+							c.restore();
 						}
 						c.globalAlpha = 1;
 						if (edge.name) {
@@ -1380,83 +1430,94 @@
 						}
 					});
 				}
+				// 节点绘制：按权重升序（权重大的在上层）→ 视口裁剪 → 焦点光晕 → 圆形填充 → 标签
 				_drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn) {
 					const hasF = !!(focusN || feObj),
 						vis = new Set();
 					this.graphNodes.forEach((n) => {
 						if (this.passFilter(n)) vis.add(n.id);
 					});
-					[...this._nodes].sort((a, b) => (a.weight || 0) - (b.weight || 0)).forEach((nd) => {
-						const x = nd.x ?? 0,
-							y = nd.y ?? 0;
-						if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
-						if (!vis.has(nd.id)) return;
-						const BR = nd.r ?? 10,
-							isNF = nd.id === focusN,
-							isNN = focusN && !isNF && this._edges.some((e) => !e.isSelfLoop && ((e.source?.id === focusN && e.target?.id === nd.id) || (e.target?.id === focusN && e.source?.id === nd.id)));
-						const isEF = feIds?.has(nd.id),
-							isSN = nd.id === sn,
-							fc = isNF || isEF || isSN,
-							ac = hasF ? fc || isNN : true,
-							r = BR;
-						c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
-						if (fc) {
-							c.beginPath();
-							c.arc(x, y, r + 5 / k, 0, Math.PI * 2);
-							c.strokeStyle = nd.color;
-							c.lineWidth = 2.5 / k;
-							c.globalAlpha = 0.35;
-							c.stroke();
+					[...this._nodes]
+						.sort((a, b) => (a.weight || 0) - (b.weight || 0))
+						.forEach((nd) => {
+							const x = nd.x ?? 0,
+								y = nd.y ?? 0;
+							if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
+							if (!vis.has(nd.id)) return;
+							const BR = nd.r ?? 10,
+								isNF = nd.id === focusN,
+								isNN = focusN && !isNF && this._edges.some((e) => !e.isSelfLoop && ((e.source?.id === focusN && e.target?.id === nd.id) || (e.target?.id === focusN && e.source?.id === nd.id)));
+							const isEF = feIds?.has(nd.id),
+								isSN = nd.id === sn,
+								fc = isNF || isEF || isSN,
+								ac = hasF ? fc || isNN : true,
+								r = BR;
 							c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
-						}
-						c.beginPath();
-						c.arc(x, y, r, 0, Math.PI * 2);
-						c.fillStyle = nd.color;
-						c.fill();
-						c.strokeStyle = fc ? "#333" : "#fff";
-						c.lineWidth = (fc ? 3 : 2.5) / k;
-						c.stroke();
-						if (k > 0.6) {
-							const sf = ac,
-								rn = nd.name || nd.label || "",
-								lb = sf ? (rn.length > 16 ? rn.slice(0, 16) + "…" : rn) : rn.length > 8 ? rn.slice(0, 8) + "…" : rn,
-								fs = sf ? Math.max(12, 12 / k) : Math.max(11, 11 / k),
-								wt = sf ? "600" : "500";
-							c.font = `${wt} ${fs}px 'JetBrains Mono',monospace`;
-							const lx = x + r + 5 / k,
-								ly = y;
-							if (sf) {
-								c.globalAlpha = 1;
-								const tw = c.measureText(lb).width,
-									pad = 5 / k,
-									bh = (fs + 8) / k;
-								c.shadowColor = "rgba(0,0,0,0.18)";
-								c.shadowBlur = 6 / k;
-								c.shadowOffsetY = 2 / k;
-								c.fillStyle = "#fff";
+							if (fc) {
 								c.beginPath();
-								c.roundRect(lx - pad, ly - bh / 2, tw + pad * 2, bh, bh / 2);
-								c.fill();
-								c.shadowColor = "transparent";
-								c.shadowBlur = 0;
-								c.shadowOffsetY = 0;
+								c.arc(x, y, r + 5 / k, 0, Math.PI * 2);
 								c.strokeStyle = nd.color;
-								c.lineWidth = 1.5 / k;
+								c.lineWidth = 2.5 / k;
+								c.globalAlpha = 0.35;
 								c.stroke();
+								c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
 							}
-							c.fillStyle = sf ? "#111" : "#555";
-							c.textAlign = "left";
-							c.textBaseline = "middle";
-							c.fillText(lb, lx, ly);
-						}
-						c.globalAlpha = 1;
-					});
+							c.beginPath();
+							c.arc(x, y, r, 0, Math.PI * 2);
+							c.fillStyle = nd.color;
+							c.fill();
+							c.strokeStyle = fc ? "#333" : "#fff";
+							c.lineWidth = (fc ? 3 : 2.5) / k;
+							c.stroke();
+							if (k > 0.6) {
+								const sf = ac,
+									rn = nd.name || nd.label || "",
+									lb = sf ? (rn.length > 16 ? rn.slice(0, 16) + "…" : rn) : rn.length > 8 ? rn.slice(0, 8) + "…" : rn,
+									fs = sf ? Math.max(12, 12 / k) : Math.max(11, 11 / k),
+									wt = sf ? "600" : "500";
+								c.font = `${wt} ${fs}px 'JetBrains Mono',monospace`;
+								const lx = x + r + 5 / k,
+									ly = y;
+								if (sf) {
+									c.globalAlpha = 1;
+									const tw = c.measureText(lb).width,
+										pad = 5 / k,
+										bh = (fs + 8) / k;
+									c.shadowColor = "rgba(0,0,0,0.18)";
+									c.shadowBlur = 6 / k;
+									c.shadowOffsetY = 2 / k;
+									c.fillStyle = "#fff";
+									c.beginPath();
+									c.roundRect(lx - pad, ly - bh / 2, tw + pad * 2, bh, bh / 2);
+									c.fill();
+									c.shadowColor = "transparent";
+									c.shadowBlur = 0;
+									c.shadowOffsetY = 0;
+									c.strokeStyle = nd.color;
+									c.lineWidth = 1.5 / k;
+									c.stroke();
+								}
+								c.fillStyle = sf ? "#111" : "#555";
+								c.textAlign = "left";
+								c.textBaseline = "middle";
+								c.fillText(lb, lx, ly);
+							}
+							c.globalAlpha = 1;
+						});
 				}
 			}
 
 			/* ═══════════════════════════════════════════════════════════════════
-   GraphInteraction — 指针事件、选中/悬浮、拖拽/平移
-   ═══════════════════════════════════════════════════════════════════ */
+			 GraphInteraction — 指针事件、选中/悬浮、拖拽/平移
+			 - selectedNodeId：当前选中节点（点击切换，选中后其他节点置灰）
+			 - hoveredNodeId/EdgeIdx：当前悬浮目标（选中后仅允许悬浮邻居节点）
+			 - dragging/isDrag：节点拖拽状态（拖拽会触发力模拟重新计算）
+			 - panning：画布平移状态（鼠标在空白区域按下时触发）
+			 - _showTmr/_hideTmr：信息面板防抖定时器（悬浮 150ms 后显示，离开 300ms 后隐藏）
+			 ═══════════════════════════════════════════════════════════════════ */
+			// 交互状态机：管理选中/悬浮/拖拽/平移四种交互模式
+			// 选中后其他节点置灰，仅允许悬浮邻居节点
+			// 信息面板使用防抖：悬浮 150ms 后显示，离开 300ms 后隐藏
 			class GraphInteraction {
 				constructor(canvas) {
 					this.canvas = canvas;
@@ -1593,6 +1654,7 @@
 						this.canvas.scheduleRender();
 					}
 				}
+				// 点击处理：节点切换选中/取消，边填充关系表单，空白处取消选中
 				onClick(e) {
 					const cv = this.canvas,
 						[wx, wy] = cv.toWorld(e.clientX, e.clientY),
@@ -1624,6 +1686,7 @@
 					this.hideInfo(true);
 					this.canvas.scheduleRender();
 				}
+				// 信息面板显示：计算关联数，填充类型/名称/权重/编号，支持防抖
 				showInfo(node, imm) {
 					if (this._hideTmr) {
 						clearTimeout(this._hideTmr);
@@ -1647,6 +1710,7 @@
 					if (this._showTmr) clearTimeout(this._showTmr);
 					this._showTmr = setTimeout(doS, 150);
 				}
+				// 信息面板隐藏：支持防抖，避免鼠标快速移动时面板闪烁
 				hideInfo(imm) {
 					if (this._showTmr) {
 						clearTimeout(this._showTmr);
@@ -1665,8 +1729,11 @@
 			}
 
 			/* ═══════════════════════════════════════════════════════════════════
-   初始化与事件绑定
-   ═══════════════════════════════════════════════════════════════════ */
+			 初始化与事件绑定
+			 window._graphApp 暴露到全局供调试和 mutate() 回调使用
+			 ═══════════════════════════════════════════════════════════════════ */
+			// 实例化四个核心对象：数据存储 → API 通信 → 渲染引擎 → 交互状态机
+			// 通过 _canvas._interaction 建立渲染引擎到交互层的反向引用
 			const _store = new GraphStore(),
 				_api = new GraphAPI(_store),
 				_canvas = new GraphCanvas(_store, document.getElementById("graph-canvas")),
@@ -1687,6 +1754,7 @@
 				document.getElementById("s-zoom").textContent = "1.00×";
 				_canvas.scheduleRender();
 			};
+			// 加载按钮：读取 group_id，调用 API 分页加载并逐页渲染
 			document.getElementById("btnLoad").onclick = async () => {
 				try {
 					const gid = clean(document.getElementById("groupId").value);
@@ -1755,6 +1823,7 @@
 			document.getElementById("panel-close").onclick = () => _ia.clearSel();
 
 			let _searchTmr = null;
+			// 模糊搜索：300ms 防抖，匹配节点名称/uid/类型/标签
 			document.getElementById("searchKeyword").addEventListener("input", (e) => {
 				const kw = clean(e.target.value).toLowerCase();
 				if (_searchTmr) clearTimeout(_searchTmr);
