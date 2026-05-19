@@ -604,7 +604,6 @@
 						<div class="ops-row"><label>分组ID（group_id）</label><input id="groupId" placeholder="例如: product_demo" /></div>
 						<div class="ops-row"><label>每页条数（page_size）</label><input id="pageSize" value="300" /></div>
 					</div>
-					<div class="ops-row" style="margin-top: 6px"><label>批量页数（单次加载页数，1~20）</label><input id="batchPages" value="5" /></div>
 					<div class="ops-actions" style="grid-template-columns: 1fr">
 						<button class="ops-btn primary" id="btnLoad">加载图谱</button>
 					</div>
@@ -1139,24 +1138,23 @@
 				async loadGroup(gid, onPage) {
 					this.store.reset();
 					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
-					const bp = Math.max(1, Math.min(20, Number(clean(document.getElementById("batchPages").value) || "5")));
-					let batchStart = 1;
-					while (true) {
-						setStatus(`分页加载中: 第 ${batchStart}~${batchStart + bp - 1} 页（并发）`);
-						const pages = Array.from({ length: bp }, (_, i) => batchStart + i);
-						const url = (pg) => `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`;
-						const results = await Promise.all(pages.map((pg) => this.req(url(pg))));
-						let hasMore = false;
-						for (const d of results) {
+					const CONCURRENCY = 5;
+					let nextPage = 1, hasMore = true, done = 0;
+					const url = (pg) => `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`;
+					const worker = async () => {
+						while (hasMore) {
+							const pg = nextPage++;
+							setStatus(`分页加载中: 第 ${pg} 页（并发${CONCURRENCY}）`);
+							const d = await this.req(url(pg));
 							this.store.addNodes(d.nodes || []);
 							this.store.addLinks(d.relations || []);
-							if (d.nodes_has_more || d.relations_has_more) hasMore = true;
+							if (!d.nodes_has_more && !d.relations_has_more) hasMore = false;
+							done++;
+							const g = this.store.mapGraphData();
+							if (onPage) onPage(g, pg);
 						}
-						const g = this.store.mapGraphData();
-						if (onPage) onPage(g, batchStart);
-						if (!hasMore) break;
-						batchStart += bp;
-					}
+					};
+					await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 					setStatus(`加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();
 				}
@@ -1289,7 +1287,7 @@
 						const e = this._edges[i],
 							s = e.source,
 							t = e.target;
-						if (!s?.x || !t?.x) continue;
+						if (!s?.x || !t?.x || !this.passEdgeFilter(e)) continue;
 						for (let u = 0; u <= 1; u += 0.05) {
 							const p = this._bezPt(e, u),
 								dx = p.x - wx,
