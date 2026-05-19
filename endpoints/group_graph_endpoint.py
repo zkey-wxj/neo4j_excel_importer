@@ -16,7 +16,7 @@ from core.embedding_common import (
     generate_embeddings,
     has_embedding_model,
 )
-from core.types import NodePayload, normalize_node, utc_now_iso
+from core.types import NodePayload, clean_text, normalize_node, utc_now_iso
 from endpoints.group_graph_store import GroupGraphStore
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class GroupGraphEndpoint(Endpoint):
 
     def _query_graph(self, r: Request, store: GroupGraphStore) -> Response:
         """分页查询 group_id 图谱。"""
-        group_id = self._clean(r.args.get("group_id"))
+        group_id = clean_text(r.args.get("group_id"))
         if not group_id:
             return self._json_response({"error": "group_id 不能为空"}, 400)
         page = self._positive_int(r.args.get("page"), default=1)
@@ -171,7 +171,7 @@ class GroupGraphEndpoint(Endpoint):
         """校验必填字段。"""
         missing: list[str] = []
         for field in fields:
-            if not self._clean(body.get(field)):
+            if not clean_text(body.get(field)):
                 missing.append(field)
         if missing:
             return "以下字段不能为空: " + ", ".join(missing)
@@ -191,10 +191,10 @@ class GroupGraphEndpoint(Endpoint):
 
         meta_from_properties: dict[str, Any] = {}
         for raw_key in list(normalized_properties.keys()):
-            key = self._clean(raw_key)
+            key = clean_text(raw_key)
             if not key.startswith("meta_"):
                 continue
-            meta_key = self._clean(key[5:])
+            meta_key = clean_text(key[5:])
             value = self._normalize_meta_value(normalized_properties.pop(raw_key))
             if meta_key and value is not None:
                 meta_from_properties[meta_key] = value
@@ -203,7 +203,7 @@ class GroupGraphEndpoint(Endpoint):
         body_meta = payload.get("meta")
         if isinstance(body_meta, Mapping):
             for raw_key, raw_value in body_meta.items():
-                meta_key = self._clean(raw_key)
+                meta_key = clean_text(raw_key)
                 value = self._normalize_meta_value(raw_value)
                 if meta_key and value is not None:
                     merged_meta[meta_key] = value
@@ -213,8 +213,8 @@ class GroupGraphEndpoint(Endpoint):
             payload["meta"] = merged_meta
 
         node_payload = dict(normalize_node(payload, index=0))
-        if not self._clean(node_payload.get("name")):
-            node_payload["name"] = self._clean(node_payload.get("uid"))
+        if not clean_text(node_payload.get("name")):
+            node_payload["name"] = clean_text(node_payload.get("uid"))
 
         raw_meta = node_payload.get("meta")
         normalized_meta = dict(raw_meta) if isinstance(raw_meta, dict) else {}
@@ -224,7 +224,7 @@ class GroupGraphEndpoint(Endpoint):
 
         now = utc_now_iso()
         normalized_meta["updated_at"] = now
-        if not self._clean(normalized_meta.get("created_at")):
+        if not clean_text(normalized_meta.get("created_at")):
             normalized_meta["created_at"] = now
         node_payload["meta"] = normalized_meta
         return node_payload
@@ -250,9 +250,6 @@ class GroupGraphEndpoint(Endpoint):
         if vectors:
             normalized["embedding"] = vectors[0]
         return normalized
-
-    def _clean(self, value: Any) -> str:
-        return str(value or "").strip()
 
     def _normalize_meta_value(self, value: Any) -> Any | None:
         """归一化 meta 值：空值丢弃，字符串去空白。"""

@@ -7,8 +7,8 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from core.embedding_common import build_node_embedding_text, generate_embeddings, has_embedding_model
-from core.graph_write_common import get_credentials, write_nodes
-from core.types import clean_text, normalize_node
+from core.graph_write_common import write_nodes
+from core.types import clean_text, get_credentials, normalize_node
 
 
 class SaveNodesBatchTool(Tool):

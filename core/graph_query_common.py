@@ -2,23 +2,15 @@ from __future__ import annotations
 
 import itertools
 import json
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, Mapping
 
 from neo4j import GraphDatabase
 
-from core.types import clean_text
+from core.types import clean_text, get_credentials
 
 READ_QUERY_TYPES = {"r", "s"}
-
-
-def get_credentials(runtime: Any) -> tuple[str, str, str]:
-    uri = clean_text(runtime.credentials.get("neo4j_uri"))
-    user = clean_text(runtime.credentials.get("neo4j_user"))
-    pwd = clean_text(runtime.credentials.get("neo4j_password"))
-    if not uri or not user or not pwd:
-        raise ValueError("Neo4j 凭据不完整，请检查 neo4j_uri / neo4j_user / neo4j_password。")
-    return uri, user, pwd
 
 
 def parse_limit(value: Any, *, default: int = 20, max_value: int = 200) -> int:
@@ -195,6 +187,28 @@ def relation_display_name(rel_obj: Any) -> str:
     return rel_type or "RELATED"
 
 
+@dataclass(frozen=True)
+class GraphRenderConfig:
+    """图谱渲染尺寸配置。"""
+    width_min: float
+    width_factor: float
+    width_max: float
+    height_min: float
+    height_factor: float
+    height_max: float
+
+
+_GROUP_GRAPH_RENDER_CONFIG = GraphRenderConfig(
+    width_min=8.0, width_factor=0.35, width_max=20.0,
+    height_min=6.0, height_factor=0.28, height_max=16.0,
+)
+
+_NODE_GRAPH_RENDER_CONFIG = GraphRenderConfig(
+    width_min=7.0, width_factor=0.5, width_max=16.0,
+    height_min=5.0, height_factor=0.35, height_max=12.0,
+)
+
+
 def build_group_graph_png(
     nodes_rows: list[dict[str, Any]],
     rels_rows: list[dict[str, Any]],
@@ -236,12 +250,7 @@ def build_group_graph_png(
         node_limit=node_limit,
         center_node_id="",
         empty_message="当前 group_id 下没有可绘制的节点。",
-        width_min=8.0,
-        width_factor=0.35,
-        width_max=20.0,
-        height_min=6.0,
-        height_factor=0.28,
-        height_max=16.0,
+        config=_GROUP_GRAPH_RENDER_CONFIG,
     )
 
 
@@ -274,12 +283,7 @@ def build_node_graph_png(
         node_limit=node_limit,
         center_node_id=center_id,
         empty_message="没有可绘制的节点。",
-        width_min=7.0,
-        width_factor=0.5,
-        width_max=16.0,
-        height_min=5.0,
-        height_factor=0.35,
-        height_max=12.0,
+        config=_NODE_GRAPH_RENDER_CONFIG,
     )
 
 
@@ -290,12 +294,7 @@ def _render_graph_png(
     node_limit: int,
     center_node_id: str,
     empty_message: str,
-    width_min: float,
-    width_factor: float,
-    width_max: float,
-    height_min: float,
-    height_factor: float,
-    height_max: float,
+    config: GraphRenderConfig,
 ) -> bytes:
     import matplotlib
 
@@ -320,8 +319,8 @@ def _render_graph_png(
     if graph.number_of_nodes() == 0:
         raise ValueError(empty_message)
 
-    width = min(max(width_min, graph.number_of_nodes() * width_factor), width_max)
-    height = min(max(height_min, graph.number_of_nodes() * height_factor), height_max)
+    width = min(max(config.width_min, graph.number_of_nodes() * config.width_factor), config.width_max)
+    height = min(max(config.height_min, graph.number_of_nodes() * config.height_factor), config.height_max)
     fig, ax = plt.subplots(figsize=(width, height), dpi=140)
     pos = nx.spring_layout(graph, seed=42)
     labels = {node_id: graph.nodes[node_id].get("label", node_id) for node_id in graph.nodes()}

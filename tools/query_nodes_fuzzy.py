@@ -7,6 +7,7 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
 
+from core.constants import VECTOR_INDEX_NAME
 from core.embedding_common import generate_embeddings, has_embedding_model
 from core.graph_query_common import normalize_group_id, parse_limit, run_cypher_query, strip_embedding_fields
 from core.types import clean_text
@@ -38,7 +39,7 @@ RETURN node AS n
 ORDER BY score DESC
 LIMIT $limit
 """
-    _VECTOR_INDEX_NAME = "knowledge_node_embedding_idx"
+    _VECTOR_INDEX_NAME = VECTOR_INDEX_NAME
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         keyword = clean_text(tool_parameters.get("keyword"))

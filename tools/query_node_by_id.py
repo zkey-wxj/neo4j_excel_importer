@@ -33,6 +33,7 @@ RETURN n, r, m
 ORDER BY coalesce(m.uid, ''), coalesce(r.rel_type, type(r))
 LIMIT $limit
 """
+    _GRAPH_LIMIT = 100
     _IMAGE_NODE_LIMIT = 40
     _IMAGE_REL_LIMIT = 80
 
@@ -82,7 +83,7 @@ LIMIT $limit
                 yield self.create_text_message(f"✅ {summary}")
                 return
 
-            limit = 100
+            limit = self._GRAPH_LIMIT
             graph_rows = run_read_query(
                 self.runtime,
                 query=self._GRAPH_QUERY,

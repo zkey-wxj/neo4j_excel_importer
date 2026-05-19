@@ -6,13 +6,13 @@ from typing import Any
 
 from neo4j import GraphDatabase
 
+from core.constants import DEFAULT_NODE_LABEL, NODE_LABEL, VECTOR_INDEX_NAME
 from core.types import NodePayload, RelationPayload, clean_text
 
 CONSTRAINT_CYPHER = (
     "CREATE CONSTRAINT IF NOT EXISTS "
-    "FOR (n:KnowledgeNode) REQUIRE n.uid IS UNIQUE"
+    f"FOR (n:{NODE_LABEL}) REQUIRE n.uid IS UNIQUE"
 )
-DEFAULT_VECTOR_INDEX_NAME = "knowledge_node_embedding_idx"
 
 UPSERT_NODES = """
 UNWIND $rows AS row
@@ -143,7 +143,7 @@ def node_payload_to_cypher_row(payload: NodePayload) -> dict[str, Any]:
         "name": clean_text(payload.get("name")),
         "description": clean_text(payload.get("description")),
         "group_id": clean_text(payload.get("group_id")),
-        "labels": payload.get("labels") or ["Node"],
+        "labels": payload.get("labels") or [DEFAULT_NODE_LABEL],
         "embedding": embedding_value,
         "props": props,
     }
@@ -180,13 +180,6 @@ def relation_payload_to_cypher_row(payload: RelationPayload) -> dict[str, Any]:
         "group_id": clean_text(payload.get("group_id")),
         "props": props,
     }
-
-
-def get_credentials(runtime: Any) -> tuple[str, str, str]:
-    uri = str(runtime.credentials.get("neo4j_uri", "")).strip()
-    user = str(runtime.credentials.get("neo4j_user", "")).strip()
-    pwd = str(runtime.credentials.get("neo4j_password", "")).strip()
-    return uri, user, pwd
 
 
 def clear_graph(uri: str, user: str, pwd: str, group_id: str = "") -> None:
@@ -280,7 +273,7 @@ def write_nodes(
             if detected_dimensions > 0:
                 _ensure_vector_index(
                     session,
-                    index_name=DEFAULT_VECTOR_INDEX_NAME,
+                    index_name=VECTOR_INDEX_NAME,
                     dimensions=detected_dimensions,
                 )
             apoc = has_apoc_add_labels(session)

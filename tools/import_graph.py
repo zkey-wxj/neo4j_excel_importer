@@ -26,7 +26,6 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
 from collections.abc import Generator, Mapping
 from typing import Any, cast
 
@@ -44,6 +43,7 @@ from core.graph_write_common import (
     write_nodes,
     write_relations,
 )
+from core.constants import DEFAULT_DIRECTION, DEFAULT_NODE_LABEL
 from core.types import (
     GraphMeta,
     NodePayload,
@@ -52,6 +52,7 @@ from core.types import (
     normalize_labels,
     normalize_properties,
     clean_text,
+    utc_now_iso,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ DEFAULT_FIELD_MAPPING: dict[str, Any] = {
         "uid": "NodeID",
         "name": "name",
         "labels": ["node_type", "keywords"],
-        "description": ["definition", "description", "说明", "备注", "简介"],
+        "description": ["description", "definition", "说明", "备注", "简介"],
         "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
     "relation": {
@@ -181,12 +182,8 @@ _REL_TYPE_NORMALIZATION_MAP: dict[str, str] = {
 }
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
 def _build_meta(source: str = "", source_row_num: int | None = None) -> dict[str, Any]:
-    now = _utc_now_iso()
+    now = utc_now_iso()
     return {
         "created_at": now,
         "updated_at": now,
@@ -468,7 +465,7 @@ class ImportGraphTool(Tool):
     @staticmethod
     def _sanitize_label(text: Any) -> str:
         value = clean_text(text)
-        return value or "Node"
+        return value or DEFAULT_NODE_LABEL
 
     def _title_to_label(self, title: str) -> str:
         text = clean_text(title)
@@ -605,9 +602,9 @@ class ImportGraphTool(Tool):
         desc_fields = self._normalize_description_fields(node.get("description", node.get("definition")))
         if len(row) < 4:
             return False
-        if clean_text(row[0]) != clean_text(node["uid"]):
-            return False
-        if clean_text(row[1]) != clean_text(node["name"]):
+        uid_ok = clean_text(row[0]) in {clean_text(node["uid"]), clean_text("uid")}
+        name_ok = clean_text(row[1]) in {clean_text(node["name"]), clean_text("name")}
+        if not uid_ok or not name_ok:
             return False
 
         effective_labels = label_fields or ["node_type"]
@@ -620,7 +617,8 @@ class ImportGraphTool(Tool):
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
         expected = [rel["source_uid"], rel["rel_type"], rel["target_uid"]]
-        return self._starts_with(row, expected)
+        fallback = ["source_uid", "rel_type", "target_uid"]
+        return self._starts_with(row, expected) or self._starts_with(row, fallback)
 
     @staticmethod
     def _build_index(header: list[str]) -> dict[str, int]:
@@ -630,6 +628,27 @@ class ImportGraphTool(Tool):
             if key and key not in result:
                 result[key] = i
         return result
+
+    @staticmethod
+    def _resolve_field(index: dict[str, int], field: str, fallback: str) -> str:
+        """优先使用映射值，index 中不存在时回退到键名本身。"""
+        if field in index:
+            return field
+        return fallback
+
+    def _resolve_fields(self, index: dict[str, int], fields: list[str], fallbacks: list[str]) -> list[str]:
+        """合并映射值与回退键名，保持顺序且去重。"""
+        resolved: list[str] = []
+        seen: set[str] = set()
+        for field in fields:
+            if field in index and field not in seen:
+                resolved.append(field)
+                seen.add(field)
+        for fb in fallbacks:
+            if fb in index and fb not in seen:
+                resolved.append(fb)
+                seen.add(fb)
+        return resolved
 
     @staticmethod
     def _get_cell(row: list[str], index: dict[str, int], column: str) -> str:
@@ -738,7 +757,7 @@ class ImportGraphTool(Tool):
                                 "source_uid": current_title_stack[-1][1],
                                 "rel_type": "包含",
                                 "target_uid": current_title_uid,
-                                "direction": "forward",
+                                "direction": DEFAULT_DIRECTION,
                                 "group_id": "",
                                 "properties": {},
                                 "meta": _build_meta(source_name, source_row_num),
@@ -759,7 +778,9 @@ class ImportGraphTool(Tool):
                     continue
 
                 if current_kind == "node":
-                    node_id = _normalize_edge_symbols(self._get_cell(row, current_index, node_map["uid"]))
+                    uid_field = self._resolve_field(current_index, node_map["uid"], "uid")
+                    name_field = self._resolve_field(current_index, node_map["name"], "name")
+                    node_id = _normalize_edge_symbols(self._get_cell(row, current_index, uid_field))
                     if self._is_empty_like(node_id):
                         continue
                     labels: list[str] = []
@@ -768,8 +789,8 @@ class ImportGraphTool(Tool):
                             if label not in labels:
                                 labels.append(label)
                     if not labels:
-                        labels = ["Node"]
-                    reserved = {node_map["uid"], node_map["name"], *label_fields, *desc_fields}
+                        labels = [DEFAULT_NODE_LABEL]
+                    reserved = {uid_field, name_field, *label_fields, *desc_fields}
                     props = self._collect_properties(
                         row=row,
                         index=current_index,
@@ -779,7 +800,7 @@ class ImportGraphTool(Tool):
                     description = self._extract_first_by_fields(row, current_index, desc_fields)
                     node_payload: dict[str, Any] = {
                         "uid": node_id,
-                        "name": self._normalize_name(self._get_cell(row, current_index, node_map["name"])),
+                        "name": self._normalize_name(self._get_cell(row, current_index, name_field)),
                         "labels": labels,
                         "group_id": "",
                         "properties": normalize_properties(props, field_name="properties"),
@@ -804,7 +825,7 @@ class ImportGraphTool(Tool):
                                 "source_uid": current_title_uid,
                                 "rel_type": "包含",
                                 "target_uid": node_payload["uid"],
-                                "direction": "forward",
+                                "direction": DEFAULT_DIRECTION,
                                 "group_id": "",
                                 "properties": {},
                                 "meta": _build_meta(source_name, source_row_num),
@@ -814,12 +835,15 @@ class ImportGraphTool(Tool):
                     continue
 
                 if current_kind == "relation":
-                    src = _normalize_edge_symbols(self._get_cell(row, current_index, rel_map["source_uid"]))
-                    rel_type = _normalize_relation_type(self._get_cell(row, current_index, rel_map["rel_type"]))
-                    tgt = _normalize_edge_symbols(self._get_cell(row, current_index, rel_map["target_uid"]))
+                    src_uid_field = self._resolve_field(current_index, rel_map["source_uid"], "source_uid")
+                    rel_type_field = self._resolve_field(current_index, rel_map["rel_type"], "rel_type")
+                    tgt_uid_field = self._resolve_field(current_index, rel_map["target_uid"], "target_uid")
+                    src = _normalize_edge_symbols(self._get_cell(row, current_index, src_uid_field))
+                    rel_type = _normalize_relation_type(self._get_cell(row, current_index, rel_type_field))
+                    tgt = _normalize_edge_symbols(self._get_cell(row, current_index, tgt_uid_field))
                     if self._is_empty_like(src) or self._is_empty_like(rel_type) or self._is_empty_like(tgt):
                         continue
-                    reserved = {rel_map["source_uid"], rel_map["rel_type"], rel_map["target_uid"], *rel_desc_fields}
+                    reserved = {src_uid_field, rel_type_field, tgt_uid_field, *rel_desc_fields}
                     props = self._collect_properties(
                         row=row,
                         index=current_index,
@@ -831,7 +855,7 @@ class ImportGraphTool(Tool):
                         "source_uid": src,
                         "rel_type": rel_type,
                         "target_uid": tgt,
-                        "direction": "forward",
+                        "direction": DEFAULT_DIRECTION,
                         "group_id": "",
                         "properties": normalize_properties(props, field_name="properties"),
                         "meta": _build_meta(source_name, source_row_num),
@@ -848,7 +872,7 @@ class ImportGraphTool(Tool):
                                 "source_uid": current_title_uid,
                                 "rel_type": "包含",
                                 "target_uid": src,
-                                "direction": "forward",
+                                "direction": DEFAULT_DIRECTION,
                                 "group_id": "",
                                 "properties": {},
                                 "meta": _build_meta(source_name, source_row_num),
@@ -1127,7 +1151,7 @@ class ImportGraphTool(Tool):
                     continue
                 labels = normalize_labels(row_data.get("labels"))
                 if not labels:
-                    labels = ["Node"]
+                    labels = [DEFAULT_NODE_LABEL]
                 properties = row_data.get("properties")
                 if isinstance(properties, dict):
                     properties = normalize_properties(properties, field_name="node.properties")
@@ -1137,7 +1161,7 @@ class ImportGraphTool(Tool):
                     NodePayload(
                         uid=uid,
                         name=clean_text(row_data.get("name")),
-                        labels=labels or ["Node"],
+                        labels=labels or [DEFAULT_NODE_LABEL],
                         description=clean_text(
                             row_data.get("description")
                             or row_data.get("definition")
@@ -1211,7 +1235,7 @@ class ImportGraphTool(Tool):
                         source_uid=source_uid,
                         target_uid=target_uid,
                         rel_type=rel_type,
-                        direction="forward",
+                        direction=DEFAULT_DIRECTION,
                         description=clean_text(
                             row_data.get("description")
                             or row_data.get("说明")

@@ -1,26 +1,28 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
+from core.constants import NODE_LABEL
 from core.graph_query_common import run_read_query
 from core.types import clean_text
 
 
 class GetGroupLabelsTool(Tool):
-    _LABELS_QUERY = """
-MATCH (n:KnowledgeNode)
+    _LABELS_QUERY = f"""
+MATCH (n:{NODE_LABEL})
 WHERE coalesce(n.group_id, '') = $group_id
 UNWIND labels(n) AS label
 WITH DISTINCT label
-WHERE label <> 'KnowledgeNode'
+WHERE label <> '{NODE_LABEL}'
 RETURN label
 ORDER BY label ASC
 """
 
-    def _invoke(self, tool_parameters: dict[str, Any]):
+    def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         group_id = clean_text(tool_parameters.get("group_id"))
         database = clean_text(tool_parameters.get("database"))
         if not group_id:

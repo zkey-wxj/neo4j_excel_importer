@@ -6,8 +6,8 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
-from core.graph_write_common import get_credentials, write_relations
-from core.types import clean_text, normalize_relation
+from core.graph_write_common import write_relations
+from core.types import clean_text, get_credentials, normalize_relation
 
 
 class SaveRelationsBatchTool(Tool):

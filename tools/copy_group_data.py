@@ -6,9 +6,25 @@ from typing import Any, cast
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
+from core.constants import (
+    DEFAULT_DIRECTION,
+    DEFAULT_NODE_LABEL,
+    DEFAULT_REL_TYPE,
+    NODE_RESERVED_PROP_KEYS,
+    RELATION_RESERVED_PROP_KEYS,
+)
 from core.graph_query_common import as_mapping, run_read_query
-from core.graph_write_common import get_credentials, write_nodes, write_relations
-from core.types import GraphMeta, NodePayload, RelationPayload, clean_text
+from core.graph_write_common import write_nodes, write_relations
+from core.types import (
+    GraphMeta,
+    NodePayload,
+    RelationPayload,
+    clean_text,
+    extract_properties,
+    get_credentials,
+    normalize_labels,
+    split_meta_from_props,
+)
 
 
 class CopyGroupDataTool(Tool):
@@ -30,19 +46,6 @@ WHERE (
 RETURN src, r, tgt
 ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
 """
-
-    _NODE_RESERVED_PROP_KEYS = {"uid", "name", "description", "group_id", "labels", "properties", "meta", "embedding"}
-    _REL_RESERVED_PROP_KEYS = {
-        "source_uid",
-        "target_uid",
-        "rel_type",
-        "group_id",
-        "direction",
-        "description",
-        "weight",
-        "properties",
-        "meta",
-    }
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         """读取 source_group_id 的图数据并复制到 target_group_id。"""
@@ -212,14 +215,14 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
     ) -> NodePayload | None:
         """将源节点映射为目标节点。"""
         source_name = clean_text(node_map.get("name")) or final_uid
-        labels = self._normalize_labels(node_map.get("labels"))
-        properties = self._extract_properties(node_map, self._NODE_RESERVED_PROP_KEYS)
-        meta, clean_props = self._split_meta_from_props(properties)
+        labels = normalize_labels(node_map.get("labels"))
+        properties = extract_properties(node_map, NODE_RESERVED_PROP_KEYS)
+        meta, clean_props = split_meta_from_props(properties)
 
         payload: NodePayload = {
             "uid": final_uid,
             "name": source_name,
-            "labels": labels or ["Node"],
+            "labels": labels or [DEFAULT_NODE_LABEL],
             "description": clean_text(node_map.get("description")),
             "group_id": target_group_id,
             "properties": clean_props,
@@ -242,17 +245,17 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
         """同 uid 同 name 时合并属性：labels 取并集，properties/source 覆盖缺失字段。"""
         uid = clean_text(target_node_map.get("uid"))
         name = clean_text(target_node_map.get("name")) or uid
-        target_labels = self._normalize_labels(target_node_map.get("labels"))
-        source_labels = self._normalize_labels(source_node_map.get("labels"))
+        target_labels = normalize_labels(target_node_map.get("labels"))
+        source_labels = normalize_labels(source_node_map.get("labels"))
         merged_labels = list(target_labels)
         for label in source_labels:
             if label not in merged_labels:
                 merged_labels.append(label)
 
-        target_props = self._extract_properties(target_node_map, self._NODE_RESERVED_PROP_KEYS)
-        target_meta, target_clean_props = self._split_meta_from_props(target_props)
-        source_props = self._extract_properties(source_node_map, self._NODE_RESERVED_PROP_KEYS)
-        source_meta, source_clean_props = self._split_meta_from_props(source_props)
+        target_props = extract_properties(target_node_map, NODE_RESERVED_PROP_KEYS)
+        target_meta, target_clean_props = split_meta_from_props(target_props)
+        source_props = extract_properties(source_node_map, NODE_RESERVED_PROP_KEYS)
+        source_meta, source_clean_props = split_meta_from_props(source_props)
 
         merged_props = dict(target_clean_props)
         for key, value in source_clean_props.items():
@@ -270,7 +273,7 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
         payload: NodePayload = {
             "uid": uid,
             "name": name,
-            "labels": merged_labels or ["Node"],
+            "labels": merged_labels or [DEFAULT_NODE_LABEL],
             "description": description,
             "group_id": target_group_id,
             "properties": merged_props,
@@ -335,13 +338,13 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
         if not rel_type and hasattr(rel_obj, "type"):
             rel_type = clean_text(getattr(rel_obj, "type"))
         if not rel_type:
-            rel_type = "RELATED"
+            rel_type = DEFAULT_REL_TYPE
 
-        rel_props = self._extract_properties(rel_map, self._REL_RESERVED_PROP_KEYS)
-        meta, clean_props = self._split_meta_from_props(rel_props)
-        direction = clean_text(rel_map.get("direction")) or "forward"
+        rel_props = extract_properties(rel_map, RELATION_RESERVED_PROP_KEYS)
+        meta, clean_props = split_meta_from_props(rel_props)
+        direction = clean_text(rel_map.get("direction")) or DEFAULT_DIRECTION
         if direction not in {"forward", "bidirectional"}:
-            direction = "forward"
+            direction = DEFAULT_DIRECTION
 
         relation: RelationPayload = {
             "source_uid": mapped_source_uid,
@@ -358,53 +361,3 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
             relation["weight"] = float(weight)
         return relation
 
-    def _extract_properties(
-        self,
-        source: Mapping[str, Any],
-        reserved_keys: set[str],
-    ) -> dict[str, Any]:
-        """提取节点/关系上的业务属性，剔除保留字段。"""
-        props: dict[str, Any] = {}
-
-        legacy_props = source.get("properties")
-        if isinstance(legacy_props, Mapping):
-            for key, value in legacy_props.items():
-                normalized_key = clean_text(key)
-                if normalized_key and value not in (None, ""):
-                    props[normalized_key] = value
-
-        for key, value in source.items():
-            normalized_key = clean_text(key)
-            if not normalized_key or normalized_key in reserved_keys:
-                continue
-            if value in (None, ""):
-                continue
-            props[normalized_key] = value
-        return props
-
-    def _split_meta_from_props(self, props: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-        """将 meta_* 属性拆回 meta 字段，保持写入格式一致。"""
-        meta: dict[str, Any] = {}
-        clean_props = dict(props)
-        for key in list(clean_props.keys()):
-            normalized_key = clean_text(key)
-            if not normalized_key.startswith("meta_"):
-                continue
-            meta_key = clean_text(normalized_key[5:])
-            value = clean_props.pop(key, None)
-            if not meta_key or value in (None, ""):
-                continue
-            meta[meta_key] = value
-        return meta, clean_props
-
-    def _normalize_labels(self, value: Any) -> list[str]:
-        """归一化 labels，确保返回字符串数组。"""
-        if isinstance(value, list):
-            labels: list[str] = []
-            for item in value:
-                label = clean_text(item)
-                if label and label not in labels:
-                    labels.append(label)
-            return labels
-        label = clean_text(value)
-        return [label] if label else []

@@ -3,8 +3,15 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Literal, Mapping
+from typing import Any, Mapping
 from typing_extensions import NotRequired, TypedDict
+
+from core.constants import (
+    DEFAULT_DIRECTION,
+    DEFAULT_NODE_LABEL,
+    DEFAULT_REL_TYPE,
+    Direction,
+)
 
 
 class GraphMeta(TypedDict):
@@ -21,7 +28,7 @@ class NodePayload(TypedDict):
     description: NotRequired[str]
     group_id: str
     properties: dict[str, Any]
-    embedding: NotRequired[list[float]]  # 向量数据
+    embedding: NotRequired[list[float]]
     meta: GraphMeta
 
 
@@ -29,7 +36,7 @@ class RelationPayload(TypedDict):
     source_uid: str
     target_uid: str
     rel_type: str
-    direction: Literal["forward", "bidirectional"]
+    direction: Direction
     description: NotRequired[str]
     weight: NotRequired[float]
     group_id: str
@@ -39,6 +46,56 @@ class RelationPayload(TypedDict):
 
 NODE_PAYLOAD_FIELDS = frozenset(NodePayload.__annotations__.keys())
 RELATION_PAYLOAD_FIELDS = frozenset(RelationPayload.__annotations__.keys())
+
+
+def get_credentials(runtime: Any) -> tuple[str, str, str]:
+    """从 runtime.credentials 提取并校验 Neo4j 连接信息。"""
+    uri = clean_text(runtime.credentials.get("neo4j_uri"))
+    user = clean_text(runtime.credentials.get("neo4j_user"))
+    pwd = clean_text(runtime.credentials.get("neo4j_password"))
+    if not uri or not user or not pwd:
+        raise ValueError("Neo4j 凭据不完整，请检查 neo4j_uri / neo4j_user / neo4j_password。")
+    return uri, user, pwd
+
+
+def extract_properties(
+    source: Mapping[str, Any],
+    reserved_keys: frozenset[str],
+) -> dict[str, Any]:
+    """提取节点/关系上的业务属性，剔除保留字段。"""
+    props: dict[str, Any] = {}
+
+    legacy_props = source.get("properties")
+    if isinstance(legacy_props, Mapping):
+        for key, value in legacy_props.items():
+            normalized_key = clean_text(key)
+            if normalized_key and value not in (None, ""):
+                props[normalized_key] = value
+
+    for key, value in source.items():
+        normalized_key = clean_text(key)
+        if not normalized_key or normalized_key in reserved_keys:
+            continue
+        if value in (None, ""):
+            continue
+        props[normalized_key] = value
+    return props
+
+
+def split_meta_from_props(props: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """将 meta_* 属性拆回 meta 字段，保持写入格式一致。"""
+    meta: dict[str, Any] = {}
+    clean_props = dict(props)
+    for key in list(clean_props.keys()):
+        normalized_key = clean_text(key)
+        if not normalized_key.startswith("meta_"):
+            continue
+        meta_key = clean_text(normalized_key[5:])
+        value = clean_props.pop(key, None)
+        if not meta_key or value in (None, ""):
+            continue
+        meta[meta_key] = value
+    return meta, clean_props
 
 
 def clean_text(value: Any) -> str:
@@ -280,7 +337,7 @@ def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
     if not rel_type:
         raise ValueError(f"relations_json[{index}].rel_type 不能为空。")
 
-    direction = clean_text(payload.get("direction")) or "forward"
+    direction = clean_text(payload.get("direction")) or DEFAULT_DIRECTION
     if direction not in {"forward", "bidirectional"}:
         raise ValueError(
             f"relations_json[{index}].direction 非法，必须是 forward 或 bidirectional。"

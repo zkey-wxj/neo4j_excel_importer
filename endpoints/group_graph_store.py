@@ -5,15 +5,13 @@ from typing import Any, cast
 
 from neo4j import Driver, GraphDatabase
 
+from core.constants import DEFAULT_NODE_LABEL, DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
 from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
-from core.types import NODE_PAYLOAD_FIELDS, RELATION_PAYLOAD_FIELDS, NodePayload, RelationPayload
+from core.types import NodePayload, RelationPayload, clean_text, extract_properties, split_meta_from_props
 
 
 class GroupGraphStore:
     """封装 group 图谱的 Neo4j 读写逻辑。"""
-
-    _NODE_RESERVED_PROP_KEYS = set(NODE_PAYLOAD_FIELDS)
-    _REL_RESERVED_PROP_KEYS = set(RELATION_PAYLOAD_FIELDS)
 
     _COUNT_NODES_QUERY = """
 MATCH (n:KnowledgeNode)
@@ -95,10 +93,10 @@ RETURN count(*) AS deleted
 
     def __init__(self, settings: Mapping[str, Any]):
         """初始化连接配置。"""
-        self.uri = self._clean(settings.get("neo4j_uri"))
-        self.user = self._clean(settings.get("neo4j_user"))
-        self.password = self._clean(settings.get("neo4j_password"))
-        self.database = self._clean(settings.get("neo4j_database"))
+        self.uri = clean_text(settings.get("neo4j_uri"))
+        self.user = clean_text(settings.get("neo4j_user"))
+        self.password = clean_text(settings.get("neo4j_password"))
+        self.database = clean_text(settings.get("neo4j_database"))
         if not self.uri or not self.user or not self.password:
             raise ValueError("Endpoint settings 缺少 neo4j_uri/neo4j_user/neo4j_password")
         self._driver: Driver | None = None
@@ -185,19 +183,19 @@ RETURN count(*) AS deleted
         """幂等写入节点并返回 element id。"""
         params = self._node_params(payload)
         rows = self._run(self._UPSERT_NODE, params, write=True)
-        return self._clean((rows[0] if rows else {}).get("node_id"))
+        return clean_text((rows[0] if rows else {}).get("node_id"))
 
     def update_node(self, payload: Mapping[str, Any]) -> str:
         """更新节点并返回 element id。"""
         params = self._node_params(payload)
         rows = self._run(self._UPSERT_NODE, params, write=True)
-        return self._clean((rows[0] if rows else {}).get("node_id"))
+        return clean_text((rows[0] if rows else {}).get("node_id"))
 
     def delete_node(self, payload: Mapping[str, Any]) -> int:
         """按 uid + group_id 删除节点。"""
         params = {
-            "group_id": self._clean(payload.get("group_id")),
-            "uid": self._clean(payload.get("uid")),
+            "group_id": clean_text(payload.get("group_id")),
+            "uid": clean_text(payload.get("uid")),
         }
         rows = self._run(self._DELETE_NODE, params, write=True)
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
@@ -220,9 +218,9 @@ RETURN count(*) AS deleted
 
     def delete_relation(self, payload: Mapping[str, Any]) -> int:
         """通过 group_id + source_uid + target_uid 删除关系。"""
-        group_id = self._clean(payload.get("group_id"))
-        source_uid = self._clean(payload.get("source_uid"))
-        target_uid = self._clean(payload.get("target_uid"))
+        group_id = clean_text(payload.get("group_id"))
+        source_uid = clean_text(payload.get("source_uid"))
+        target_uid = clean_text(payload.get("target_uid"))
         rows = self._run(
             self._DELETE_REL_BY_ENDPOINTS,
             {"group_id": group_id, "source_uid": source_uid, "target_uid": target_uid},
@@ -233,11 +231,11 @@ RETURN count(*) AS deleted
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = node_payload_to_cypher_row(
             cast(NodePayload, {
-                "uid": self._clean(payload.get("uid")),
-                "name": self._clean(payload.get("name")) or self._clean(payload.get("uid")),
+                "uid": clean_text(payload.get("uid")),
+                "name": clean_text(payload.get("name")) or clean_text(payload.get("uid")),
                 "labels": self._str_list(payload.get("labels")) or ["Node"],
-                "description": self._clean(payload.get("description")),
-                "group_id": self._clean(payload.get("group_id")),
+                "description": clean_text(payload.get("description")),
+                "group_id": clean_text(payload.get("group_id")),
                 "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
                 "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
             })
@@ -255,12 +253,12 @@ RETURN count(*) AS deleted
     def _relation_create_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = relation_payload_to_cypher_row(
             cast(RelationPayload, {
-                "source_uid": self._clean(payload.get("source_uid")),
-                "target_uid": self._clean(payload.get("target_uid")),
-                "rel_type": self._clean(payload.get("rel_type")) or "RELATED",
+                "source_uid": clean_text(payload.get("source_uid")),
+                "target_uid": clean_text(payload.get("target_uid")),
+                "rel_type": clean_text(payload.get("rel_type")) or "RELATED",
                 "direction": "forward",
-                "group_id": self._clean(payload.get("group_id")),
-                "description": self._clean(payload.get("description")),
+                "group_id": clean_text(payload.get("group_id")),
+                "description": clean_text(payload.get("description")),
                 "properties": payload.get("properties") if isinstance(payload.get("properties"), Mapping) else {},
                 "meta": payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {},
             })
@@ -274,10 +272,10 @@ RETURN count(*) AS deleted
         }
 
     def _relation_update_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        group_id = self._clean(payload.get("group_id"))
-        source_uid = self._clean(payload.get("source_uid"))
-        target_uid = self._clean(payload.get("target_uid"))
-        rel_type = self._clean(payload.get("rel_type")) or "RELATED"
+        group_id = clean_text(payload.get("group_id"))
+        source_uid = clean_text(payload.get("source_uid"))
+        target_uid = clean_text(payload.get("target_uid"))
+        rel_type = clean_text(payload.get("rel_type")) or "RELATED"
         if not group_id:
             raise ValueError("group_id 不能为空")
         if not source_uid:
@@ -287,8 +285,8 @@ RETURN count(*) AS deleted
 
         input_props = payload.get("properties")
         input_meta = payload.get("meta")
-        description = self._clean(payload.get("description"))
-        direction = self._clean(payload.get("direction")) or "forward"
+        description = clean_text(payload.get("description"))
+        direction = clean_text(payload.get("direction")) or "forward"
         weight = payload.get("weight")
         if not isinstance(weight, (int, float)):
             weight = None
@@ -338,7 +336,7 @@ RETURN count(*) AS deleted
         if value is None:
             return None
         data = self._mapping(value)
-        uid = self._clean(data.get("uid"))
+        uid = clean_text(data.get("uid"))
         if not uid:
             return None
         labels = self._str_list(data.get("labels"))
@@ -352,13 +350,13 @@ RETURN count(*) AS deleted
                 labels = []
         if labels:
             labels = [label for label in labels if label != "KnowledgeNode"]
-        properties = self._extract_node_properties(data)
-        meta = self._extract_node_meta(properties)
+        properties = extract_properties(data, NODE_RESERVED_PROP_KEYS)
+        meta, properties = split_meta_from_props(properties)
         return {
             "uid": uid,
-            "name": self._clean(data.get("name")) or uid,
-            "group_id": self._clean(data.get("group_id")),
-            "description": self._clean(data.get("description")),
+            "name": clean_text(data.get("name")) or uid,
+            "group_id": clean_text(data.get("group_id")),
+            "description": clean_text(data.get("description")),
             "labels": labels,
             "properties": properties,
             "meta": meta,
@@ -375,94 +373,28 @@ RETURN count(*) AS deleted
         if rel_obj is None or src_node is None or tgt_node is None:
             return None
         data = self._mapping(rel_obj)
-        rel_type = self._clean(data.get("rel_type"))
-        
-        if not rel_type or rel_type == "RELATED":
-            neo_type = self._clean(explicit_type) if explicit_type else ""
+        rel_type = clean_text(data.get("rel_type"))
+
+        if not rel_type or rel_type == DEFAULT_REL_TYPE:
+            neo_type = clean_text(explicit_type) if explicit_type else ""
             if not neo_type and hasattr(rel_obj, "type"):
-                neo_type = self._clean(getattr(rel_obj, "type"))
-            if neo_type and neo_type != "RELATED":
+                neo_type = clean_text(getattr(rel_obj, "type"))
+            if neo_type and neo_type != DEFAULT_REL_TYPE:
                 rel_type = neo_type
 
-        rel_id = self._clean(explicit_id) if explicit_id else ""
+        rel_id = clean_text(explicit_id) if explicit_id else ""
         if not rel_id and hasattr(rel_obj, "element_id"):
-            rel_id = self._clean(getattr(rel_obj, "element_id", ""))
-            
+            rel_id = clean_text(getattr(rel_obj, "element_id", ""))
+
         return {
             "id": rel_id,
             "source_uid": src_node.get("uid"),
             "target_uid": tgt_node.get("uid"),
-            "rel_type": rel_type or "RELATED",
-            "group_id": self._clean(data.get("group_id")),
-            "description": self._clean(data.get("description")),
-            "properties": self._extract_relation_properties(data),
+            "rel_type": rel_type or DEFAULT_REL_TYPE,
+            "group_id": clean_text(data.get("group_id")),
+            "description": clean_text(data.get("description")),
+            "properties": extract_properties(data, RELATION_RESERVED_PROP_KEYS),
         }
-
-    def _extract_node_properties(self, node_map: Mapping[str, Any]) -> dict[str, Any]:
-        props: dict[str, Any] = {}
-
-        legacy_properties = node_map.get("properties")
-        if isinstance(legacy_properties, Mapping):
-            for key, value in legacy_properties.items():
-                normalized_key = self._clean(key)
-                if normalized_key and value not in (None, ""):
-                    props[normalized_key] = value
-
-        for key, value in node_map.items():
-            normalized_key = self._clean(key)
-            if not normalized_key or normalized_key in self._NODE_RESERVED_PROP_KEYS:
-                continue
-            if value in (None, ""):
-                continue
-            props[normalized_key] = value
-
-        return props
-
-    def _extract_node_meta(self, props: dict[str, Any]) -> dict[str, Any]:
-        meta: dict[str, Any] = {}
-        for key in list(props.keys()):
-            normalized_key = self._clean(key)
-            if not normalized_key.startswith("meta_"):
-                continue
-            meta_key = self._clean(normalized_key[5:])
-            value = props.pop(key, None)
-            if not meta_key or value in (None, ""):
-                continue
-            meta[meta_key] = value
-        return meta
-
-    def _extract_relation_properties(self, rel_map: Mapping[str, Any]) -> dict[str, Any]:
-        props: dict[str, Any] = {}
-
-        legacy_properties = rel_map.get("properties")
-        if isinstance(legacy_properties, Mapping):
-            for key, value in legacy_properties.items():
-                normalized_key = self._clean(key)
-                if normalized_key and value not in (None, ""):
-                    props[normalized_key] = value
-
-        for key, value in rel_map.items():
-            normalized_key = self._clean(key)
-            if not normalized_key or normalized_key in self._REL_RESERVED_PROP_KEYS:
-                continue
-            if value in (None, ""):
-                continue
-            props[normalized_key] = value
-
-        return props
-
-    def _split_meta_from_props(self, props: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-        meta: dict[str, Any] = {}
-        clean_props = dict(props)
-        for key in list(clean_props.keys()):
-            normalized_key = self._clean(key)
-            if not normalized_key.startswith("meta_"):
-                continue
-            meta_key = self._clean(normalized_key[5:])
-            value = clean_props.pop(key, None)
-            if meta_key and value not in (None, ""):
-                meta[meta_key] = value
-        return meta, clean_props
 
     def _mapping(self, value: Any) -> Mapping[str, Any]:
         if isinstance(value, Mapping):
@@ -479,10 +411,7 @@ RETURN count(*) AS deleted
             return []
         result: list[str] = []
         for item in value:
-            text = self._clean(item)
+            text = clean_text(item)
             if text:
                 result.append(text)
         return result
-
-    def _clean(self, value: Any) -> str:
-        return str(value or "").strip()
