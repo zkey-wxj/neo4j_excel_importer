@@ -6,6 +6,7 @@ from typing import Any, cast
 from neo4j import Driver, GraphDatabase
 
 from core.constants import DEFAULT_NODE_LABEL, DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
+from core.graph_query_common import _ensure_group_id_index, _ensure_group_id_prop
 from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
 from core.types import NodePayload, RelationPayload, clean_text, extract_properties, split_meta_from_props
 
@@ -15,32 +16,32 @@ class GroupGraphStore:
 
     _COUNT_NODES_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 RETURN count(n) AS total
 """
 
     _COUNT_RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE coalesce(r.group_id, '') = $group_id
-   OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
+WHERE r.group_id = $group_id
+   OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 RETURN count(r) AS total
 """
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 RETURN n, labels(n) AS neo_labels
-ORDER BY coalesce(n.name, n.uid) ASC
+ORDER BY n.name ASC, n.uid ASC
 SKIP $offset
 LIMIT $limit
 """
 
     _RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE coalesce(r.group_id, '') = $group_id
-   OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
+WHERE r.group_id = $group_id
+   OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
-ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), coalesce(r.rel_type, type(r), '')
+ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
 SKIP $offset
 LIMIT $limit
 """
@@ -133,6 +134,12 @@ RETURN count(*) AS redirected
                 auth=(self.user, self.password),
                 connection_timeout=30.0,
             )
+            kwargs: dict[str, Any] = {}
+            if self.database:
+                kwargs["database"] = self.database
+            with self._driver.session(**kwargs) as session:
+                _ensure_group_id_index(session, self.database)
+                _ensure_group_id_prop(session, self.database)
 
     def query_graph(self, group_id: str, page: int, page_size: int) -> dict[str, Any]:
         """分页查询 group_id 下的图谱节点与关系。"""
@@ -361,19 +368,19 @@ RETURN count(*) AS redirected
                 result.consume()
             return rows
 
-    _NEIGHBORS_QUERY = """
-MATCH (start:KnowledgeNode {uid: $uid, group_id: $group_id})
-CALL {
+    _NEIGHBORS_QUERY_TEMPLATE = """
+MATCH (start:KnowledgeNode {{uid: $uid, group_id: $group_id}})
+CALL {{
   WITH start
-  MATCH path = (start)-[*1..""" + str(5) + """]->(n:KnowledgeNode)
-  WHERE coalesce(n.group_id, '') = $group_id
+  MATCH path = (start)-[*1..{depth}]->(n:KnowledgeNode)
+  WHERE n.group_id = $group_id
   RETURN nodes(path) AS path_nodes, relationships(path) AS path_rels
   UNION
   WITH start
-  MATCH path = (n:KnowledgeNode)-[*1..""" + str(5) + """]->(start)
-  WHERE coalesce(n.group_id, '') = $group_id
+  MATCH path = (n:KnowledgeNode)-[*1..{depth}]->(start)
+  WHERE n.group_id = $group_id
   RETURN nodes(path) AS path_nodes, relationships(path) AS path_rels
-}
+}}
 UNWIND path_nodes AS pn
 UNWIND path_rels AS pr
 RETURN collect(DISTINCT pn) AS nodes, collect(DISTINCT pr) AS rels
@@ -390,11 +397,11 @@ RETURN [n IN nodes(path) | n] AS nodes,
 
     _STATS_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 WITH collect(DISTINCT n) AS all_nodes, count(n) AS node_count
 OPTIONAL MATCH (a:KnowledgeNode)-[r]->(b:KnowledgeNode)
-WHERE coalesce(r.group_id, '') = $group_id
-  OR (coalesce(a.group_id, '') = $group_id AND coalesce(b.group_id, '') = $group_id)
+WHERE r.group_id = $group_id
+  OR (a.group_id = $group_id AND b.group_id = $group_id)
 WITH all_nodes, node_count,
      collect(DISTINCT r) AS all_rels,
      count(DISTINCT r) AS rel_count
@@ -412,7 +419,7 @@ RETURN count(*) AS deleted
     def expand_neighbors(self, group_id: str, uid: str, depth: int = 1) -> dict[str, Any]:
         """查询指定节点的 N 跳邻居（双向）。"""
         safe_depth = max(1, min(depth, 5))
-        query = self._NEIGHBORS_QUERY
+        query = self._NEIGHBORS_QUERY_TEMPLATE.format(depth=safe_depth)
         rows = self._run(query, {"group_id": group_id, "uid": uid})
         if not rows:
             return {"nodes": [], "relations": []}

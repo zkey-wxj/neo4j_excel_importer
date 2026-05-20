@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import threading
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any, Mapping
@@ -12,6 +13,109 @@ from core.types import clean_text, get_credentials
 
 READ_QUERY_TYPES = {"r", "s"}
 
+# ── Driver 缓存 ────────────────────────────────────────────────────────────
+_DRIVER_CACHE: dict[tuple[str, str], Any] = {}
+_DRIVER_CACHE_LOCK = threading.Lock()
+
+
+def get_driver(uri: str, user: str, pwd: str) -> Any:
+    """获取或创建缓存的 Neo4j Driver 实例，按 (uri, user) 复用。"""
+    cache_key = (uri, user)
+    driver = _DRIVER_CACHE.get(cache_key)
+    if driver is not None:
+        return driver
+    with _DRIVER_CACHE_LOCK:
+        driver = _DRIVER_CACHE.get(cache_key)
+        if driver is not None:
+            return driver
+        driver = GraphDatabase.driver(
+            uri,
+            auth=(user, pwd),
+            connection_timeout=30.0,
+            max_connection_lifetime=3600,
+            user_agent="dify-neo4j-plugin/1.0",
+        )
+        _DRIVER_CACHE[cache_key] = driver
+        return driver
+
+
+def clear_driver_cache() -> None:
+    """关闭并清空所有缓存的 Driver。"""
+    with _DRIVER_CACHE_LOCK:
+        for driver in _DRIVER_CACHE.values():
+            try:
+                driver.close()
+            except Exception:
+                pass
+        _DRIVER_CACHE.clear()
+
+
+# ── 索引初始化标记 ─────────────────────────────────────────────────────────
+_GROUP_ID_INDEX_CREATED: set[str] = set()
+_GROUP_ID_PROP_MIGRATED: set[str] = set()
+_FULLTEXT_INDEX_CREATED: set[str] = set()
+_INIT_LOCK = threading.Lock()
+
+
+def _ensure_group_id_index(session: Any, database: str) -> None:
+    """确保 group_id 属性索引存在（节点 + 关系），每个数据库仅首次执行。"""
+    if database in _GROUP_ID_INDEX_CREATED:
+        return
+    with _INIT_LOCK:
+        if database in _GROUP_ID_INDEX_CREATED:
+            return
+        try:
+            session.run(
+                "CREATE INDEX IF NOT EXISTS FOR (n:KnowledgeNode) ON (n.group_id)"
+            ).consume()
+            session.run(
+                "CREATE INDEX IF NOT EXISTS FOR ()-[r:RELATED]-() ON (r.group_id)"
+            ).consume()
+        except Exception:
+            pass
+        _GROUP_ID_INDEX_CREATED.add(database)
+
+
+def _ensure_group_id_prop(session: Any, database: str) -> None:
+    """为缺少 group_id 属性的节点/关系补上空字符串，每个数据库仅执行一次。"""
+    if database in _GROUP_ID_PROP_MIGRATED:
+        return
+    with _INIT_LOCK:
+        if database in _GROUP_ID_PROP_MIGRATED:
+            return
+        try:
+            session.run(
+                "MATCH (n:KnowledgeNode) WHERE NOT exists(n.group_id) "
+                "SET n.group_id = ''"
+            ).consume()
+            session.run(
+                "MATCH ()-[r:RELATED]-() WHERE NOT exists(r.group_id) "
+                "SET r.group_id = ''"
+            ).consume()
+        except Exception:
+            pass
+        _GROUP_ID_PROP_MIGRATED.add(database)
+
+
+def _ensure_fulltext_index(session: Any, database: str) -> bool:
+    """确保全文索引存在，返回是否可用。每个数据库仅首次执行。"""
+    if database in _FULLTEXT_INDEX_CREATED:
+        return True
+    with _INIT_LOCK:
+        if database in _FULLTEXT_INDEX_CREATED:
+            return True
+        try:
+            session.run(
+                "CREATE FULLTEXT INDEX node_fulltext IF NOT EXISTS "
+                "FOR (n:KnowledgeNode) ON EACH [n.name, n.description, n.uid]"
+            ).consume()
+            _FULLTEXT_INDEX_CREATED.add(database)
+            return True
+        except Exception:
+            return False
+
+
+# ── 参数解析 ────────────────────────────────────────────────────────────────
 
 def parse_limit(value: Any, *, default: int = 20, max_value: int = 200) -> int:
     if value in (None, ""):
@@ -61,6 +165,8 @@ def parse_json_object(value: Any, *, field_name: str) -> dict[str, Any]:
     raise ValueError(f"{field_name} 必须是 JSON 对象或 JSON 字符串。")
 
 
+# ── 查询类型校验 ────────────────────────────────────────────────────────────
+
 def _validate_query_type(
     session: Any,
     *,
@@ -75,6 +181,35 @@ def _validate_query_type(
         raise ValueError(f"仅允许只读查询，当前 query_type={query_type or 'unknown'}。")
     return query_type or "unknown"
 
+
+# ── 内部查询执行（跳过 EXPLAIN，供固定模板使用） ───────────────────────────
+
+def run_template_query(
+    runtime: Any,
+    *,
+    query: str,
+    parameters: dict[str, Any] | None = None,
+    database: str = "",
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """执行固定模板查询，跳过 EXPLAIN 校验，复用缓存 Driver。"""
+    uri, user, pwd = get_credentials(runtime)
+    safe_parameters = parameters or {}
+    driver = get_driver(uri, user, pwd)
+
+    session_kwargs: dict[str, Any] = {"fetch_size": min(max(limit, 1), 1000)}
+    database_name = clean_text(database)
+    if database_name:
+        session_kwargs["database"] = database_name
+
+    with driver.session(**session_kwargs) as session:
+        _ensure_group_id_index(session, database_name)
+        _ensure_group_id_prop(session, database_name)
+        result = session.run(query, safe_parameters)  # type: ignore[arg-type]
+        return [record.data() for record in itertools.islice(result, limit)]
+
+
+# ── 公开查询接口 ────────────────────────────────────────────────────────────
 
 def run_read_query(
     runtime: Any,
@@ -103,36 +238,104 @@ def run_cypher_query(
     limit: int = 100,
     allow_write: bool = False,
 ) -> list[dict[str, Any]]:
+    """执行自定义 Cypher 查询（含 EXPLAIN 校验），复用缓存 Driver。"""
     if not clean_text(query):
         raise ValueError("query 不能为空。")
 
     uri, user, pwd = get_credentials(runtime)
     safe_parameters = parameters or {}
-    driver = GraphDatabase.driver(
-        uri,
-        auth=(user, pwd),
-        connection_timeout=30.0,
-        max_connection_lifetime=3600,
-        user_agent="dify-neo4j-plugin/1.0",
+    driver = get_driver(uri, user, pwd)
+
+    session_kwargs: dict[str, Any] = {"fetch_size": min(max(limit, 1), 1000)}
+    database_name = clean_text(database)
+    if database_name:
+        session_kwargs["database"] = database_name
+
+    with driver.session(**session_kwargs) as session:
+        _ensure_group_id_index(session, database_name)
+        _ensure_group_id_prop(session, database_name)
+        _validate_query_type(
+            session,
+            query=query,
+            parameters=safe_parameters,
+            allow_write=allow_write,
+        )
+        result = session.run(query, safe_parameters)  # type: ignore[arg-type]
+        return [record.data() for record in itertools.islice(result, limit)]
+
+
+def run_read_queries(
+    runtime: Any,
+    queries: list[dict[str, Any]],
+    *,
+    database: str = "",
+) -> list[list[dict[str, Any]]]:
+    """在同一 Session 内批量执行多条只读查询，减少连接开销。"""
+    uri, user, pwd = get_credentials(runtime)
+    driver = get_driver(uri, user, pwd)
+
+    database_name = clean_text(database)
+    session_kwargs: dict[str, Any] = {"fetch_size": 1000}
+    if database_name:
+        session_kwargs["database"] = database_name
+
+    results: list[list[dict[str, Any]]] = []
+    with driver.session(**session_kwargs) as session:
+        _ensure_group_id_index(session, database_name)
+        _ensure_group_id_prop(session, database_name)
+        for q in queries:
+            query = q.get("query", "")
+            parameters = q.get("parameters") or {}
+            limit = int(q.get("limit", 100))
+            result = session.run(query, parameters)  # type: ignore[arg-type]
+            results.append([record.data() for record in itertools.islice(result, limit)])
+    return results
+
+
+def run_fulltext_query(
+    runtime: Any,
+    *,
+    index_name: str,
+    keyword: str,
+    group_id: str = "",
+    database: str = "",
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """使用全文索引查询节点。"""
+    uri, user, pwd = get_credentials(runtime)
+    driver = get_driver(uri, user, pwd)
+
+    database_name = clean_text(database)
+    session_kwargs: dict[str, Any] = {"fetch_size": min(max(limit, 1), 1000)}
+    if database_name:
+        session_kwargs["database"] = database_name
+
+    group_filter = ""
+    params: dict[str, Any] = {"keyword": keyword, "limit": limit}
+    if group_id:
+        group_filter = "WHERE node.group_id = $group_id"
+        params["group_id"] = group_id
+
+    query = (
+        f"CALL db.index.fulltext.queryNodes($index_name, $keyword) "
+        f"YIELD node, score "
+        f"{group_filter} "
+        f"RETURN node AS n, score "
+        f"ORDER BY score DESC "
+        f"LIMIT $limit"
     )
-    try:
-        session_kwargs: dict[str, Any] = {"fetch_size": min(max(limit, 1), 1000)}
-        database_name = clean_text(database)
-        if database_name:
-            session_kwargs["database"] = database_name
+    params["index_name"] = index_name
 
-        with driver.session(**session_kwargs) as session:
-            _validate_query_type(
-                session,
-                query=query,
-                parameters=safe_parameters,
-                allow_write=allow_write,
-            )
-            result = session.run(query, safe_parameters)  # type: ignore[arg-type]
-            return [record.data() for record in itertools.islice(result, limit)]
-    finally:
-        driver.close()
+    with driver.session(**session_kwargs) as session:
+        _ensure_group_id_index(session, database_name)
+        _ensure_group_id_prop(session, database_name)
+        if not _ensure_fulltext_index(session, database_name):
+            raise ValueError("全文索引不可用。")
+        result = session.run(query, params)  # type: ignore[arg-type]
+        return [record.data() for record in itertools.islice(result, limit)]
 
+
+# ── 工具函数 ────────────────────────────────────────────────────────────────
 
 def normalize_group_id(value: Any) -> str:
     return clean_text(value)

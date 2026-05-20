@@ -6,52 +6,56 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
+import logging
+
+from dify_plugin.config.logger_format import plugin_logger_handler
+
 from core.graph_query_common import (
     as_mapping,
     build_group_graph_png,
     parse_bool,
     parse_limit,
     relation_display_name,
-    run_read_query,
+    run_read_queries,
     strip_embedding_fields,
 )
 from core.types import clean_text
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(plugin_logger_handler)
 
 
 class QueryGroupGraphTool(Tool):
     _COUNT_NODES_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 RETURN count(n) AS total
 """
 
     _COUNT_RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE
-    (
-        coalesce(r.group_id, '') = $group_id
-        OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
-    )
+    r.group_id = $group_id
+    OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 RETURN count(r) AS total
 """
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 RETURN n
-ORDER BY coalesce(n.name, n.uid) ASC
+ORDER BY n.name ASC, n.uid ASC
 LIMIT $limit
 """
 
     _RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE
-    (
-        coalesce(r.group_id, '') = $group_id
-        OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
-    )
+    r.group_id = $group_id
+    OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 RETURN src, r, tgt
-ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
+ORDER BY src.uid ASC, tgt.uid ASC, type(r)
 LIMIT $limit
 """
 
@@ -90,6 +94,7 @@ LIMIT $limit
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         group_id = clean_text(tool_parameters.get("group_id"))
         database = clean_text(tool_parameters.get("database"))
+        logger.info("QueryGroupGraphTool invoked | group_id=%s database=%s", group_id, database)
         if not group_id:
             yield self.create_text_message("❌ group_id 不能为空。")
             return
@@ -102,37 +107,19 @@ LIMIT $limit
                 default=False,
                 field_name="generate_image",
             )
-            count_nodes_rows = run_read_query(
+            results = run_read_queries(
                 self.runtime,
-                query=self._COUNT_NODES_QUERY,
-                parameters={"group_id": group_id},
+                [
+                    {"query": self._COUNT_NODES_QUERY, "parameters": {"group_id": group_id}, "limit": 1},
+                    {"query": self._COUNT_RELS_QUERY, "parameters": {"group_id": group_id}, "limit": 1},
+                    {"query": self._NODES_QUERY, "parameters": {"group_id": group_id, "limit": detail_limit}, "limit": detail_limit},
+                    {"query": self._RELS_QUERY, "parameters": {"group_id": group_id, "limit": detail_limit}, "limit": detail_limit},
+                ],
                 database=database,
-                limit=1,
             )
-            count_rels_rows = run_read_query(
-                self.runtime,
-                query=self._COUNT_RELS_QUERY,
-                parameters={"group_id": group_id},
-                database=database,
-                limit=1,
-            )
+            count_nodes_rows, count_rels_rows, nodes_rows, rels_rows = results
             nodes_total = int((count_nodes_rows[0] if count_nodes_rows else {}).get("total", 0))
             rels_total = int((count_rels_rows[0] if count_rels_rows else {}).get("total", 0))
-
-            nodes_rows = run_read_query(
-                self.runtime,
-                query=self._NODES_QUERY,
-                parameters={"group_id": group_id, "limit": detail_limit},
-                database=database,
-                limit=detail_limit,
-            )
-            rels_rows = run_read_query(
-                self.runtime,
-                query=self._RELS_QUERY,
-                parameters={"group_id": group_id, "limit": detail_limit},
-                database=database,
-                limit=detail_limit,
-            )
         except Exception as exc:
             yield self.create_text_message(f"❌ 查询失败：{exc}")
             return
@@ -179,16 +166,32 @@ LIMIT $limit
             f"关系总数 {rels_total} 条（返回 {len(rels_payload)} 条）。"
         )
 
+        image_generated = bool(image_png)
+        image_format = "png" if image_png else ""
+        request_echo = {
+            "group_id": group_id,
+            "database": database,
+            "limit_requested": requested_limit,
+            "limit_applied": detail_limit,
+            "generate_image": generate_image,
+        }
+
+        yield self.create_variable_message("group_id", group_id)
         yield self.create_variable_message("nodes_count", len(nodes_payload))
         yield self.create_variable_message("rels_count", len(rels_payload))
         yield self.create_variable_message("nodes_total", nodes_total)
         yield self.create_variable_message("rels_total", rels_total)
-        yield self.create_variable_message("results", payload)
+        yield self.create_variable_message("nodes_truncated", len(nodes_payload) < nodes_total)
+        yield self.create_variable_message("relations_truncated", len(rels_payload) < rels_total)
+        yield self.create_variable_message("nodes", nodes_payload)
+        yield self.create_variable_message("relations", rels_payload)
+        yield self.create_variable_message("image_generated", image_generated)
+        yield self.create_variable_message("image_format", image_format)
+        yield self.create_variable_message("request", request_echo)
         yield self.create_variable_message("summary", summary)
         yield self.create_json_message({**payload, "summary": summary})
 
         if image_png:
-            yield self.create_variable_message("image_generated", True)
             yield self.create_blob_message(image_png, meta={"mime_type": "image/png", "filename": f"group_{group_id}.png"})
 
         yield self.create_text_message(f"✅ {summary}")

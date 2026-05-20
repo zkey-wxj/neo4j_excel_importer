@@ -13,7 +13,7 @@ from core.constants import (
     NODE_RESERVED_PROP_KEYS,
     RELATION_RESERVED_PROP_KEYS,
 )
-from core.graph_query_common import as_mapping, run_read_query
+from core.graph_query_common import as_mapping, run_read_queries
 from core.graph_write_common import write_nodes, write_relations
 from core.types import (
     GraphMeta,
@@ -32,19 +32,19 @@ class CopyGroupDataTool(Tool):
 
     _NODE_QUERY = """
 MATCH (n:KnowledgeNode)
-WHERE coalesce(n.group_id, '') = $group_id
+WHERE n.group_id = $group_id
 RETURN n
-ORDER BY coalesce(n.name, n.uid) ASC
+ORDER BY n.name ASC, n.uid ASC
 """
 
     _REL_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE (
-  coalesce(r.group_id, '') = $group_id
-  OR (coalesce(src.group_id, '') = $group_id AND coalesce(tgt.group_id, '') = $group_id)
+  r.group_id = $group_id
+  OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 )
 RETURN src, r, tgt
-ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
+ORDER BY src.uid ASC, tgt.uid ASC, type(r)
 """
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
@@ -65,27 +65,16 @@ ORDER BY coalesce(src.uid, ''), coalesce(tgt.uid, ''), type(r)
             return
 
         try:
-            source_node_rows = run_read_query(
+            results = run_read_queries(
                 self.runtime,
-                query=self._NODE_QUERY,
-                parameters={"group_id": source_group_id},
+                [
+                    {"query": self._NODE_QUERY, "parameters": {"group_id": source_group_id}, "limit": 100000},
+                    {"query": self._REL_QUERY, "parameters": {"group_id": source_group_id}, "limit": 200000},
+                    {"query": self._NODE_QUERY, "parameters": {"group_id": target_group_id}, "limit": 100000},
+                ],
                 database=database,
-                limit=100000,
             )
-            source_rel_rows = run_read_query(
-                self.runtime,
-                query=self._REL_QUERY,
-                parameters={"group_id": source_group_id},
-                database=database,
-                limit=200000,
-            )
-            target_node_rows = run_read_query(
-                self.runtime,
-                query=self._NODE_QUERY,
-                parameters={"group_id": target_group_id},
-                database=database,
-                limit=100000,
-            )
+            source_node_rows, source_rel_rows, target_node_rows = results
         except Exception as exc:
             yield self.create_text_message(f"❌ 读取分组数据失败：{exc}")
             return

@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Any
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
+from dify_plugin.config.logger_format import plugin_logger_handler
 
 from core.embedding_common import build_node_embedding_text, generate_embeddings, has_embedding_model
 from core.graph_write_common import write_nodes
 from core.types import clean_text, get_credentials, normalize_node
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(plugin_logger_handler)
 
 
 class SaveNodeSingleTool(Tool):
@@ -16,6 +22,7 @@ class SaveNodeSingleTool(Tool):
         node_payload = tool_parameters.get("node_json")
         embedding_model = tool_parameters.get("embedding_model")
         group_id = clean_text(tool_parameters.get("group_id"))
+        logger.info("SaveNodeSingleTool invoked | group_id=%s", group_id)
         if node_payload is None:
             yield self.create_text_message("❌ node_json 不能为空。")
             return

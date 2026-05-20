@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Any
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
+from dify_plugin.config.logger_format import plugin_logger_handler
 
 from core.graph_query_common import parse_bool, parse_json_object, parse_limit, run_cypher_query, strip_embedding_fields
 from core.types import clean_text
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(plugin_logger_handler)
 
 
 class Neo4jQueryTool(Tool):
@@ -19,6 +25,7 @@ class Neo4jQueryTool(Tool):
         query = clean_text(tool_parameters.get("query"))
         database = clean_text(tool_parameters.get("database"))
 
+        logger.info("Neo4jQueryTool invoked | query_len=%d database=%s", len(query), database)
         if not query:
             yield self.create_text_message("❌ query 不能为空。")
             return
@@ -49,20 +56,21 @@ class Neo4jQueryTool(Tool):
 
         sanitized_rows = strip_embedding_fields(rows)
         summary = f"Neo4j 查询完成，返回 {len(rows)} 条记录。"
-        payload = {
-            "count": len(rows),
-            "results": sanitized_rows,
-            "summary": summary,
-            "request": {
-                "database": database,
-                "max_records": max_records,
-                "allow_write_queries": allow_write,
-                "parameters": params,
-            },
+        request_echo = {
+            "database": database,
+            "max_records": max_records,
+            "allow_write_queries": allow_write,
+            "parameters": params,
         }
 
         yield self.create_variable_message("count", len(rows))
         yield self.create_variable_message("results", sanitized_rows)
         yield self.create_variable_message("summary", summary)
-        yield self.create_json_message(payload)
+        yield self.create_variable_message("request", request_echo)
+        yield self.create_json_message({
+            "count": len(rows),
+            "results": sanitized_rows,
+            "summary": summary,
+            "request": request_echo,
+        })
         yield self.create_text_message(f"✅ {summary}")

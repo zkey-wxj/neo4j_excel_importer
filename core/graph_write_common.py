@@ -4,9 +4,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from neo4j import GraphDatabase
-
 from core.constants import DEFAULT_NODE_LABEL, NODE_LABEL, VECTOR_INDEX_NAME
+from core.graph_query_common import get_driver
 from core.types import NodePayload, RelationPayload, clean_text
 
 CONSTRAINT_CYPHER = (
@@ -184,32 +183,28 @@ def relation_payload_to_cypher_row(payload: RelationPayload) -> dict[str, Any]:
 
 def clear_graph(uri: str, user: str, pwd: str, group_id: str = "") -> None:
     """清理图数据：传 group_id 时按组清理，否则清空全图。"""
-    driver = GraphDatabase.driver(uri, auth=(user, pwd))
-    try:
-        with driver.session() as session:
-            normalized_group_id = clean_text(group_id)
-            if normalized_group_id:
-                # 先删该组关系，再删该组节点，避免跨组节点被误删。
-                session.run(
-                    """
-                    MATCH ()-[r]-()
-                    WHERE r.group_id = $group_id
-                    DELETE r
-                    """,
-                    group_id=normalized_group_id,
-                )
-                session.run(
-                    """
-                    MATCH (n:KnowledgeNode)
-                    WHERE n.group_id = $group_id
-                    DETACH DELETE n
-                    """,
-                    group_id=normalized_group_id,
-                )
-            else:
-                session.run("MATCH (n) DETACH DELETE n")
-    finally:
-        driver.close()
+    driver = get_driver(uri, user, pwd)
+    with driver.session() as session:
+        normalized_group_id = clean_text(group_id)
+        if normalized_group_id:
+            session.run(
+                """
+                MATCH ()-[r]-()
+                WHERE r.group_id = $group_id
+                DELETE r
+                """,
+                group_id=normalized_group_id,
+            )
+            session.run(
+                """
+                MATCH (n:KnowledgeNode)
+                WHERE n.group_id = $group_id
+                DETACH DELETE n
+                """,
+                group_id=normalized_group_id,
+            )
+        else:
+            session.run("MATCH (n) DETACH DELETE n")
 
 
 def _has_procedure(session: Any, procedure_name: str) -> bool:
@@ -248,12 +243,9 @@ def has_apoc(session: Any) -> bool:
 
 
 def get_apoc_capabilities(uri: str, user: str, pwd: str) -> tuple[bool, bool]:
-    driver = GraphDatabase.driver(uri, auth=(user, pwd))
-    try:
-        with driver.session() as session:
-            return has_apoc_add_labels(session), has_apoc_merge_relationship(session)
-    finally:
-        driver.close()
+    driver = get_driver(uri, user, pwd)
+    with driver.session() as session:
+        return has_apoc_add_labels(session), has_apoc_merge_relationship(session)
 
 
 def write_nodes(
@@ -266,28 +258,25 @@ def write_nodes(
 ) -> int:
     cypher_rows = [node_payload_to_cypher_row(row) for row in rows]
     detected_dimensions = _detect_embedding_dimensions(cypher_rows)
-    driver = GraphDatabase.driver(uri, auth=(user, pwd))
-    try:
-        with driver.session() as session:
-            session.run(CONSTRAINT_CYPHER)
-            if detected_dimensions > 0:
-                _ensure_vector_index(
-                    session,
-                    index_name=VECTOR_INDEX_NAME,
-                    dimensions=detected_dimensions,
-                )
-            apoc = has_apoc_add_labels(session)
-            for start in range(0, len(cypher_rows), batch_size):
-                batch = cypher_rows[start: start + batch_size]
-                try:
-                    if apoc:
-                        session.run(UPSERT_NODES, rows=batch)
-                    else:
-                        session.run(UPSERT_NODES_GENERIC, rows=batch)
-                except Exception:
+    driver = get_driver(uri, user, pwd)
+    with driver.session() as session:
+        session.run(CONSTRAINT_CYPHER)
+        if detected_dimensions > 0:
+            _ensure_vector_index(
+                session,
+                index_name=VECTOR_INDEX_NAME,
+                dimensions=detected_dimensions,
+            )
+        apoc = has_apoc_add_labels(session)
+        for start in range(0, len(cypher_rows), batch_size):
+            batch = cypher_rows[start: start + batch_size]
+            try:
+                if apoc:
+                    session.run(UPSERT_NODES, rows=batch)
+                else:
                     session.run(UPSERT_NODES_GENERIC, rows=batch)
-    finally:
-        driver.close()
+            except Exception:
+                session.run(UPSERT_NODES_GENERIC, rows=batch)
     return len(rows)
 
 
@@ -332,16 +321,13 @@ def write_relations(
     batch_size: int,
 ) -> int:
     cypher_rows = [relation_payload_to_cypher_row(row) for row in rows]
-    driver = GraphDatabase.driver(uri, auth=(user, pwd))
-    try:
-        with driver.session() as session:
-            rel_cypher = UPSERT_RELS_APOC if has_apoc_merge_relationship(session) else UPSERT_RELS_GENERIC
-            for start in range(0, len(cypher_rows), batch_size):
-                batch = cypher_rows[start: start + batch_size]
-                try:
-                    session.run(rel_cypher, rows=batch)
-                except Exception:
-                    session.run(UPSERT_RELS_GENERIC, rows=batch)
-    finally:
-        driver.close()
+    driver = get_driver(uri, user, pwd)
+    with driver.session() as session:
+        rel_cypher = UPSERT_RELS_APOC if has_apoc_merge_relationship(session) else UPSERT_RELS_GENERIC
+        for start in range(0, len(cypher_rows), batch_size):
+            batch = cypher_rows[start: start + batch_size]
+            try:
+                session.run(rel_cypher, rows=batch)
+            except Exception:
+                session.run(UPSERT_RELS_GENERIC, rows=batch)
     return len(rows)
