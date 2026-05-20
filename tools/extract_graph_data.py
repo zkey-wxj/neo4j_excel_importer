@@ -1,6 +1,5 @@
 """extract_graph_data.py — Dify Tool
-从 Excel / Markdown 提取图谱结构数据，仅解析不写入 Neo4j。
-复用 import_graph 的全部解析逻辑。
+从 Markdown 提取图谱结构数据，仅解析不写入 Neo4j。
 """
 from __future__ import annotations
 
@@ -12,16 +11,26 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
 
+from core.graph_parser import GraphParser
 from core.types import clean_text, ensure_mapping, utc_now_iso
-from tools.import_graph import ImportGraphTool
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(plugin_logger_handler)
 
+_STANDARD_MAPPING: dict[str, Any] = {
+    "node": {
+        "uid": "uid", "name": "name", "labels": ["labels"],
+        "description": ["description"], "properties": ["grade_range", "*"],
+    },
+    "relation": {
+        "source_uid": "source_uid", "rel_type": "rel_type", "target_uid": "target_uid",
+        "description": ["description"], "properties": ["*"],
+    },
+}
+
 
 def _node_to_dict(raw: dict[str, Any], group_id: str) -> dict[str, Any]:
-    """将解析后的原始节点规范化为输出字典。"""
     return {
         "uid": clean_text(raw.get("uid")),
         "name": clean_text(raw.get("name")),
@@ -34,7 +43,6 @@ def _node_to_dict(raw: dict[str, Any], group_id: str) -> dict[str, Any]:
 
 
 def _relation_to_dict(raw: dict[str, Any], group_id: str) -> dict[str, Any]:
-    """将解析后的原始关系规范化为输出字典。"""
     return {
         "source_uid": clean_text(raw.get("source_uid")),
         "target_uid": clean_text(raw.get("target_uid")),
@@ -47,31 +55,14 @@ def _relation_to_dict(raw: dict[str, Any], group_id: str) -> dict[str, Any]:
     }
 
 
-class ExtractGraphDataTool(ImportGraphTool):
-    """从 Excel / Markdown 提取图谱结构数据，仅解析不写入 Neo4j。"""
-
-    _STANDARD_MAPPING: dict[str, Any] = {
-        "node": {
-            "uid": "uid",
-            "name": "name",
-            "labels": ["labels"],
-            "description": ["description"],
-            "properties": ["grade_range", "*"],
-        },
-        "relation": {
-            "source_uid": "source_uid",
-            "rel_type": "rel_type",
-            "target_uid": "target_uid",
-            "description": ["description"],
-            "properties": ["*"],
-        },
-    }
+class ExtractGraphDataTool(GraphParser, Tool):
+    """从 Markdown 提取图谱结构数据，仅解析不写入 Neo4j。"""
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         params: Mapping[str, Any] = ensure_mapping(tool_parameters, field_name="tool_parameters")
 
         text = str(params.get("text") or "").strip()
-        mapping = self._resolve_mapping(params.get("mapping") or self._STANDARD_MAPPING)
+        mapping = self.resolve_mapping(params.get("mapping"), default=_STANDARD_MAPPING)
         input_group_id = str(params.get("group_id") or "").strip()
         group_id = input_group_id or utc_now_iso().replace("-", "").replace(":", "")[:14]
 
@@ -81,15 +72,13 @@ class ExtractGraphDataTool(ImportGraphTool):
             yield self.create_text_message("text cannot be empty.")
             return
 
-        # ── 解析 ──────────────────────────────────────────────────────────
         try:
-            raw_nodes, raw_relations = self._parse_markdown_tables(text, mapping)
+            raw_nodes, raw_relations = self.parse_markdown_tables(text, mapping)
         except Exception as exc:
             logger.error("Parse failed: %s", exc)
             yield self.create_text_message(f"Parse failed: {exc}")
             return
 
-        # ── 规范化 ────────────────────────────────────────────────────────
         nodes = [_node_to_dict(n, group_id) for n in raw_nodes if clean_text(n.get("uid"))]
         relations = [
             _relation_to_dict(r, group_id) for r in raw_relations
@@ -99,25 +88,19 @@ class ExtractGraphDataTool(ImportGraphTool):
         known_ids = {n["uid"] for n in nodes}
         skipped_rels = sum(1 for r in raw_relations if clean_text(r.get("source_uid")) not in known_ids or clean_text(r.get("target_uid")) not in known_ids)
 
-        # ── 统计 ──────────────────────────────────────────────────────────
         node_type_stats: dict[str, int] = {}
         for n in nodes:
             for label in n.get("labels", []):
                 if label:
                     node_type_stats[label] = node_type_stats.get(label, 0) + 1
-
         rel_type_stats: dict[str, int] = {}
         for r in relations:
             rt = r.get("rel_type", "")
             if rt:
                 rel_type_stats[rt] = rel_type_stats.get(rt, 0) + 1
 
-        summary = (
-            f"Extracted {len(nodes)} nodes, {len(relations)} relations, "
-            f"skipped {skipped_rels} relations (missing nodes)."
-        )
+        summary = f"Extracted {len(nodes)} nodes, {len(relations)} relations, skipped {skipped_rels} (missing nodes)."
 
-        # ── 输出 ──────────────────────────────────────────────────────────
         yield self.create_variable_message("group_id", group_id)
         yield self.create_variable_message("nodes_count", len(nodes))
         yield self.create_variable_message("relations_count", len(relations))
@@ -128,14 +111,8 @@ class ExtractGraphDataTool(ImportGraphTool):
         yield self.create_variable_message("relations", relations)
         yield self.create_variable_message("summary", summary)
         yield self.create_json_message({
-            "group_id": group_id,
-            "nodes_count": len(nodes),
-            "relations_count": len(relations),
-            "skipped_rels": skipped_rels,
-            "node_type_stats": node_type_stats,
-            "rel_type_stats": rel_type_stats,
-            "nodes": nodes,
-            "relations": relations,
-            "summary": summary,
+            "group_id": group_id, "nodes_count": len(nodes), "relations_count": len(relations),
+            "skipped_rels": skipped_rels, "node_type_stats": node_type_stats, "rel_type_stats": rel_type_stats,
+            "nodes": nodes, "relations": relations, "summary": summary,
         })
         yield self.create_text_message(f"OK {summary}")
