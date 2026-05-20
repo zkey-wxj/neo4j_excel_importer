@@ -40,6 +40,7 @@ credentials_for_provider:
 
 tools:
   - tools/import_graph.yaml
+  - tools/extract_graph_data.yaml
   - tools/neo4j_query.yaml
   - tools/query_node_by_id.yaml
   - tools/query_nodes_fuzzy.yaml

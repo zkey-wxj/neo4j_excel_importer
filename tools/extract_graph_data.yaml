@@ -1,0 +1,93 @@
+identity:
+  name: extract_graph_data
+  author: wxj
+  label:
+    en_US: Extract Graph Data
+    zh_Hans: 提取图谱数据
+
+description:
+  human:
+    en_US: Extract nodes and relations from Excel or Markdown without writing to Neo4j.
+    zh_Hans: 从 Excel 或 Markdown 提取节点和关系数据，仅解析不写入 Neo4j。
+  llm: Extract graph structure (nodes + relations) from Excel URL or Markdown text. Returns parsed data as JSON without saving to database.
+
+parameters:
+  - name: text
+    type: string
+    required: true
+    label:
+      en_US: Markdown Text
+      zh_Hans: Markdown 文本
+    human_description:
+      en_US: Markdown table text containing node and relation data.
+      zh_Hans: 包含节点和关系数据的 Markdown 表格文本。
+    llm_description: |
+      Markdown table content with node and relation data.
+      The tool auto-detects node tables and relation tables by header row.
+      Node table header example: | uid | name | labels | description |
+      Relation table header example: | source_uid | rel_type | target_uid |
+      Tables can have additional columns beyond the standard fields; they will be stored into corresponding fields according to the mapping.
+      A title-only row (other columns empty) is treated as a section title node.
+    form: llm
+
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional group id tag for extracted data.
+      zh_Hans: 可选的分组 ID 标签，用于标识提取的数据。
+    llm_description: Optional group_id to tag extracted nodes and relations.
+    form: llm
+
+  - name: mapping
+    type: string
+    required: false
+    label:
+      en_US: Field Mapping
+      zh_Hans: 字段映射
+    human_description:
+      en_US: Optional JSON string overriding the default node/relation field mapping.
+      zh_Hans: 可选的 JSON 字符串，覆盖默认的节点/关系字段映射。
+    llm_description: |
+      Optional JSON string to customize field mapping. Default mapping:
+      {"node":{"uid":"uid","name":"name","labels":["labels"],"description":["description"],"properties":["grade_range","*"]},"relation":{"source_uid":"source_uid","rel_type":"rel_type","target_uid":"target_uid","description":["description"],"properties":["*"]}}
+      In properties, "*" means collect all remaining columns not already mapped to standard fields.
+    form: llm
+
+output_schema:
+  type: object
+  properties:
+    group_id:
+      type: string
+      description: Group id tag for extracted data.
+    nodes_count:
+      type: integer
+      description: Number of extracted nodes.
+    relations_count:
+      type: integer
+      description: Number of extracted relations.
+    skipped_rels:
+      type: integer
+      description: Number of relations skipped due to missing nodes.
+    node_type_stats:
+      type: object
+      description: Node label distribution.
+    rel_type_stats:
+      type: object
+      description: Relation type distribution.
+    nodes:
+      type: array
+      description: Extracted node objects.
+    relations:
+      type: array
+      description: Extracted relation objects.
+    summary:
+      type: string
+      description: Human-readable extraction summary.
+
+extra:
+  python:
+    source: tools/extract_graph_data.py
