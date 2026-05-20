@@ -326,7 +326,6 @@ class GraphParser:
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
-        print(rel)
         return self._starts_with(row, [rel["source_uid"], rel["rel_type"], rel["target_uid"]]) \
             or self._starts_with(row, ["source_uid", "rel_type", "target_uid"])
 
