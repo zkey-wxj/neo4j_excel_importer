@@ -300,7 +300,8 @@ class GraphParser:
     def _starts_with(row: list[str], expected: list[str]) -> bool:
         if len(row) < len(expected):
             return False
-        return all(clean_text(row[i]) == clean_text(v) for i, v in enumerate(expected))
+        row_set = {clean_text(c) for c in row}
+        return all(clean_text(v) in row_set for v in expected)
 
     @staticmethod
     def _matches_any(value: str, candidates: list[str]) -> bool:
@@ -313,16 +314,19 @@ class GraphParser:
             return False
         uid_ok = clean_text(row[0]) in {clean_text(node["uid"]), clean_text("uid")}
         name_ok = clean_text(row[1]) in {clean_text(node["name"]), clean_text("name")}
+        
+        
         if not uid_ok or not name_ok:
             return False
         label_fields = self._normalize_label_fields(node.get("labels"))
         if not self._matches_any(row[2], label_fields or ["node_type"]):
             return False
-        desc_fields = self._normalize_description_fields(node.get("description", node.get("definition")))
-        return self._matches_any(row[3], desc_fields or ["description", "definition", "说明", "备注", "简介"])
+        
+        return True
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
+        print(rel)
         return self._starts_with(row, [rel["source_uid"], rel["rel_type"], rel["target_uid"]]) \
             or self._starts_with(row, ["source_uid", "rel_type", "target_uid"])
 
