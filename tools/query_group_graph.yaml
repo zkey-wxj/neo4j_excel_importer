@@ -29,13 +29,26 @@ parameters:
     required: false
     default: 100
     label:
-      en_US: Result Limit
-      zh_Hans: 返回条数上限
+      en_US: Page Size
+      zh_Hans: 每页条数
     human_description:
-      en_US: Max rows for nodes and relations each. Default 100, max 3000.
-      zh_Hans: 节点和关系各自的最大返回条数。默认 100，最大 3000。
-    llm_description: Limit for nodes and relations query.
-    form: form
+      en_US: Page size for nodes and relations each. Default 100, max 3000.
+      zh_Hans: 节点和关系各自每页返回条数。默认 100，最大 3000。
+    llm_description: Page size for nodes and relations query.
+    form: llm
+
+  - name: page
+    type: number
+    required: false
+    default: 1
+    label:
+      en_US: Page Number
+      zh_Hans: 页码
+    human_description:
+      en_US: Page number starting from 1. Default 1.
+      zh_Hans: 页码，从 1 开始。默认 1。
+    llm_description: Page number, starts from 1.
+    form: llm
 
   - name: generate_image
     type: boolean
@@ -86,6 +99,18 @@ output_schema:
     relations_truncated:
       type: boolean
       description: Whether relation rows are truncated by safe limit.
+    page:
+      type: integer
+      description: Current page number.
+    page_size:
+      type: integer
+      description: Page size used for this query.
+    nodes_has_more:
+      type: boolean
+      description: Whether there are more node pages after this one.
+    rels_has_more:
+      type: boolean
+      description: Whether there are more relation pages after this one.
     nodes:
       type: array
       description: Node rows.
