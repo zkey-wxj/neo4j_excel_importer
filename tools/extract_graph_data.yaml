@@ -7,9 +7,14 @@ identity:
 
 description:
   human:
-    en_US: Extract nodes and relations from Excel or Markdown without writing to Neo4j.
-    zh_Hans: 从 Excel 或 Markdown 提取节点和关系数据，仅解析不写入 Neo4j。
-  llm: Extract graph structure (nodes + relations) from Excel URL or Markdown text. Returns parsed data as JSON without saving to database.
+    en_US: Parse Markdown tables into structured node and relation data without writing to Neo4j.
+    zh_Hans: 将 Markdown 表格解析为结构化的节点和关系数据，不写入 Neo4j。
+  llm: |
+    Parse Markdown table text into nodes and relations. Returns structured JSON.
+    Node table header: | uid | name | labels | description |
+    Relation table header: | source_uid | rel_type | target_uid |
+    Additional columns are collected into properties.
+    Title-only rows become section title nodes.
 
 parameters:
   - name: text
@@ -30,18 +35,6 @@ parameters:
       A title-only row (other columns empty) is treated as a section title node.
     form: llm
 
-  - name: group_id
-    type: string
-    required: false
-    label:
-      en_US: Group ID
-      zh_Hans: 分组 ID
-    human_description:
-      en_US: Optional group id tag for extracted data.
-      zh_Hans: 可选的分组 ID 标签，用于标识提取的数据。
-    llm_description: Optional group_id to tag extracted nodes and relations.
-    form: llm
-
   - name: mapping
     type: string
     required: false
@@ -60,9 +53,6 @@ parameters:
 output_schema:
   type: object
   properties:
-    group_id:
-      type: string
-      description: Group id tag for extracted data.
     nodes_count:
       type: integer
       description: Number of extracted nodes.
