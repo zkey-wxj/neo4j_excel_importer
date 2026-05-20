@@ -94,6 +94,10 @@
 				font-weight: 600;
 				color: var(--blue);
 			}
+			.stat-clickable { cursor: pointer; transition: all 0.15s; }
+			.stat-clickable:hover { background: var(--surface2); }
+			.stat-clickable.active { background: rgba(233,68,90,0.1); }
+			.stat-clickable.active .n { color: var(--rose); }
 			.stat-cell .l {
 				font-size: 9px;
 				color: var(--muted);
@@ -178,9 +182,10 @@
 			}
 			.legend-box.collapsed .legend-content,
 			.legend-box.collapsed .legend-actions,
-			#minimap.collapsed .minimap-content {
+			#minimap.collapsed {
 				display: none;
 			}
+			
 			.legend-box h5 {
 				font-family: "JetBrains Mono", monospace;
 				font-size: 9.5px;
@@ -542,7 +547,7 @@
 			<div id="stats">
 				<div class="stat-cell"><div class="n" id="s-nodes">0</div><div class="l">节点</div></div>
 				<div class="stat-cell"><div class="n" id="s-links">0</div><div class="l">关系</div></div>
-				<div class="stat-cell"><div class="n" id="s-orphans">-</div><div class="l">孤立</div></div>
+				<div class="stat-cell stat-clickable" id="stat-orphans"><div class="n" id="s-orphans">-</div><div class="l">孤立</div></div>
 				<div class="stat-cell"><div class="n" id="s-node-types">-</div><div class="l">节点类型</div></div>
 				<div class="stat-cell"><div class="n" id="s-rel-types">-</div><div class="l">关系类型</div></div>
 				<div class="stat-cell"><div class="n" id="s-zoom">1.00×</div><div class="l">缩放</div></div>
@@ -588,7 +593,7 @@
 					<div id="d-nei-list" style="max-height:200px;overflow-y:auto"></div>
 				</div>
 				<div class="d-actions">
-					<button class="ops-btn primary" id="btnExpandNei">展开邻居</button>
+					<!-- <button class="ops-btn primary" id="btnExpandNei">展开邻居</button> -->
 					<button class="ops-btn" id="btnFillNodeForm">编辑</button>
 				</div>
 			</div>
@@ -681,8 +686,9 @@
 							<div style="display:flex;gap:4px"><input id="pathTarget" placeholder="目标节点" style="flex:1" /><button class="ops-btn" type="button" data-pick-input="pathTarget" style="white-space:nowrap;padding:6px 8px">抓取</button></div>
 						</div>
 					</div>
-					<div class="ops-actions" style="grid-template-columns: 1fr">
+					<div class="ops-actions" style="grid-template-columns: 1fr auto">
 						<button class="ops-btn primary" id="btnFindPath">查找最短路径</button>
+						<button class="ops-btn" id="btnClearPath" style="display:none;padding:6px 8px" title="清除路径">✕</button>
 					</div>
 				</div>
 
@@ -1233,6 +1239,7 @@
 					this.graphLinks = [];
 					this.selectedLegendTypes = new Set();
 					this.selectedRelTypes = new Set();
+					this.orphanFilter = false;
 					this.searchKeyword = "";
 					this.needRender = false;
 					this._pathHighlight = null;
@@ -1276,7 +1283,13 @@
 				// @param r 查询半径
 				// @return Node | null 找到的节点或 null
 				findNodeAt(wx, wy, r = 18) {
-					return this.quadtree?.find(wx, wy, r) ?? null;
+					const nd = this.quadtree?.find(wx, wy, r) ?? null;
+					if (nd) {
+						if (this._pathHighlight && !this._pathHighlight.has(nd.id)) return null;
+						const g = this.graphNodes.find(n => n.id === nd.id);
+						if (g && !this.passFilter(g)) return null;
+					}
+					return nd;
 				}
 				// 查找世界坐标处的边：沿着贝塞尔曲线采样判断碰撞
 				// @param wx, wy 世界坐标
@@ -1288,6 +1301,13 @@
 							s = e.source,
 							t = e.target;
 						if (!s?.x || !t?.x || !this.passEdgeFilter(e)) continue;
+						const ph = this._pathHighlight;
+						if (ph) {
+							const ek = `${s.id}=>${t.id}`, ekR = `${t.id}=>${s.id}`;
+							if (!ph.has(ek) && !ph.has(ekR)) continue;
+						}
+						const sg = this.graphNodes.find(n => n.id === s.id), tg = this.graphNodes.find(n => n.id === t.id);
+						if (!sg || !tg || !this.passFilter(sg) || !this.passFilter(tg)) continue;
 						for (let u = 0; u <= 1; u += 0.05) {
 							const p = this._bezPt(e, u),
 								dx = p.x - wx,
@@ -1344,6 +1364,15 @@
 				}
 				passFilter(n) {
 					if (this.selectedLegendTypes.size && !this._getNodeLabelKeys(n).some((k) => this.selectedLegendTypes.has(k))) return false;
+					if (this.orphanFilter) {
+						const id = n.id;
+						const connected = this.graphLinks.some(l => {
+							const s = clean(typeof l.source === "object" ? l.source?.id : l.source);
+							const t = clean(typeof l.target === "object" ? l.target?.id : l.target);
+							return s === id || t === id;
+						});
+						if (connected) return false;
+					}
 					if (!this.searchKeyword) return true;
 					const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
 					return [clean(n?.label).toLowerCase(), clean(n?.uid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
@@ -1602,6 +1631,7 @@
 					this.graphNodes.forEach((n) => {
 						if (this.passFilter(n)) vis.add(n.id);
 					});
+					const ph = this._pathHighlight;
 					this._edges.forEach((edge, i) => {
 						const s = edge.source,
 							t = edge.target;
@@ -1612,13 +1642,21 @@
 							ty = t.y;
 						if (Math.max(sx, tx) < vx0 || Math.min(sx, tx) > vx1 || Math.max(sy, ty) < vy0 || Math.min(sy, ty) > vy1) return;
 						if (!vis.has(s.id) || !vis.has(t.id) || !this.passEdgeFilter(edge)) return;
+						const edgeKey = `${s.id}=>${t.id}`, edgeKeyR = `${t.id}=>${s.id}`;
+						const onPath = ph && (ph.has(edgeKey) || ph.has(edgeKeyR));
 						const isE = i === ae,
 							isNL = focusN && (s.id === focusN || t.id === focusN),
 							act = isE || isNL;
-						c.globalAlpha = hasF ? (act ? 1 : 0.1) : 0.55;
+						if (ph && hasF) {
+							c.globalAlpha = act ? 1 : onPath ? 0.2 : 0.05;
+						} else if (ph) {
+							c.globalAlpha = onPath ? 1 : 0.08;
+						} else {
+							c.globalAlpha = hasF ? (act ? 1 : 0.1) : 0.55;
+						}
 						c.beginPath();
-						c.lineWidth = act ? 2.5 / k : 1.6 / k;
-						c.strokeStyle = isE ? "#3498db" : isNL ? "#9b59b6" : "#C0C0C0";
+						c.lineWidth = onPath ? 2.5 / k : act ? 2.5 / k : 1.6 / k;
+						c.strokeStyle = onPath ? "#e8445a" : act ? "#9b59b6" : isE ? "#3498db" : "#C0C0C0";
 						if (edge.isSelfLoop) {
 							c.arc(sx + 20, sy - 20, 22, 0, Math.PI * 2);
 						} else {
@@ -1664,9 +1702,12 @@
 							c.fill();
 							c.restore();
 						}
-						c.globalAlpha = 1;
+						const edgeAlpha = ph && hasF ? (act ? 1 : onPath ? 0.2 : 0.05) : ph ? (onPath ? 1 : 0.08) : hasF ? (act ? 1 : 0.1) : 0.55;
+						c.globalAlpha = edgeAlpha;
 						if (edge.name) {
-							if (hasF && !act) return;
+							if (ph && hasF && !act) return;
+							if (ph && !hasF && !onPath) return;
+							if (!ph && hasF && !act) return;
 							const m = this._bezMid(edge),
 								lb = edge.name.length > 14 ? edge.name.slice(0, 14) + "…" : edge.name,
 								fs = Math.max(9, 9 / k);
@@ -1688,6 +1729,7 @@
 				// 节点绘制：按权重升序（权重大的在上层）→ 视口裁剪 → 焦点光晕 → 圆形填充 → 标签
 				_drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn) {
 					const hasF = !!(focusN || feObj),
+						ph = this._pathHighlight,
 						vis = new Set();
 					this.graphNodes.forEach((n) => {
 						if (this.passFilter(n)) vis.add(n.id);
@@ -1699,15 +1741,38 @@
 								y = nd.y ?? 0;
 							if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
 							if (!vis.has(nd.id)) return;
+							const onPath = ph && ph.has(nd.id);
 							const BR = nd.r ?? 10,
 								isNF = nd.id === focusN,
 								isNN = focusN && !isNF && this._edges.some((e) => !e.isSelfLoop && ((e.source?.id === focusN && e.target?.id === nd.id) || (e.target?.id === focusN && e.source?.id === nd.id)));
 							const isEF = feIds?.has(nd.id),
 								isSN = nd.id === sn,
 								fc = isNF || isEF || isSN,
-								ac = hasF ? fc || isNN : true,
 								r = BR;
-							c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
+							// 路径高亮 + 选中：关联节点(含非路径)高亮，其余路径节点淡化，非路径非关联隐藏
+							if (ph && hasF) {
+								if (fc || isNN) {
+									c.globalAlpha = 1;
+								} else if (onPath) {
+									c.globalAlpha = 0.2;
+								} else {
+									c.globalAlpha = 0.05;
+								}
+							} else if (ph) {
+								c.globalAlpha = onPath ? 1 : 0.1;
+							} else {
+								c.globalAlpha = hasF ? (fc || isNN ? 1 : 0.15) : 1;
+							}
+							// 路径节点光晕
+							if (onPath && (!ph || !hasF || fc || isNN)) {
+								c.beginPath();
+								c.arc(x, y, r + 6 / k, 0, Math.PI * 2);
+								c.strokeStyle = "#e8445a";
+								c.lineWidth = 2.5 / k;
+								c.globalAlpha = Math.min(c.globalAlpha, 0.5);
+								c.stroke();
+								c.globalAlpha = ph && hasF ? (fc || isNN ? 1 : 0.2) : ph ? (onPath ? 1 : 0.1) : 1;
+							}
 							if (fc) {
 								c.beginPath();
 								c.arc(x, y, r + 5 / k, 0, Math.PI * 2);
@@ -1715,7 +1780,7 @@
 								c.lineWidth = 2.5 / k;
 								c.globalAlpha = 0.35;
 								c.stroke();
-								c.globalAlpha = hasF ? (ac ? 1 : 0.15) : 1;
+								c.globalAlpha = 1;
 							}
 							c.beginPath();
 							c.arc(x, y, r, 0, Math.PI * 2);
@@ -1725,7 +1790,8 @@
 							c.lineWidth = (fc ? 3 : 2.5) / k;
 							c.stroke();
 							if (k > 0.6) {
-								const sf = ac,
+								const sf = (fc || isNN) && !ph,
+									nodeAlpha = ph && hasF ? (fc || isNN ? 1 : onPath ? 0.2 : 0.05) : ph ? (onPath ? 1 : 0.1) : hasF ? (fc || isNN ? 1 : 0.15) : 1,
 									rn = nd.name || nd.label || "",
 									lb = sf ? (rn.length > 16 ? rn.slice(0, 16) + "…" : rn) : rn.length > 8 ? rn.slice(0, 8) + "…" : rn,
 									fs = sf ? Math.max(12, 12 / k) : Math.max(11, 11 / k),
@@ -1734,7 +1800,7 @@
 								const lx = x + r + 5 / k,
 									ly = y;
 								if (sf) {
-									c.globalAlpha = 1;
+									c.globalAlpha = nodeAlpha;
 									const tw = c.measureText(lb).width,
 										pad = 5 / k,
 										bh = (fs + 8) / k;
@@ -2171,6 +2237,7 @@
 				if (n) fillNodeForm(n.raw);
 			};
 
+			/* 展开邻居功能暂未启用
 			document.getElementById("btnExpandNei").onclick = async () => {
 				try {
 					const gid = clean(document.getElementById("groupId").value);
@@ -2185,25 +2252,59 @@
 					setStatus(`邻居展开完成: 新增 ${(d.nodes||[]).length} 节点, ${(d.relations||[]).length} 关系`);
 				} catch (e) { setStatus(`邻居展开失败: ${e.message}`, true); }
 			};
+			*/
 
-			document.getElementById("btnFindPath").onclick = async () => {
-				try {
-					const gid = clean(document.getElementById("groupId").value);
-					const src = clean(document.getElementById("pathSource").value);
-					const tgt = clean(document.getElementById("pathTarget").value);
-					if (!gid) { setStatus("请先加载图谱", true); return; }
-					if (!src || !tgt) { setStatus("请输入起点和终点 uid", true); return; }
-					setStatus("查找路径中...");
-					const d = await _api.req(`/group-graph/api/path?group_id=${encodeURIComponent(gid)}&source_uid=${encodeURIComponent(src)}&target_uid=${encodeURIComponent(tgt)}`);
-					if (d.path_length < 0) { setStatus("未找到路径", true); return; }
-					_store.addNodes(d.nodes || []);
-					_store.addLinks(d.relations || []);
-					const g = _store.mapGraphData();
-					_canvas._pathHighlight = new Set([...(d.nodes||[]).map(n => clean(n.uid)), ...(d.relations||[]).map(r => `${clean(r.source_uid)}=>${clean(r.target_uid)}`)]);
-					_canvas.render(g.nodes, g.links);
-					setStatus(`路径找到: ${d.path_length} 跳, ${(d.nodes||[]).length} 节点`);
-					setTimeout(() => { _canvas._pathHighlight = null; }, 8000);
-				} catch (e) { setStatus(`路径查询失败: ${e.message}`, true); }
+			document.getElementById("btnFindPath").onclick = () => {
+				const src = clean(document.getElementById("pathSource").value);
+				const tgt = clean(document.getElementById("pathTarget").value);
+				if (!src || !tgt) { setStatus("请输入起点和终点 uid", true); return; }
+				if (!_store.nodeMap.has(src)) { setStatus(`起点 ${src} 不存在`, true); return; }
+				if (!_store.nodeMap.has(tgt)) { setStatus(`终点 ${tgt} 不存在`, true); return; }
+				if (src === tgt) { setStatus("起点和终点相同", true); return; }
+				// 构建邻接表（双向）
+				const adj = new Map();
+				_store.linkMap.forEach(r => {
+					const s = clean(r.source_uid), t = clean(r.target_uid);
+					if (!s || !t) return;
+					if (!adj.has(s)) adj.set(s, []);
+					if (!adj.has(t)) adj.set(t, []);
+					adj.get(s).push(t);
+					adj.get(t).push(s);
+				});
+				// BFS 最短路径
+				const queue = [src], visited = new Set([src]), parent = new Map();
+				let found = false;
+				while (queue.length && !found) {
+					const cur = queue.shift();
+					for (const nei of (adj.get(cur) || [])) {
+						if (visited.has(nei)) continue;
+						visited.add(nei);
+						parent.set(nei, cur);
+						if (nei === tgt) { found = true; break; }
+						queue.push(nei);
+					}
+				}
+				if (!found) { setStatus("未找到路径", true); return; }
+				// 回溯路径
+				const pathNodes = [];
+				let node = tgt;
+				while (node) { pathNodes.unshift(node); node = parent.get(node); }
+				// 高亮路径
+				_canvas._pathHighlight = new Set();
+				for (const uid of pathNodes) _canvas._pathHighlight.add(uid);
+				for (let i = 0; i < pathNodes.length - 1; i++) {
+					_canvas._pathHighlight.add(`${pathNodes[i]}=>${pathNodes[i + 1]}`);
+					_canvas._pathHighlight.add(`${pathNodes[i + 1]}=>${pathNodes[i]}`);
+				}
+				_canvas.scheduleRender();
+				setStatus(`路径找到: ${pathNodes.length - 1} 跳, ${pathNodes.length} 节点`);
+				document.getElementById("btnClearPath").style.display = "";
+			};
+			document.getElementById("btnClearPath").onclick = () => {
+				_canvas._pathHighlight = null;
+				_canvas.scheduleRender();
+				document.getElementById("btnClearPath").style.display = "none";
+				setStatus("已清除路径高亮");
 			};
 
 			function refreshStats() {
@@ -2248,6 +2349,12 @@
 				mm.classList.toggle("collapsed");
 				document.getElementById("btnMinimap").style.borderColor = mm.classList.contains("collapsed") ? "" : "var(--blue)";
 				document.getElementById("btnMinimap").style.color = mm.classList.contains("collapsed") ? "" : "var(--blue)";
+			});
+			document.getElementById("stat-orphans").addEventListener("click", () => {
+				_canvas.orphanFilter = !_canvas.orphanFilter;
+				document.getElementById("stat-orphans").classList.toggle("active", _canvas.orphanFilter);
+				_canvas.scheduleRender();
+				setStatus(_canvas.orphanFilter ? "已筛选孤立节点" : "已取消孤立节点筛选");
 			});
 
 			let _searchTmr = null;
