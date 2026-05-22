@@ -120,7 +120,7 @@ class ExtractGraphDataTool(GraphParser, Tool):
             if rt:
                 rel_type_stats[rt] = rel_type_stats.get(rt, 0) + 1
 
-        summary = f"Extracted {len(nodes)} nodes, {len(relations)} relations, skipped {skipped_rels} (missing nodes)."
+        summary = f"提取完成，节点 {len(nodes)} 条，关系 {len(relations)} 条，跳过 {skipped_rels} 条（节点缺失）。"
 
         result = {
             "nodes_count": len(nodes),
