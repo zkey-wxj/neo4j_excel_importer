@@ -2625,6 +2625,7 @@
 
 			async function loadAndRender(gid) {
 				await _api.loadGroup(gid, (g) => {
+					loading.stopFullscreen();
 					_canvas.render(g.nodes, g.links);
 				});
 			}
@@ -2663,7 +2664,9 @@
 			document.getElementById("btnNodeCreate").onclick = function () {
 				throttleBtn(this, async () => {
 					try {
-						await _api.mutate("/group-graph/api/node", "POST", nodePayload());
+						const p = nodePayload();
+						if (!confirm(`确认新增节点 uid=${p.uid}？`)) return;
+						await _api.mutate("/group-graph/api/node", "POST", p);
 					} catch (e) {
 						notify(`节点新增失败: ${e.message}`, "error");
 					}
@@ -2672,7 +2675,9 @@
 			document.getElementById("btnNodeUpdate").onclick = function () {
 				throttleBtn(this, async () => {
 					try {
-						await _api.mutate("/group-graph/api/node", "PUT", nodePayload());
+						const p = nodePayload();
+						if (!confirm(`确认更新节点 uid=${p.uid}？`)) return;
+						await _api.mutate("/group-graph/api/node", "PUT", p);
 					} catch (e) {
 						notify(`节点更新失败: ${e.message}`, "error");
 					}
@@ -2682,6 +2687,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = nodePayload();
+						if (!confirm(`确认删除节点 uid=${p.uid}？此操作不可撤销。`)) return;
 						await _api.mutate("/group-graph/api/node", "DELETE", { group_id: p.group_id, uid: p.uid });
 					} catch (e) {
 						notify(`节点删除失败: ${e.message}`, "error");
@@ -2691,7 +2697,9 @@
 			document.getElementById("btnRelCreate").onclick = function () {
 				throttleBtn(this, async () => {
 					try {
-						await _api.mutate("/group-graph/api/relation", "POST", relPayload());
+						const p = relPayload();
+						if (!confirm(`确认新增关系 ${p.source_uid} → ${p.target_uid}？`)) return;
+						await _api.mutate("/group-graph/api/relation", "POST", p);
 					} catch (e) {
 						notify(`关系新增失败: ${e.message}`, "error");
 					}
@@ -2700,7 +2708,9 @@
 			document.getElementById("btnRelUpdate").onclick = function () {
 				throttleBtn(this, async () => {
 					try {
-						await _api.mutate("/group-graph/api/relation", "PUT", relPayload());
+						const p = relPayload();
+						if (!confirm(`确认更新关系 ${p.source_uid} → ${p.target_uid}？`)) return;
+						await _api.mutate("/group-graph/api/relation", "PUT", p);
 					} catch (e) {
 						notify(`关系更新失败: ${e.message}`, "error");
 					}
@@ -2710,6 +2720,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = relPayload();
+						if (!confirm(`确认删除关系 ${p.source_uid} → ${p.target_uid}？此操作不可撤销。`)) return;
 						await _api.mutate("/group-graph/api/relation", "DELETE", { group_id: p.group_id, source_uid: p.source_uid, target_uid: p.target_uid });
 					} catch (e) {
 						notify(`关系删除失败: ${e.message}`, "error");
