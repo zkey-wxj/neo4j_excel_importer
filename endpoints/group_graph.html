@@ -89,6 +89,29 @@
 				padding: 8px 16px;
 				text-align: center;
 			}
+			.stat-spinner {
+				display: none;
+				align-items: center;
+				justify-content: center;
+				background: var(--surface);
+				padding: 8px 12px;
+			}
+			.stat-spinner.show {
+				display: flex;
+			}
+			.stat-spinner .spin-dot {
+				width: 14px;
+				height: 14px;
+				border: 2px solid var(--border2);
+				border-top-color: var(--blue);
+				border-radius: 50%;
+				animation: stats-spin 0.7s linear infinite;
+			}
+			@keyframes stats-spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
 			.stat-cell .n {
 				font-size: 15px;
 				font-weight: 600;
@@ -680,6 +703,45 @@
 				border-left: 3px solid var(--rose);
 			}
 
+			/* ── 全屏 Loading ── */
+			#fullscreen-loading {
+				position: fixed;
+				inset: 0;
+				z-index: 99999;
+				background: rgba(240, 242, 247, 0.92);
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: 18px;
+				opacity: 1;
+				transition: opacity 0.35s ease;
+				pointer-events: auto;
+			}
+			#fullscreen-loading.hide {
+				opacity: 0;
+				pointer-events: none;
+			}
+			#fullscreen-loading .spinner {
+				width: 36px;
+				height: 36px;
+				border: 3px solid var(--border2);
+				border-top-color: var(--blue);
+				border-radius: 50%;
+				animation: fl-spin 0.8s linear infinite;
+			}
+			@keyframes fl-spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+			#fullscreen-loading .loading-text {
+				font-family: "JetBrains Mono", monospace;
+				font-size: 12px;
+				color: var(--muted);
+				letter-spacing: 0.05em;
+			}
+
 			@media (max-width: 1100px) {
 				#ops-panel {
 					width: 300px;
@@ -714,8 +776,13 @@
 	</head>
 	<body>
 		<div id="toast-container"></div>
+		<div id="fullscreen-loading">
+			<div class="spinner"></div>
+			<div class="loading-text">图谱加载中...</div>
+		</div>
 		<div id="app">
 			<div id="stats">
+				<div class="stat-spinner" id="stat-spinner"><div class="spin-dot"></div></div>
 				<div class="stat-cell">
 					<div class="n" id="s-nodes">0</div>
 					<div class="l">节点</div>
@@ -1067,7 +1134,10 @@
 			function nodePayload() {
 				const g = clean(document.getElementById("groupId").value),
 					u = clean(document.getElementById("nodeUid").value);
-				if (!g || !u) throw new Error("group_id 和 uid 不能为空");
+				if (!g && !u) throw new Error("group_id 和 uid 不能为空");
+
+				if (!g) throw new Error("group_id 不能为空");
+				if (!u) throw new Error("uid 不能为空");
 				return {
 					group_id: g,
 					uid: u,
@@ -1142,6 +1212,34 @@
 				};
 				Promise.resolve().then(fn).then(done, done);
 			}
+
+			class Loading {
+				constructor() {
+					this._fs = document.getElementById("fullscreen-loading");
+					this._sp = document.getElementById("stat-spinner");
+					this._cnt = 0;
+				}
+				fullscreen() {
+					if (this._fs) this._fs.classList.remove("hide");
+				}
+				stopFullscreen() {
+					if (!this._fs) return;
+					this._fs.classList.add("hide");
+					setTimeout(() => {
+						this._fs?.remove();
+						this._fs = null;
+					}, 500);
+				}
+				start() {
+					this._cnt++;
+					if (this._sp) this._sp.classList.add("show");
+				}
+				stop() {
+					this._cnt = Math.max(0, this._cnt - 1);
+					if (this._cnt === 0 && this._sp) this._sp.classList.remove("show");
+				}
+			}
+			const loading = new Loading();
 
 			function notify(msg, type = "success") {
 				const container = document.getElementById("toast-container");
@@ -1438,6 +1536,7 @@
 				// @return Promise<{nodes, links}> 完整的渲染数据
 				async loadGroup(gid, onPage) {
 					this.store.reset();
+					loading.start();
 					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
 					const CONCURRENCY = 5;
 					let nextPage = 1,
@@ -1458,14 +1557,17 @@
 						}
 					};
 					await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+					loading.stop();
 					setStatus(`加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();
 				}
 				async loadDemoSync() {
 					if (document.getElementById("groupId")) document.getElementById("groupId").value = "";
 					this.store.reset();
+					loading.start();
 					this.store.addNodes(genDemoNodes(1000));
 					this.store.addLinks(genDemoLinks(Array.from(this.store.nodeMap.values())));
+					loading.stop();
 					setStatus("已加载示例图谱");
 					return this.store.mapGraphData();
 				}
@@ -1474,6 +1576,7 @@
 				// @return Promise<{nodes, links}> 完整的演示数据
 				async loadDemoPaged(onPage) {
 					this.store.reset();
+					loading.start();
 					const dn = genDemoNodes(1000),
 						dl = genDemoLinks(dn),
 						total = Math.max(dn.length, dl.length);
@@ -1486,31 +1589,37 @@
 						const g = this.store.mapGraphData();
 						if (onPage) onPage(g, pg);
 						pg++;
-						await sleep(280);
+						await sleep(2000);
 					}
+					loading.stop();
 					setStatus(`示例加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();
 				}
 				// 执行 CRUD 操作：发送请求后直接在前端更新图数据，不重新加载
 				async mutate(path, method, payload) {
-					setStatus("执行中...");
-					const result = await this.req(path, { method, body: JSON.stringify(payload) });
-					if (result.ok !== true) {
-						notify(result.error || "操作失败", "error");
-						setStatus(result.error || "操作失败", true);
-						return null;
+					loading.start();
+					try {
+						setStatus("执行中...");
+						const result = await this.req(path, { method, body: JSON.stringify(payload) });
+						if (result.ok !== true) {
+							notify(result.error || "操作失败", "error");
+							setStatus(result.error || "操作失败", true);
+							return null;
+						}
+						if (path.includes("/replace-node-relations")) {
+							this.store.applyReplaceRelations(payload.old_uid);
+							await this.refreshAfterReplace();
+						} else {
+							this.store.applyMutation(path, method, payload);
+						}
+						const g = this.store.mapGraphData();
+						window._graphApp.render(g.nodes, g.links);
+						notify("操作成功", "success");
+						setStatus("操作成功");
+						return g;
+					} finally {
+						loading.stop();
 					}
-					if (path.includes("/replace-node-relations")) {
-						this.store.applyReplaceRelations(payload.old_uid);
-						await this.refreshAfterReplace();
-					} else {
-						this.store.applyMutation(path, method, payload);
-					}
-					const g = this.store.mapGraphData();
-					window._graphApp.render(g.nodes, g.links);
-					notify("操作成功", "success");
-					setStatus("操作成功");
-					return g;
 				}
 				// replace-node-relations 后端不返回新关系数据，需轻量刷新第一页补齐
 				async refreshAfterReplace() {
@@ -2828,6 +2937,7 @@
 						await loadAndRender(gid);
 					} else if (demo) {
 						await _api.loadDemoPaged((g) => {
+							loading.stopFullscreen();
 							_canvas.render(g.nodes, g.links);
 						});
 					} else {
@@ -2840,6 +2950,8 @@
 						const g = await _api.loadDemoSync();
 						_canvas.render(g.nodes, g.links);
 					} else _canvas.render([], []);
+				} finally {
+					loading.stopFullscreen();
 				}
 			})();
 		</script>
