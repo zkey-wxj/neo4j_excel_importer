@@ -166,12 +166,21 @@ class GraphParser:
     def parse_excel(
         self, excel_bytes: bytes, mapping: dict[str, Any], source_name: str,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        df_raw = pd.read_excel(io.BytesIO(excel_bytes), header=None, dtype=str).fillna("")
-        rows = [[str(v or "").strip() for v in r] for r in df_raw.values.tolist()]
-        blocks = self._split_rows_into_blocks(rows)
-        if not blocks:
+        raw_sheets = pd.read_excel(io.BytesIO(excel_bytes), header=None, dtype=str, sheet_name=None)
+        sheets = {name: df.fillna("") for name, df in raw_sheets.items()}
+        return self._parse_multi_sheets(sheets, mapping, source_name)
+
+    def _parse_multi_sheets(
+        self, sheets: dict[str, pd.DataFrame], mapping: dict[str, Any], source_name: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """将所有 sheet 的行上下拼接后，复用原有块解析逻辑。"""
+        all_blocks: list[list[list[str]]] = []
+        for df in sheets.values():
+            rows = [[str(v or "").strip() for v in r] for r in df.values.tolist()]
+            all_blocks.extend(self._split_rows_into_blocks(rows))
+        if not all_blocks:
             raise ValueError("未检测到 Excel 表格行。")
-        return self._parse_blocks_with_mapping(blocks, mapping, source_name=source_name)
+        return self._parse_blocks_with_mapping(all_blocks, mapping, source_name=source_name)
 
     @staticmethod
     def resolve_mapping(mapping: Any, default: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -319,7 +328,7 @@ class GraphParser:
         if not uid_ok or not name_ok:
             return False
         label_fields = self._normalize_label_fields(node.get("labels"))
-        if not self._matches_any(row[2], label_fields or ["node_type"]):
+        if not self._matches_any(row[2], label_fields or ["node_type", "labels"]):
             return False
         
         return True

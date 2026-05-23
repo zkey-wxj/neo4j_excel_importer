@@ -5,6 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>D3 Graph — Neural Map</title>
 		<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 		<style>
 			@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap");
 
@@ -2928,16 +2929,39 @@
 			};
 
 			document.getElementById("btnExportExcel").onclick = () => {
-				const gid = clean(document.getElementById("groupId").value);
-				if (!gid) {
-					notify("请先加载图谱（group_id 不能为空）", "error");
+				const nodes = (_store.nodes || []).map((n) => n.raw || n);
+				const relations = (_store.links || []).map((l) => l.raw || l);
+				if (!nodes.length && !relations.length) {
+					notify("没有可导出的数据", "error");
 					return;
 				}
-				const a = document.createElement("a");
-				a.href = _api.url(`/group-graph/api/export?group_id=${encodeURIComponent(gid)}&format=excel`);
-				a.download = `graph_${gid}.xlsx`;
-				a.click();
-				setStatus("Excel 导出中...");
+				// ── 节点 sheet ──
+				const nodeExtra = new Set();
+				nodes.forEach((n) => Object.keys(n.properties || {}).forEach((k) => nodeExtra.add(k)));
+				const nodeHeaders = ["uid", "name", "labels", "description", ...[...nodeExtra].sort()];
+				const nodeRows = nodes.map((n) => {
+					const row = [n.uid || "", n.name || "", (n.labels || []).join(", "), n.description || ""];
+					nodeExtra.forEach((k) => row.push((n.properties || {})[k] ?? ""));
+					return row;
+				});
+				// ── 关系 sheet ──
+				const relExtra = new Set();
+				relations.forEach((r) => Object.keys(r.properties || {}).forEach((k) => relExtra.add(k)));
+				const relHeaders = ["source_uid", "rel_type", "target_uid", "description", ...[...relExtra].sort()];
+				const relRows = relations.map((r) => {
+					const row = [r.source_uid || "", r.rel_type || "", r.target_uid || "", r.description || ""];
+					relExtra.forEach((k) => row.push((r.properties || {})[k] ?? ""));
+					return row;
+				});
+				const wb = XLSX.utils.book_new();
+				const wsNode = XLSX.utils.aoa_to_sheet([nodeHeaders, ...nodeRows]);
+				XLSX.utils.book_append_sheet(wb, wsNode, "节点");
+				const wsRel = XLSX.utils.aoa_to_sheet([relHeaders, ...relRows]);
+				XLSX.utils.book_append_sheet(wb, wsRel, "关系");
+				const gid = clean(document.getElementById("groupId").value) || "graph";
+				XLSX.writeFile(wb, `graph_${gid}.xlsx`);
+				notify("Excel 导出完成");
+				setStatus("Excel 导出完成");
 			};
 
 			let _pendingImportFile = null;
