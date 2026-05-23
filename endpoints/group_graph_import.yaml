@@ -1,0 +1,13 @@
+path: "/group-graph/api/import"
+method: "POST"
+query:
+  - name: group_id
+    type: string
+    required: true
+  - name: mode
+    type: string
+    required: false
+    default: "merge"
+extra:
+  python:
+    source: "endpoints/group_graph_endpoint.py"

@@ -16,6 +16,8 @@ from core.embedding_common import (
     generate_embeddings,
     has_embedding_model,
 )
+from core.graph_export import export_excel, export_json
+from core.graph_parser import GraphParser
 from core.types import NodePayload, clean_text, normalize_node, utc_now_iso
 from endpoints.group_graph_store import GroupGraphStore
 
@@ -67,6 +69,11 @@ class GroupGraphEndpoint(Endpoint):
                 return self._get_stats(r, store)
             if path == "/group-graph/api/group" and method == "DELETE":
                 return self._clear_group(r, store)
+
+            if path == "/group-graph/api/export" and method == "GET":
+                return self._export_data(r, store)
+            if path == "/group-graph/api/import" and method == "POST":
+                return self._import_data(r, store, settings)
         except Exception as exc:
             logger.exception("endpoint invoke failed")
             return self._json_response({"error": str(exc)}, 500)
@@ -217,6 +224,75 @@ class GroupGraphEndpoint(Endpoint):
         group_id = clean_text(body["group_id"])
         deleted = store.clear_group(group_id)
         return self._json_response({"ok": True, "deleted": deleted}, 200)
+
+    def _export_data(self, r: Request, store: GroupGraphStore) -> Response:
+        """导出指定 group_id 的全部节点和关系，支持 excel/json 格式。"""
+        group_id = clean_text(r.args.get("group_id"))
+        if not group_id:
+            return self._json_response({"error": "group_id 不能为空"}, 400)
+        fmt = clean_text(r.args.get("format") or "excel").lower()
+        nodes, relations = store.export_all(group_id)
+        for n in nodes:
+            n.pop("group_id", None)
+        for rel in relations:
+            rel.pop("group_id", None)
+            rel.pop("id", None)
+
+        if fmt == "json":
+            blob = export_json(nodes, relations)
+            return Response(
+                blob, status=200,
+                headers={"Content-Disposition": f'attachment; filename="graph_{group_id}.json"'},
+                content_type="application/json; charset=utf-8",
+            )
+        blob = export_excel(nodes, relations)
+        return Response(
+            blob, status=200,
+            headers={"Content-Disposition": f'attachment; filename="graph_{group_id}.xlsx"'},
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def _import_data(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
+        """从上传的 Excel/JSON 文件导入节点和关系到指定 group_id。
+        mode=override：清空分组后导入；mode=merge：按 uid UPSERT 合并。
+        """
+        group_id = clean_text(r.args.get("group_id"))
+        mode = clean_text(r.args.get("mode") or "merge").lower()
+        if mode not in ("merge", "override"):
+            return self._json_response({"error": "mode 必须是 merge 或 override"}, 400)
+        if not group_id:
+            return self._json_response({"error": "group_id 不能为空"}, 400)
+
+        file_storage = r.files.get("file")
+        if not file_storage:
+            return self._json_response({"error": "请上传文件（file 字段）"}, 400)
+        file_bytes = file_storage.read()
+        if not file_bytes:
+            return self._json_response({"error": "文件内容为空"}, 400)
+
+        filename = clean_text(file_storage.filename or "")
+        mapping = GraphParser.resolve_mapping(None)
+
+        try:
+            if filename.endswith(".json"):
+                data = json.loads(file_bytes)
+                nodes = data.get("nodes", [])
+                relations = data.get("relations", [])
+            else:
+                parser = GraphParser()
+                nodes, relations = parser.parse_excel(file_bytes, mapping, source_name=filename)
+        except Exception as exc:
+            logger.error("Import parse failed: %s", exc)
+            return self._json_response({"error": f"解析失败: {exc}"}, 400)
+
+        if mode == "override":
+            store.clear_group(group_id)
+            result = store.import_all(group_id, nodes, relations, settings)
+        else:
+            result = store.merge_import(group_id, nodes, relations, settings)
+        result["group_id"] = group_id
+        result["mode"] = mode
+        return self._json_response({"ok": True, **result}, 200)
 
     def _body_json(self, r: Request) -> dict[str, Any]:
         """读取 JSON body，空 body 返回空对象。"""

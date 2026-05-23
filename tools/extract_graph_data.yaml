@@ -35,6 +35,35 @@ parameters:
       A title-only row (other columns empty) is treated as a section title node.
     form: llm
 
+  - name: export_format
+    type: select
+    required: false
+    default: "不导出"
+    options:
+      - value: "不导出"
+        label:
+          en_US: "No Export"
+          zh_Hans: "不导出"
+      - value: "excel"
+        label:
+          en_US: "Excel"
+          zh_Hans: "Excel"
+      - value: "json"
+        label:
+          en_US: "JSON"
+          zh_Hans: "JSON"
+    label:
+      en_US: Export Format
+      zh_Hans: 导出格式
+    human_description:
+      en_US: "Export format for the extracted data. Options: No Export, Excel, JSON."
+      zh_Hans: "提取数据的导出格式。可选：不导出、Excel、JSON。"
+    llm_description: >
+      Export format for the extracted data. "不导出" means only return JSON in the tool output
+      without generating a file. "excel" generates an .xlsx file with Nodes and Relations sheets.
+      "json" generates a .json file. Default is "不导出".
+    form: form
+
   - name: mapping
     type: string
     required: false

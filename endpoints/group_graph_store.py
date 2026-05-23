@@ -76,6 +76,16 @@ SET r += $props
 RETURN elementId(r) AS relation_id
 """
 
+    _MERGE_REL = """
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
+MATCH (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MERGE (src)-[r:RELATED]->(tgt)
+SET r.rel_type = $rel_type,
+    r.group_id = $group_id
+SET r += $props
+RETURN elementId(r) AS relation_id
+"""
+
     _UPDATE_REL_BY_ENDPOINTS = """
 MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 SET r.rel_type = $rel_type,
@@ -522,6 +532,98 @@ RETURN count(*) AS deleted
         """删除指定 group_id 下的全部节点和关系。"""
         rows = self._run(self._CLEAR_GROUP, {"group_id": group_id}, write=True)
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
+
+    def export_all(self, group_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """导出指定 group_id 下的全部节点和关系。"""
+        nodes: dict[str, dict[str, Any]] = {}
+        rels: list[dict[str, Any]] = []
+        page_size = 500
+        page = 1
+        while True:
+            data = self.query_graph(group_id, page, page_size)
+            for n in data["nodes"]:
+                nodes[n["uid"]] = n
+            rels.extend(data["relations"])
+            if not data["nodes_has_more"] and not data["relations_has_more"] and len(data["nodes"]) == 0 and len(data["relations"]) == 0:
+                break
+            page += 1
+        return list(nodes.values()), rels
+
+    def import_all(
+        self, group_id: str, nodes: list[dict[str, Any]], relations: list[dict[str, Any]],
+        settings: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """批量导入节点和关系到指定 group_id，返回统计信息。"""
+        node_count = 0
+        for n in nodes:
+            n["group_id"] = group_id
+            self.create_node(n)
+            node_count += 1
+
+        rel_count = 0
+        skipped = 0
+        known_ids = {clean_text(n.get("uid")) for n in nodes}
+        for r in relations:
+            r["group_id"] = group_id
+            src = clean_text(r.get("source_uid"))
+            tgt = clean_text(r.get("target_uid"))
+            if src not in known_ids or tgt not in known_ids:
+                skipped += 1
+                continue
+            self.create_relation(r)
+            rel_count += 1
+
+        return {"nodes_imported": node_count, "relations_imported": rel_count, "relations_skipped": skipped}
+
+    def merge_import(
+        self, group_id: str, nodes: list[dict[str, Any]], relations: list[dict[str, Any]],
+        settings: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """按 uid MERGE 节点，按 src+tgt MERGE 关系，不删除已有数据。"""
+        known_ids = self._collect_group_uids(group_id)
+        node_count = 0
+        for n in nodes:
+            n["group_id"] = group_id
+            self.create_node(n)
+            uid = clean_text(n.get("uid"))
+            if uid:
+                known_ids.add(uid)
+            node_count += 1
+
+        rel_count = 0
+        skipped = 0
+        for r in relations:
+            r["group_id"] = group_id
+            src = clean_text(r.get("source_uid"))
+            tgt = clean_text(r.get("target_uid"))
+            if src not in known_ids or tgt not in known_ids:
+                skipped += 1
+                continue
+            params = self._relation_create_params(r)
+            self._run(self._MERGE_REL, params, write=True)
+            rel_count += 1
+
+        return {"nodes_imported": node_count, "relations_imported": rel_count, "relations_skipped": skipped}
+
+    def _collect_group_uids(self, group_id: str) -> set[str]:
+        """收集指定 group_id 下的全部节点 uid，用于关系导入前校验。"""
+        uids: set[str] = set()
+        page_size = 500
+        page = 1
+        while True:
+            offset = (page - 1) * page_size
+            rows = self._run(
+                "MATCH (n:KnowledgeNode {group_id: $group_id}) RETURN n.uid AS uid SKIP $offset LIMIT $limit",
+                {"group_id": group_id, "offset": offset, "limit": page_size},
+            )
+            for row in rows:
+                uid = clean_text(row.get("uid"))
+                if uid:
+                    uids.add(uid)
+            if len(rows) < page_size:
+                break
+            page += 1
+        return uids
 
     def close(self) -> None:
         """关闭 Neo4j driver。"""

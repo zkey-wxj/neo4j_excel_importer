@@ -856,6 +856,50 @@
 						<path d="M14 10l-3-3-7 7" />
 					</svg>
 				</button>
+				<button class="ctrl-btn" id="btnExportExcel" title="导出 Excel">
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<rect x="2" y="2" width="12" height="12" rx="2" />
+						<line x1="2" y1="6" x2="14" y2="6" />
+						<line x1="2" y1="10" x2="14" y2="10" />
+						<line x1="6" y1="2" x2="6" y2="14" />
+						<line x1="10" y1="2" x2="10" y2="14" />
+					</svg>
+				</button>
+				<button class="ctrl-btn" id="btnImport" title="导入 Excel/JSON">
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M8 2v8" />
+						<path d="M5 7l3 3 3-3" />
+						<path d="M2 11v2c0 1 1 2 2 2h8c1 0 2-1 2-2v-2" />
+					</svg>
+				</button>
+				<input type="file" id="importFileInput" accept=".xlsx,.xls,.json" style="display:none" />
+			</div>
+
+			<div id="import-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
+				<div style="background:var(--surface); border-radius:14px; padding:24px 28px; width:420px; max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,0.2); font-family:'JetBrains Mono',monospace;">
+					<div style="font-size:15px; font-weight:700; margin-bottom:14px; color:var(--text);">导入图谱数据</div>
+					<div id="import-filename" style="font-size:11px; color:var(--muted); margin-bottom:16px; word-break:break-all;"></div>
+					<div id="import-mode-group" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+						<label style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border2); border-radius:8px; cursor:pointer; transition:all 0.15s;">
+							<input type="radio" name="importMode" value="merge" checked style="margin-top:3px; accent-color:var(--blue);" />
+							<div>
+								<div style="font-size:12px; font-weight:600; color:var(--text);">合并导入</div>
+								<div style="font-size:10px; color:var(--muted); margin-top:2px;">按节点 uid 合并，已存在则更新，不存在则新增；关系按源节点+目标节点合并。不删除已有数据。</div>
+							</div>
+						</label>
+						<label style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border2); border-radius:8px; cursor:pointer; transition:all 0.15s;">
+							<input type="radio" name="importMode" value="override" style="margin-top:3px; accent-color:var(--rose);" />
+							<div>
+								<div style="font-size:12px; font-weight:600; color:var(--text);">覆盖导入</div>
+								<div style="font-size:10px; color:var(--muted); margin-top:2px;">清空当前分组所有数据后重新导入。此操作不可撤销。</div>
+							</div>
+						</label>
+					</div>
+					<div style="display:flex; gap:8px; justify-content:flex-end;">
+						<button class="ops-btn" id="importCancelBtn" style="padding:8px 20px;">取消</button>
+						<button class="ops-btn primary" id="importConfirmBtn" style="padding:8px 20px;">确认导入</button>
+					</div>
+				</div>
 			</div>
 
 			<div id="legend-wrap">
@@ -2881,6 +2925,82 @@
 					a.click();
 					setStatus("PNG 已导出");
 				});
+			};
+
+			document.getElementById("btnExportExcel").onclick = () => {
+				const gid = clean(document.getElementById("groupId").value);
+				if (!gid) {
+					notify("请先加载图谱（group_id 不能为空）", "error");
+					return;
+				}
+				const a = document.createElement("a");
+				a.href = _api.url(`/group-graph/api/export?group_id=${encodeURIComponent(gid)}&format=excel`);
+				a.download = `graph_${gid}.xlsx`;
+				a.click();
+				setStatus("Excel 导出中...");
+			};
+
+			let _pendingImportFile = null;
+
+			document.getElementById("btnImport").onclick = () => {
+				const gid = clean(document.getElementById("groupId").value);
+				if (!gid) {
+					notify("请先输入 group_id", "error");
+					return;
+				}
+				document.getElementById("importFileInput").click();
+			};
+
+			document.getElementById("importFileInput").addEventListener("change", (e) => {
+				const file = e.target.files?.[0];
+				if (!file) return;
+				_pendingImportFile = file;
+				document.getElementById("import-filename").textContent = `文件: ${file.name}`;
+				document.getElementById("import-modal").style.display = "flex";
+				e.target.value = "";
+			});
+
+			document.getElementById("importCancelBtn").onclick = () => {
+				_pendingImportFile = null;
+				document.getElementById("import-modal").style.display = "none";
+			};
+
+			document.getElementById("import-modal").addEventListener("click", (e) => {
+				if (e.target.id === "import-modal") {
+					_pendingImportFile = null;
+					document.getElementById("import-modal").style.display = "none";
+				}
+			});
+
+			document.getElementById("importConfirmBtn").onclick = async () => {
+				const file = _pendingImportFile;
+				if (!file) return;
+				const gid = clean(document.getElementById("groupId").value);
+				const mode = document.querySelector('input[name="importMode"]:checked')?.value || "merge";
+				const modeLabel = mode === "override" ? "覆盖导入（将清空现有数据）" : "合并导入";
+				if (!confirm(`确认以「${modeLabel}」方式导入 ${file.name} 到分组 ${gid}？`)) return;
+				document.getElementById("import-modal").style.display = "none";
+				loading.start();
+				try {
+					const fd = new FormData();
+					fd.append("file", file);
+					const m = window.location.pathname.match(/^\/e\/[^/]+/);
+					const base = m ? m[0] : "";
+					const url = `${base}/group-graph/api/import?group_id=${encodeURIComponent(gid)}&mode=${mode}`;
+					const res = await fetch(url, { method: "POST", body: fd });
+					const data = await res.json();
+					if (!res.ok || data.error) {
+						notify(`导入失败: ${data.error || res.status}`, "error");
+					} else {
+						notify(`导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}`);
+						await loadAndRender(gid);
+					}
+				} catch (err) {
+					notify(`导入失败: ${err.message}`, "error");
+				} finally {
+					loading.stop();
+					_pendingImportFile = null;
+				}
 			};
 
 			document.querySelectorAll(".ops-card .ops-title").forEach((title) => {

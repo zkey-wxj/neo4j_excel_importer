@@ -1,0 +1,13 @@
+path: "/group-graph/api/export"
+method: "GET"
+query:
+  - name: group_id
+    type: string
+    required: true
+  - name: format
+    type: string
+    required: false
+    default: "excel"
+extra:
+  python:
+    source: "endpoints/group_graph_endpoint.py"

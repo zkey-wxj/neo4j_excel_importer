@@ -57,3 +57,5 @@ endpoints:
   - endpoints/group_graph_path.yaml
   - endpoints/group_graph_stats.yaml
   - endpoints/group_graph_clear.yaml
+  - endpoints/group_graph_export.yaml
+  - endpoints/group_graph_import.yaml

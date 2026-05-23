@@ -15,6 +15,7 @@ from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.config.logger_format import plugin_logger_handler
 
+from core.graph_export import export_excel, export_json
 from core.graph_parser import GraphParser
 from core.types import clean_text, ensure_mapping
 
@@ -59,7 +60,6 @@ def _relation_to_dict(raw: dict[str, Any]) -> dict[str, Any]:
         "source_uid": clean_text(raw.get("source_uid")),
         "target_uid": clean_text(raw.get("target_uid")),
         "rel_type": clean_text(raw.get("rel_type")),
-        "direction": clean_text(raw.get("direction")) or "forward",
         "description": clean_text(raw.get("description")),
         "properties": (
             raw.get("properties") if isinstance(raw.get("properties"), dict) else {}
@@ -77,6 +77,7 @@ class ExtractGraphDataTool(GraphParser, Tool):
         )
 
         text = str(params.get("text") or "").strip()
+        export_format = str(params.get("export_format") or "不导出").strip()
         mapping = self.resolve_mapping(params.get("mapping"), default=_STANDARD_MAPPING)
 
         logger.info("ExtractGraphDataTool invoked | text_len=%d", len(text))
@@ -104,10 +105,11 @@ class ExtractGraphDataTool(GraphParser, Tool):
         known_ids = {n["uid"] for n in nodes}
         skipped_rels = sum(
             1
-            for r in raw_relations
-            if clean_text(r.get("source_uid")) not in known_ids
-            or clean_text(r.get("target_uid")) not in known_ids
+            for r in relations
+            if r["source_uid"] not in known_ids
+            or r["target_uid"] not in known_ids
         )
+        valid_relations = [r for r in relations if r["source_uid"] in known_ids and r["target_uid"] in known_ids]
 
         node_type_stats: dict[str, int] = {}
         for n in nodes:
@@ -115,34 +117,45 @@ class ExtractGraphDataTool(GraphParser, Tool):
                 if label:
                     node_type_stats[label] = node_type_stats.get(label, 0) + 1
         rel_type_stats: dict[str, int] = {}
-        for r in relations:
+        for r in valid_relations:
             rt = r.get("rel_type", "")
             if rt:
                 rel_type_stats[rt] = rel_type_stats.get(rt, 0) + 1
 
-        summary = f"提取完成，节点 {len(nodes)} 条，关系 {len(relations)} 条，跳过 {skipped_rels} 条（节点缺失）。"
+        summary = f"提取完成，节点 {len(nodes)} 条，关系 {len(valid_relations)} 条，跳过 {skipped_rels} 条（节点缺失）。"
 
         result = {
             "nodes_count": len(nodes),
-            "relations_count": len(relations),
+            "relations_count": len(valid_relations),
             "skipped_rels": skipped_rels,
             "node_type_stats": node_type_stats,
             "rel_type_stats": rel_type_stats,
             "nodes": nodes,
-            "relations": relations,
+            "relations": valid_relations,
             "summary": summary,
         }
 
         yield self.create_variable_message("nodes_count", len(nodes))
-        yield self.create_variable_message("relations_count", len(relations))
+        yield self.create_variable_message("relations_count", len(valid_relations))
         yield self.create_variable_message("skipped_rels", skipped_rels)
         yield self.create_variable_message("node_type_stats", node_type_stats)
         yield self.create_variable_message("rel_type_stats", rel_type_stats)
         yield self.create_variable_message("nodes", nodes)
-        yield self.create_variable_message("relations", relations)
+        yield self.create_variable_message("relations", valid_relations)
         yield self.create_variable_message("summary", summary)
         yield self.create_json_message(result)
         yield self.create_text_message(json.dumps(result, indent=2, ensure_ascii=False))
+
+        if export_format == "excel":
+            blob = export_excel(nodes, valid_relations)
+            yield self.create_blob_message(
+                blob, meta={"mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "filename": "graph_data.xlsx"}
+            )
+        elif export_format == "json":
+            blob = export_json(nodes, valid_relations)
+            yield self.create_blob_message(
+                blob, meta={"mime_type": "application/json", "filename": "graph_data.json"}
+            )
 
 
 # if __name__ == "__main__":
