@@ -30,14 +30,16 @@ RETURN node_count, rel_count
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
-RETURN n AS node_obj, null AS rel_obj
+RETURN n, labels(n) AS neo_labels
 ORDER BY n.name ASC, n.uid ASC
 SKIP $offset
 LIMIT $limit
-UNION ALL
+"""
+
+    _RELS_QUERY = """
 MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id OR tgt.group_id = $group_id
-RETURN null AS node_obj, {src: src, r: r, r_id: elementId(r), tgt: tgt} AS rel_obj
+RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
 ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
 SKIP $offset
 LIMIT $limit
@@ -169,20 +171,15 @@ RETURN count(*) AS redirected
                 nodes_total = int(row.get("node_count", 0) or 0)
                 relations_total = int(row.get("rel_count", 0) or 0)
 
-            t0 = time.perf_counter()
-            data_rows = [record.data() for record in session.run(
-                self._NODES_QUERY,
-                {"group_id": group_id, "offset": offset, "limit": limit},
-            )]
-            db_timings["data"] = round((time.perf_counter() - t0) * 1000, 1)
+            params = {"group_id": group_id, "offset": offset, "limit": limit}
 
-        node_rows: list[dict[str, Any]] = []
-        rel_rows: list[dict[str, Any]] = []
-        for row in data_rows:
-            if row.get("node_obj") is not None:
-                node_rows.append(row)
-            elif row.get("rel_obj") is not None:
-                rel_rows.append(row)
+            t0 = time.perf_counter()
+            node_rows = [record.data() for record in session.run(self._NODES_QUERY, params)]
+            db_timings["data_nodes"] = round((time.perf_counter() - t0) * 1000, 1)
+
+            t0 = time.perf_counter()
+            rel_rows = [record.data() for record in session.run(self._RELS_QUERY, params)]
+            db_timings["data_rels"] = round((time.perf_counter() - t0) * 1000, 1)
 
         nodes_has_more = len(node_rows) > page_size
         relations_has_more = len(rel_rows) > page_size
@@ -195,19 +192,18 @@ RETURN count(*) AS redirected
         rels: list[dict[str, Any]] = []
 
         for row in node_rows:
-            node = self._serialize_node(row.get("node_obj"))
+            node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
             if node:
                 nodes[node["uid"]] = node
 
         for row in rel_rows:
-            rel_data: dict[str, Any] = row.get("rel_obj", {})
-            src = self._serialize_node(rel_data.get("src"))
-            tgt = self._serialize_node(rel_data.get("tgt"))
+            src = self._serialize_node(row.get("src"), explicit_labels=row.get("src_labels"))
+            tgt = self._serialize_node(row.get("tgt"), explicit_labels=row.get("tgt_labels"))
             if src:
                 nodes[src["uid"]] = src
             if tgt:
                 nodes[tgt["uid"]] = tgt
-            rel = self._serialize_relation(rel_data.get("r"), src, tgt, explicit_type=None, explicit_id=rel_data.get("r_id"))
+            rel = self._serialize_relation(row.get("r"), src, tgt, explicit_type=row.get("r_type"), explicit_id=row.get("r_id"))
             if rel:
                 rels.append(rel)
 
