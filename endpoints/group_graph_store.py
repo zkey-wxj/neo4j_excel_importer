@@ -37,16 +37,7 @@ RETURN node_count, rel_count
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
 WITH DISTINCT n
-RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
-ORDER BY elementId(n)
-SKIP $offset
-LIMIT $limit
-"""
-
-    _NODES_CURSOR_QUERY = """
-MATCH (n:KnowledgeNode {group_id: $group_id})
-WITH DISTINCT n
-WHERE elementId(n) > $after_id
+WHERE $after_id = '' OR elementId(n) > $after_id
 RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
 ORDER BY elementId(n)
 LIMIT $limit
@@ -56,18 +47,7 @@ LIMIT $limit
 MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
 WITH DISTINCT r, src, tgt
-RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
-       properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
-ORDER BY elementId(r)
-SKIP $offset
-LIMIT $limit
-"""
-
-    _RELS_CURSOR_QUERY = """
-MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
-WHERE r.group_id = $group_id
-WITH DISTINCT r, src, tgt
-WHERE elementId(r) > $after_id
+WHERE $after_id = '' OR elementId(r) > $after_id
 RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
        properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
 ORDER BY elementId(r)
@@ -270,7 +250,6 @@ RETURN count(*) AS deleted
         if not use_cursor and page > 1:
             self._log.warning("使用 SKIP 分页 (page=%d)，建议改用游标参数 node_cursor/rel_cursor", page)
 
-        offset = 0 if use_cursor else max(0, (page - 1) * page_size)
         is_first = use_cursor or page == 1
 
         nodes_total = -1
@@ -294,28 +273,22 @@ RETURN count(*) AS deleted
         def _fetch_nodes() -> None:
             try:
                 with self._driver.session(**kwargs) as s:  # type: ignore[union-attr]
-                    if use_cursor:
-                        if node_cursor:
-                            params = {"group_id": group_id, "after_id": node_cursor, "limit": limit}
-                            node_rows.extend(record.data() for record in s.run(self._NODES_CURSOR_QUERY, params))
-                        # node_cursor 为空表示节点已取完，跳过
-                    else:
-                        params = {"group_id": group_id, "offset": offset, "limit": limit}
-                        node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
+                    if use_cursor and not node_cursor:
+                        return  # 节点已取完，跳过
+                    after = node_cursor if use_cursor else ""
+                    params = {"group_id": group_id, "after_id": after, "limit": limit}
+                    node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
             except Exception as e:
                 err_box.append(e)
 
         def _fetch_rels() -> None:
             try:
                 with self._driver.session(**kwargs) as s:  # type: ignore[union-attr]
-                    if use_cursor:
-                        if rel_cursor:
-                            params = {"group_id": group_id, "after_id": rel_cursor, "limit": limit}
-                            rel_rows.extend(record.data() for record in s.run(self._RELS_CURSOR_QUERY, params))
-                        # rel_cursor 为空表示关系已取完，跳过
-                    else:
-                        params = {"group_id": group_id, "offset": offset, "limit": limit}
-                        rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
+                    if use_cursor and not rel_cursor:
+                        return  # 关系已取完，跳过
+                    after = rel_cursor if use_cursor else ""
+                    params = {"group_id": group_id, "after_id": after, "limit": limit}
+                    rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
             except Exception as e:
                 err_box.append(e)
 
@@ -409,7 +382,6 @@ RETURN count(*) AS deleted
             "group_id": group_id,
             "page": page,
             "page_size": page_size,
-            "offset": offset,
             "nodes": list(nodes.values()),
             "relations": rels,
             "nodes_total": nodes_total,
