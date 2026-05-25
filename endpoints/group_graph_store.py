@@ -29,22 +29,18 @@ RETURN node_count, rel_count
 """
 
     _NODES_QUERY = """
-CALL {
-  MATCH (n:KnowledgeNode {group_id: $group_id})
-  RETURN n AS node_obj, null AS rel_obj
-  ORDER BY n.name ASC, n.uid ASC
-  SKIP $offset
-  LIMIT $limit
-}
-CALL {
-  MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
-  WHERE r.group_id = $group_id OR tgt.group_id = $group_id
-  RETURN null AS node_obj, {src: src, r: r, r_id: elementId(r), tgt: tgt} AS rel_obj
-  ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
-  SKIP $offset
-  LIMIT $limit
-}
-RETURN node_obj, rel_obj
+MATCH (n:KnowledgeNode {group_id: $group_id})
+RETURN n AS node_obj, null AS rel_obj
+ORDER BY n.name ASC, n.uid ASC
+SKIP $offset
+LIMIT $limit
+UNION ALL
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+WHERE r.group_id = $group_id OR tgt.group_id = $group_id
+RETURN null AS node_obj, {src: src, r: r, r_id: elementId(r), tgt: tgt} AS rel_obj
+ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
+SKIP $offset
+LIMIT $limit
 """
 
     _UPSERT_NODE = """
@@ -417,15 +413,15 @@ RETURN [n IN nodes(path) | n] AS nodes,
 """
 
     _STATS_QUERY = """
-MATCH (n:KnowledgeNode)
-WHERE n.group_id = $group_id
-WITH collect(DISTINCT n) AS all_nodes, count(n) AS node_count
-OPTIONAL MATCH (a:KnowledgeNode)-[r]->(b:KnowledgeNode)
-WHERE r.group_id = $group_id
-  OR (a.group_id = $group_id AND b.group_id = $group_id)
-WITH all_nodes, node_count,
-     collect(DISTINCT r) AS all_rels,
-     count(DISTINCT r) AS rel_count
+CALL {
+  MATCH (n:KnowledgeNode {group_id: $group_id})
+  RETURN collect(DISTINCT n) AS all_nodes, count(n) AS node_count
+}
+CALL {
+  MATCH (a:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(b:KnowledgeNode)
+  WHERE r.group_id = $group_id OR b.group_id = $group_id
+  RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
+}
 RETURN node_count, rel_count,
        [n IN all_nodes | {uid: n.uid, name: n.name, labels: n.labels}] AS node_samples,
        [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).uid, target: endNode(r).uid}] AS rel_samples
