@@ -21,8 +21,7 @@ class QueryRelationsByNodeTool(Tool):
     _QUERY_FORWARD = """
 MATCH (n:KnowledgeNode {uid: $node_id})-[r]->(m:KnowledgeNode)
 WHERE
-    ($group_id = '' OR n.group_id = $group_id)
-    AND ($group_id = '' OR m.group_id = $group_id)
+    ($group_id = '' OR r.group_id = $group_id)
     AND (
         $relation_type = ''
         OR type(r) = $relation_type
@@ -33,8 +32,7 @@ RETURN n, r, m
     _QUERY_BACKWARD = """
 MATCH (n:KnowledgeNode {uid: $node_id})<-[r]-(m:KnowledgeNode)
 WHERE
-    ($group_id = '' OR n.group_id = $group_id)
-    AND ($group_id = '' OR m.group_id = $group_id)
+    ($group_id = '' OR r.group_id = $group_id)
     AND (
         $relation_type = ''
         OR type(r) = $relation_type

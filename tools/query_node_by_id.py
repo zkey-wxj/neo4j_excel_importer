@@ -32,15 +32,11 @@ LIMIT 1
 """
     _GRAPH_QUERY = """
 MATCH (n:KnowledgeNode {uid: $node_id})-[r]->(m:KnowledgeNode)
-WHERE
-    ($group_id = '' OR n.group_id = $group_id)
-    AND ($group_id = '' OR m.group_id = $group_id)
+WHERE ($group_id = '' OR r.group_id = $group_id)
 RETURN n, r, m
 UNION
 MATCH (n:KnowledgeNode {uid: $node_id})<-[r]-(m:KnowledgeNode)
-WHERE
-    ($group_id = '' OR n.group_id = $group_id)
-    AND ($group_id = '' OR m.group_id = $group_id)
+WHERE ($group_id = '' OR r.group_id = $group_id)
 RETURN n, r, m
 LIMIT $limit
 """

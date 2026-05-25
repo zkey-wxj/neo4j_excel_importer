@@ -1,0 +1,72 @@
+identity:
+  name: query_nodes_by_uids
+  author: wxj
+  label:
+    en_US: Query Nodes By UIDs
+    zh_Hans: 批量按 uid 查询节点
+
+description:
+  human:
+    en_US: Query multiple KnowledgeNode records by a list of uids.
+    zh_Hans: 根据 uid 列表批量查询节点信息。
+  llm: Query multiple KnowledgeNode records by uids. Accepts comma-separated uid string. Returns matched nodes with optional group_id filter.
+
+parameters:
+  - name: uids
+    type: string
+    required: true
+    label:
+      en_US: UIDs
+      zh_Hans: 节点 UID 列表
+    human_description:
+      en_US: Comma-separated uid values, e.g. "uid1,uid2,uid3".
+      zh_Hans: 逗号分隔的 uid 列表，如 "uid1,uid2,uid3"。
+    llm_description: Comma-separated uid values to query.
+    form: llm
+
+  - name: group_id
+    type: string
+    required: false
+    label:
+      en_US: Group ID
+      zh_Hans: 分组 ID
+    human_description:
+      en_US: Optional group_id filter.
+      zh_Hans: 可选 group_id 过滤条件。
+    llm_description: Optional group_id filter.
+    form: llm
+
+  - name: database
+    type: string
+    required: false
+    label:
+      en_US: Database Name
+      zh_Hans: 数据库名称
+    human_description:
+      en_US: Optional Neo4j database name.
+      zh_Hans: 可选 Neo4j 数据库名称。
+    llm_description: Optional Neo4j database name.
+    form: form
+
+output_schema:
+  type: object
+  properties:
+    count:
+      type: integer
+      description: Number of matched nodes.
+    nodes:
+      type: array
+      description: Matched node list.
+    missing_uids:
+      type: array
+      description: UIDs not found.
+    summary:
+      type: string
+      description: Human-readable summary.
+    request:
+      type: object
+      description: Request echo.
+
+extra:
+  python:
+    source: tools/query_nodes_by_uids.py

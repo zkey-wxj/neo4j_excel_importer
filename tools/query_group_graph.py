@@ -35,9 +35,7 @@ RETURN count(n) AS total
 
     _COUNT_RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE
-    r.group_id = $group_id
-    OR (src.group_id = $group_id AND tgt.group_id = $group_id)
+WHERE r.group_id = $group_id
 RETURN count(r) AS total
 """
 
@@ -52,9 +50,7 @@ LIMIT $limit
 
     _RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE
-    r.group_id = $group_id
-    OR (src.group_id = $group_id AND tgt.group_id = $group_id)
+WHERE r.group_id = $group_id
 RETURN src, r, tgt
 ORDER BY src.uid ASC, tgt.uid ASC, type(r)
 SKIP $skip

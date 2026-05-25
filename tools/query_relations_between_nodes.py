@@ -20,8 +20,7 @@ class QueryRelationsBetweenNodesTool(Tool):
     _QUERY = """
 MATCH (src:KnowledgeNode {uid: $source_uid})-[r]->(tgt:KnowledgeNode {uid: $target_uid})
 WHERE
-    ($group_id = '' OR src.group_id = $group_id)
-    AND ($group_id = '' OR tgt.group_id = $group_id)
+    ($group_id = '' OR r.group_id = $group_id)
     AND (
         $relation_type = ''
         OR type(r) = $relation_type
