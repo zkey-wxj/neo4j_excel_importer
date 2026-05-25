@@ -35,7 +35,7 @@ RETURN node_count, rel_count
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
-RETURN n, labels(n) AS neo_labels
+RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
 SKIP $offset
 LIMIT $limit
 """
@@ -43,7 +43,7 @@ LIMIT $limit
     _NODES_CURSOR_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
 WHERE elementId(n) > $after_id
-RETURN n, labels(n) AS neo_labels
+RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
 ORDER BY elementId(n)
 LIMIT $limit
 """
@@ -395,11 +395,7 @@ RETURN count(*) AS deleted
         next_node_cursor = ""
         next_rel_cursor = ""
         if node_rows:
-            last_node = node_rows[-1].get("n")
-            if last_node is not None:
-                next_node_cursor = clean_text(getattr(last_node, "element_id", ""))
-                if not next_node_cursor and isinstance(last_node, Mapping):
-                    next_node_cursor = clean_text(last_node.get("element_id", ""))
+            next_node_cursor = clean_text(node_rows[-1].get("nid", ""))
         if rel_rows:
             next_rel_cursor = clean_text(rel_rows[-1].get("rel_id", ""))
 
