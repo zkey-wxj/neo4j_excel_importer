@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Mapping
 from typing import Any, cast
@@ -14,6 +15,8 @@ from core.types import NodePayload, RelationPayload, clean_text, extract_propert
 
 class GroupGraphStore:
     """封装 group 图谱的 Neo4j 读写逻辑。"""
+
+    _log = logging.getLogger("GroupGraphStore")
 
     _COUNT_QUERY = """
 CALL {
@@ -31,7 +34,6 @@ RETURN node_count, rel_count
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
 RETURN n, labels(n) AS neo_labels
-ORDER BY n.name ASC, n.uid ASC
 SKIP $offset
 LIMIT $limit
 """
@@ -40,7 +42,6 @@ LIMIT $limit
 MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id OR tgt.group_id = $group_id
 RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
-ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
 SKIP $offset
 LIMIT $limit
 """
@@ -157,7 +158,7 @@ RETURN count(*) AS redirected
         limit = page_size + 1
         nodes_total = -1
         relations_total = -1
-        db_timings: dict[str, float] = {}
+        db_timings: dict[str, Any] = {}
         kwargs: dict[str, Any] = {}
         if self.database:
             kwargs["database"] = self.database
@@ -170,6 +171,7 @@ RETURN count(*) AS redirected
                 row = count_rows[0] if count_rows else {}
                 nodes_total = int(row.get("node_count", 0) or 0)
                 relations_total = int(row.get("rel_count", 0) or 0)
+                db_timings["count_raw"] = row
 
             params = {"group_id": group_id, "offset": offset, "limit": limit}
 
