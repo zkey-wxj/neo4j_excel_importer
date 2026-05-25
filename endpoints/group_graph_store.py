@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from neo4j import Driver, GraphDatabase
 
-from core.constants import DEFAULT_NODE_LABEL, DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
+from core.constants import DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
 from core.graph_query_common import _ensure_group_id_index, _ensure_group_id_prop
 from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
 from core.types import NodePayload, RelationPayload, clean_text, extract_properties, split_meta_from_props
@@ -292,9 +292,7 @@ RETURN count(*) AS deleted
                         if node_cursor:
                             params = {"group_id": group_id, "after_id": node_cursor, "limit": limit}
                             node_rows.extend(record.data() for record in s.run(self._NODES_CURSOR_QUERY, params))
-                        else:
-                            params = {"group_id": group_id, "offset": offset, "limit": limit}
-                            node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
+                        # node_cursor 为空表示节点已取完，跳过
                     else:
                         params = {"group_id": group_id, "offset": offset, "limit": limit}
                         node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
@@ -308,9 +306,7 @@ RETURN count(*) AS deleted
                         if rel_cursor:
                             params = {"group_id": group_id, "after_id": rel_cursor, "limit": limit}
                             rel_rows.extend(record.data() for record in s.run(self._RELS_CURSOR_QUERY, params))
-                        else:
-                            params = {"group_id": group_id, "offset": offset, "limit": limit}
-                            rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
+                        # rel_cursor 为空表示关系已取完，跳过
                     else:
                         params = {"group_id": group_id, "offset": offset, "limit": limit}
                         rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
@@ -421,10 +417,9 @@ RETURN count(*) AS deleted
             "nodes_has_more": nodes_has_more,
             "relations_has_more": relations_has_more,
             "db_timings": db_timings,
+            "next_node_cursor": next_node_cursor,
+            "next_rel_cursor": next_rel_cursor,
         }
-        if next_node_cursor or next_rel_cursor:
-            result["next_node_cursor"] = next_node_cursor
-            result["next_rel_cursor"] = next_rel_cursor
         return result
 
     def _batch_load_nodes(self, group_id: str, uids: set[str]) -> list[dict[str, Any]]:
