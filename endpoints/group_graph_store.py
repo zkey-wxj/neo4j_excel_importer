@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -14,36 +15,36 @@ from core.types import NodePayload, RelationPayload, clean_text, extract_propert
 class GroupGraphStore:
     """封装 group 图谱的 Neo4j 读写逻辑。"""
 
-    _COUNT_NODES_QUERY = """
-MATCH (n:KnowledgeNode)
-WHERE n.group_id = $group_id
-RETURN count(n) AS total
-"""
-
-    _COUNT_RELS_QUERY = """
-MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE r.group_id = $group_id
-   OR (src.group_id = $group_id AND tgt.group_id = $group_id)
-RETURN count(r) AS total
+    _COUNT_QUERY = """
+CALL {
+  MATCH (n:KnowledgeNode {group_id: $group_id})
+  RETURN count(n) AS node_count
+}
+CALL {
+  MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+  WHERE r.group_id = $group_id OR tgt.group_id = $group_id
+  RETURN count(r) AS rel_count
+}
+RETURN node_count, rel_count
 """
 
     _NODES_QUERY = """
-MATCH (n:KnowledgeNode)
-WHERE n.group_id = $group_id
-RETURN n, labels(n) AS neo_labels
-ORDER BY n.name ASC, n.uid ASC
-SKIP $offset
-LIMIT $limit
-"""
-
-    _RELS_QUERY = """
-MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
-WHERE r.group_id = $group_id
-   OR (src.group_id = $group_id AND tgt.group_id = $group_id)
-RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
-ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
-SKIP $offset
-LIMIT $limit
+CALL {
+  MATCH (n:KnowledgeNode {group_id: $group_id})
+  RETURN n AS node_obj, null AS rel_obj
+  ORDER BY n.name ASC, n.uid ASC
+  SKIP $offset
+  LIMIT $limit
+}
+CALL {
+  MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+  WHERE r.group_id = $group_id OR tgt.group_id = $group_id
+  RETURN null AS node_obj, {src: src, r: r, r_id: elementId(r), tgt: tgt} AS rel_obj
+  ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
+  SKIP $offset
+  LIMIT $limit
+}
+RETURN node_obj, rel_obj
 """
 
     _UPSERT_NODE = """
@@ -158,26 +159,34 @@ RETURN count(*) AS redirected
         limit = page_size + 1
         nodes_total = -1
         relations_total = -1
+        db_timings: dict[str, float] = {}
         kwargs: dict[str, Any] = {}
         if self.database:
             kwargs["database"] = self.database
         assert self._driver is not None
         with self._driver.session(**kwargs) as session:
-            # 只在第一页查询 total，避免每次分页都全量 count。
             if page == 1:
-                node_count_rows = [record.data() for record in session.run(self._COUNT_NODES_QUERY, {"group_id": group_id})]
-                rel_count_rows = [record.data() for record in session.run(self._COUNT_RELS_QUERY, {"group_id": group_id})]
-                nodes_total = int((node_count_rows[0] if node_count_rows else {}).get("total", 0) or 0)
-                relations_total = int((rel_count_rows[0] if rel_count_rows else {}).get("total", 0) or 0)
+                t0 = time.perf_counter()
+                count_rows = [record.data() for record in session.run(self._COUNT_QUERY, {"group_id": group_id})]
+                db_timings["count"] = round((time.perf_counter() - t0) * 1000, 1)
+                row = count_rows[0] if count_rows else {}
+                nodes_total = int(row.get("node_count", 0) or 0)
+                relations_total = int(row.get("rel_count", 0) or 0)
 
-            node_rows = [record.data() for record in session.run(
+            t0 = time.perf_counter()
+            data_rows = [record.data() for record in session.run(
                 self._NODES_QUERY,
                 {"group_id": group_id, "offset": offset, "limit": limit},
             )]
-            rel_rows = [record.data() for record in session.run(
-                self._RELS_QUERY,
-                {"group_id": group_id, "offset": offset, "limit": limit},
-            )]
+            db_timings["data"] = round((time.perf_counter() - t0) * 1000, 1)
+
+        node_rows: list[dict[str, Any]] = []
+        rel_rows: list[dict[str, Any]] = []
+        for row in data_rows:
+            if row.get("node_obj") is not None:
+                node_rows.append(row)
+            elif row.get("rel_obj") is not None:
+                rel_rows.append(row)
 
         nodes_has_more = len(node_rows) > page_size
         relations_has_more = len(rel_rows) > page_size
@@ -190,18 +199,19 @@ RETURN count(*) AS redirected
         rels: list[dict[str, Any]] = []
 
         for row in node_rows:
-            node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
+            node = self._serialize_node(row.get("node_obj"))
             if node:
                 nodes[node["uid"]] = node
 
         for row in rel_rows:
-            src = self._serialize_node(row.get("src"), explicit_labels=row.get("src_labels"))
-            tgt = self._serialize_node(row.get("tgt"), explicit_labels=row.get("tgt_labels"))
+            rel_data: dict[str, Any] = row.get("rel_obj", {})
+            src = self._serialize_node(rel_data.get("src"))
+            tgt = self._serialize_node(rel_data.get("tgt"))
             if src:
                 nodes[src["uid"]] = src
             if tgt:
                 nodes[tgt["uid"]] = tgt
-            rel = self._serialize_relation(row.get("r"), src, tgt, explicit_type=row.get("r_type"), explicit_id=row.get("r_id"))
+            rel = self._serialize_relation(rel_data.get("r"), src, tgt, explicit_type=None, explicit_id=rel_data.get("r_id"))
             if rel:
                 rels.append(rel)
 
@@ -218,6 +228,7 @@ RETURN count(*) AS redirected
             "relations_count": len(rels),
             "nodes_has_more": nodes_has_more,
             "relations_has_more": relations_has_more,
+            "db_timings": db_timings,
         }
 
     def create_node(self, payload: Mapping[str, Any]) -> str:
@@ -441,8 +452,12 @@ RETURN count(*) AS deleted
             src_uid = ""
             tgt_uid = ""
             try:
-                src_uid = clean_text(getattr(r, "start_node", lambda: None)().get("uid", ""))
-                tgt_uid = clean_text(getattr(r, "end_node", lambda: None)().get("uid", ""))
+                start = getattr(r, "start_node", lambda: None)()
+                end = getattr(r, "end_node", lambda: None)()
+                if start is not None:
+                    src_uid = clean_text(start.get("uid", ""))
+                if end is not None:
+                    tgt_uid = clean_text(end.get("uid", ""))
             except Exception:
                 pass
             rels.append({
