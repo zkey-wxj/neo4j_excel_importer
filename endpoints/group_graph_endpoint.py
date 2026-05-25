@@ -95,7 +95,11 @@ class GroupGraphEndpoint(Endpoint):
             return self._json_response({"error": "group_id 不能为空"}, 400)
         page = self._positive_int(r.args.get("page"), default=1)
         page_size = self._limit(r.args.get("page_size"), default=300, max_value=5000)
-        return self._json_response(store.query_graph(group_id, page, page_size), 200)
+        node_cursor = clean_text(r.args.get("node_cursor"))
+        rel_cursor = clean_text(r.args.get("rel_cursor"))
+        return self._json_response(store.query_graph(
+            group_id, page, page_size, node_cursor, rel_cursor,
+        ), 200)
 
     def _create_node(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
         """新增节点。"""

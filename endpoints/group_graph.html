@@ -1583,25 +1583,23 @@
 					this.store.reset();
 					loading.start();
 					const ps = Number(clean(document.getElementById("pageSize").value) || "300");
-					const CONCURRENCY = 5;
-					let nextPage = 1,
-						hasMore = true,
-						done = 0;
-					const url = (pg) => `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=${pg}&page_size=${ps}`;
-					const worker = async () => {
-						while (hasMore) {
-							const pg = nextPage++;
-							setStatus(`分页加载中: 第 ${pg} 页（并发${CONCURRENCY}）`);
-							const d = await this.req(url(pg));
-							this.store.addNodes(d.nodes || []);
-							this.store.addLinks(d.relations || []);
-							if (!d.nodes_has_more && !d.relations_has_more) hasMore = false;
-							done++;
-							const g = this.store.mapGraphData();
-							if (onPage) onPage(g, pg);
-						}
-					};
-					await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+					let nc = "", rc = "", pg = 0, hasMore = true;
+					const base = `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page_size=${ps}`;
+					while (hasMore) {
+						pg++;
+						let url = base;
+						if (nc) url += `&node_cursor=${encodeURIComponent(nc)}`;
+						if (rc) url += `&rel_cursor=${encodeURIComponent(rc)}`;
+						setStatus(`游标加载中: 第 ${pg} 页`);
+						const d = await this.req(url);
+						this.store.addNodes(d.nodes || []);
+						this.store.addLinks(d.relations || []);
+						nc = d.next_node_cursor || "";
+						rc = d.next_rel_cursor || "";
+						if (!d.nodes_has_more && !d.relations_has_more) hasMore = false;
+						const g = this.store.mapGraphData();
+						if (onPage) onPage(g, pg);
+					}
 					loading.stop();
 					setStatus(`加载完成: 节点 ${this.store.nodeMap.size}，关系 ${this.store.links.length}`);
 					return this.store.mapGraphData();

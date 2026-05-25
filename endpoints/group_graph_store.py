@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import threading
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -18,14 +19,15 @@ class GroupGraphStore:
 
     _log = logging.getLogger("GroupGraphStore")
 
+    # ── 读查询：不含 OR，不限关系类型 ──────────────────────────────────────
+
     _COUNT_QUERY = """
 CALL {
   MATCH (n:KnowledgeNode {group_id: $group_id})
   RETURN count(n) AS node_count
 }
 CALL {
-  MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
-  WHERE r.group_id = $group_id OR tgt.group_id = $group_id
+  MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
   RETURN count(r) AS rel_count
 }
 RETURN node_count, rel_count
@@ -38,13 +40,38 @@ SKIP $offset
 LIMIT $limit
 """
 
+    _NODES_CURSOR_QUERY = """
+MATCH (n:KnowledgeNode {group_id: $group_id})
+WHERE elementId(n) > $after_id
+RETURN n, labels(n) AS neo_labels
+ORDER BY elementId(n)
+LIMIT $limit
+"""
+
     _RELS_QUERY = """
-MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
-WHERE r.group_id = $group_id OR tgt.group_id = $group_id
-RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
+       properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
 SKIP $offset
 LIMIT $limit
 """
+
+    _RELS_CURSOR_QUERY = """
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+WHERE elementId(r) > $after_id
+RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
+       properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
+ORDER BY elementId(r)
+LIMIT $limit
+"""
+
+    _BATCH_NODES_QUERY = """
+UNWIND $uids AS uid
+MATCH (n:KnowledgeNode {uid: uid, group_id: $group_id})
+RETURN n, labels(n) AS neo_labels
+"""
+
+    # ── 写查询：不限关系类型，用属性匹配 ──────────────────────────────────
 
     _UPSERT_NODE = """
 MERGE (n:KnowledgeNode {uid: $uid, group_id: $group_id})
@@ -87,7 +114,9 @@ RETURN elementId(r) AS relation_id
 """
 
     _UPDATE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
+      -[r {group_id: $group_id}]->
+      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 SET r.rel_type = $rel_type,
     r.group_id = $group_id,
     r.description = $description
@@ -97,13 +126,29 @@ RETURN elementId(r) AS relation_id
 """
 
     _DELETE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
+      -[r {group_id: $group_id}]->
+      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
 DELETE r
 RETURN count(*) AS deleted
 """
 
     _REDIRECT_OUTGOING_RELS = """
-MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+      -[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+WHERE tgt.uid <> $new_uid OR tgt.group_id <> $group_id
+WITH old, tgt, r, type(r) AS rType, properties(r) AS rProps
+DELETE r
+WITH old, tgt, rType, rProps
+MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+CALL apoc.create.relationship(new, rType, rProps, tgt) YIELD rel
+SET rel.group_id = $group_id
+RETURN count(*) AS redirected
+"""
+
+    _REDIRECT_OUTGOING_RELS_FALLBACK = """
+MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+      -[r {group_id: $group_id}]->(tgt:KnowledgeNode)
 WHERE tgt.uid <> $new_uid OR tgt.group_id <> $group_id
 WITH old, tgt, r, properties(r) AS rProps
 DELETE r
@@ -111,11 +156,28 @@ WITH old, tgt, rProps
 MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
 CREATE (new)-[nr:RELATED]->(tgt)
 SET nr = rProps
+SET nr.group_id = $group_id
 RETURN count(*) AS redirected
 """
 
     _REDIRECT_INCOMING_RELS = """
-MATCH (src:KnowledgeNode)-[r:RELATED]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode)
+      -[r {group_id: $group_id}]->
+      (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+WHERE src.uid <> $new_uid OR src.group_id <> $group_id
+WITH src, old, r, type(r) AS rType, properties(r) AS rProps
+DELETE r
+WITH src, old, rType, rProps
+MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+CALL apoc.create.relationship(src, rType, rProps, new) YIELD rel
+SET rel.group_id = $group_id
+RETURN count(*) AS redirected
+"""
+
+    _REDIRECT_INCOMING_RELS_FALLBACK = """
+MATCH (src:KnowledgeNode)
+      -[r {group_id: $group_id}]->
+      (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
 WHERE src.uid <> $new_uid OR src.group_id <> $group_id
 WITH src, old, r, properties(r) AS rProps
 DELETE r
@@ -123,8 +185,33 @@ WITH src, old, rProps
 MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
 CREATE (src)-[nr:RELATED]->(new)
 SET nr = rProps
+SET nr.group_id = $group_id
 RETURN count(*) AS redirected
 """
+
+    # ── 统计查询：不含 OR ────────────────────────────────────────────────
+
+    _STATS_QUERY = """
+CALL {
+  MATCH (n:KnowledgeNode {group_id: $group_id})
+  RETURN collect(DISTINCT n) AS all_nodes, count(n) AS node_count
+}
+CALL {
+  MATCH (a:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(b:KnowledgeNode)
+  RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
+}
+RETURN node_count, rel_count,
+       [n IN all_nodes | {uid: n.uid, name: n.name, labels: n.labels}] AS node_samples,
+       [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).uid, target: endNode(r).uid}] AS rel_samples
+"""
+
+    _CLEAR_GROUP = """
+MATCH (n:KnowledgeNode {group_id: $group_id})
+DETACH DELETE n
+RETURN count(*) AS deleted
+"""
+
+    # ── 初始化 ──────────────────────────────────────────────────────────
 
     def __init__(self, settings: Mapping[str, Any]):
         """初始化连接配置。"""
@@ -151,37 +238,107 @@ RETURN count(*) AS redirected
                 _ensure_group_id_index(session, self.database)
                 _ensure_group_id_prop(session, self.database)
 
-    def query_graph(self, group_id: str, page: int, page_size: int) -> dict[str, Any]:
-        """分页查询 group_id 下的图谱节点与关系。"""
-        self._ensure_driver()
-        offset = max(0, (page - 1) * page_size)
-        limit = page_size + 1
-        nodes_total = -1
-        relations_total = -1
-        db_timings: dict[str, Any] = {}
+    def _session_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
         if self.database:
             kwargs["database"] = self.database
+        return kwargs
+
+    # ── 查询图谱（游标 + 分页兼容 + 三路并行）──────────────────────────
+
+    def query_graph(
+        self,
+        group_id: str,
+        page: int = 1,
+        page_size: int = 300,
+        node_cursor: str = "",
+        rel_cursor: str = "",
+    ) -> dict[str, Any]:
+        """分页查询 group_id 下的图谱节点与关系。"""
+        self._ensure_driver()
         assert self._driver is not None
-        with self._driver.session(**kwargs) as session:
-            if page == 1:
-                t0 = time.perf_counter()
-                count_rows = [record.data() for record in session.run(self._COUNT_QUERY, {"group_id": group_id})]
-                db_timings["count"] = round((time.perf_counter() - t0) * 1000, 1)
-                row = count_rows[0] if count_rows else {}
-                nodes_total = int(row.get("node_count", 0) or 0)
-                relations_total = int(row.get("rel_count", 0) or 0)
-                db_timings["count_raw"] = row
+        limit = page_size + 1
+        use_cursor = bool(node_cursor or rel_cursor)
+        kwargs = self._session_kwargs()
 
-            params = {"group_id": group_id, "offset": offset, "limit": limit}
+        if not use_cursor and page > 1:
+            self._log.warning("使用 SKIP 分页 (page=%d)，建议改用游标参数 node_cursor/rel_cursor", page)
 
-            t0 = time.perf_counter()
-            node_rows = [record.data() for record in session.run(self._NODES_QUERY, params)]
-            db_timings["data_nodes"] = round((time.perf_counter() - t0) * 1000, 1)
+        offset = 0 if use_cursor else max(0, (page - 1) * page_size)
+        is_first = use_cursor or page == 1
 
-            t0 = time.perf_counter()
-            rel_rows = [record.data() for record in session.run(self._RELS_QUERY, params)]
-            db_timings["data_rels"] = round((time.perf_counter() - t0) * 1000, 1)
+        nodes_total = -1
+        relations_total = -1
+        db_timings: dict[str, Any] = {}
+
+        count_rows: list[dict[str, Any]] = []
+        node_rows: list[dict[str, Any]] = []
+        rel_rows: list[dict[str, Any]] = []
+        err_box: list[Exception] = []
+
+        def _fetch_count() -> None:
+            try:
+                with self._driver.session(**kwargs) as s:  # type: ignore[union-attr]
+                    count_rows.extend(
+                        record.data() for record in s.run(self._COUNT_QUERY, {"group_id": group_id})
+                    )
+            except Exception as e:
+                err_box.append(e)
+
+        def _fetch_nodes() -> None:
+            try:
+                with self._driver.session(**kwargs) as s:  # type: ignore[union-attr]
+                    if use_cursor:
+                        if node_cursor:
+                            params = {"group_id": group_id, "after_id": node_cursor, "limit": limit}
+                            node_rows.extend(record.data() for record in s.run(self._NODES_CURSOR_QUERY, params))
+                        else:
+                            params = {"group_id": group_id, "offset": offset, "limit": limit}
+                            node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
+                    else:
+                        params = {"group_id": group_id, "offset": offset, "limit": limit}
+                        node_rows.extend(record.data() for record in s.run(self._NODES_QUERY, params))
+            except Exception as e:
+                err_box.append(e)
+
+        def _fetch_rels() -> None:
+            try:
+                with self._driver.session(**kwargs) as s:  # type: ignore[union-attr]
+                    if use_cursor:
+                        if rel_cursor:
+                            params = {"group_id": group_id, "after_id": rel_cursor, "limit": limit}
+                            rel_rows.extend(record.data() for record in s.run(self._RELS_CURSOR_QUERY, params))
+                        else:
+                            params = {"group_id": group_id, "offset": offset, "limit": limit}
+                            rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
+                    else:
+                        params = {"group_id": group_id, "offset": offset, "limit": limit}
+                        rel_rows.extend(record.data() for record in s.run(self._RELS_QUERY, params))
+            except Exception as e:
+                err_box.append(e)
+
+        threads: list[threading.Thread] = []
+        if is_first:
+            threads.append(threading.Thread(target=_fetch_count))
+        threads.append(threading.Thread(target=_fetch_nodes))
+        threads.append(threading.Thread(target=_fetch_rels))
+
+        t0 = time.perf_counter()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        if err_box:
+            raise err_box[0]
+        db_timings["data"] = round((time.perf_counter() - t0) * 1000, 1)
+
+        if is_first and count_rows:
+            cr = count_rows[0]
+            nodes_total = int(cr.get("node_count", 0) or 0)
+            relations_total = int(cr.get("rel_count", 0) or 0)
+            db_timings["count_raw"] = cr
+
+        # ── 分页 ──
 
         nodes_has_more = len(node_rows) > page_size
         relations_has_more = len(rel_rows) > page_size
@@ -190,26 +347,67 @@ RETURN count(*) AS redirected
         if relations_has_more:
             rel_rows = rel_rows[:page_size]
 
-        nodes: dict[str, dict[str, Any]] = {}
-        rels: list[dict[str, Any]] = []
+        # ── 序列化节点 ──
 
+        nodes: dict[str, dict[str, Any]] = {}
         for row in node_rows:
             node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
             if node:
                 nodes[node["uid"]] = node
 
-        for row in rel_rows:
-            src = self._serialize_node(row.get("src"), explicit_labels=row.get("src_labels"))
-            tgt = self._serialize_node(row.get("tgt"), explicit_labels=row.get("tgt_labels"))
-            if src:
-                nodes[src["uid"]] = src
-            if tgt:
-                nodes[tgt["uid"]] = tgt
-            rel = self._serialize_relation(row.get("r"), src, tgt, explicit_type=row.get("r_type"), explicit_id=row.get("r_id"))
-            if rel:
-                rels.append(rel)
+        # ── 序列化关系（仅 uid + properties，不含完整节点）──
 
-        return {
+        rels: list[dict[str, Any]] = []
+        missing_uids: set[str] = set()
+        rel_raw: list[tuple[str, str, dict[str, Any], str, str]] = []
+
+        for row in rel_rows:
+            src_uid = clean_text(row.get("src_uid"))
+            tgt_uid = clean_text(row.get("tgt_uid"))
+            rel_props = row.get("rel_props") or {}
+            rel_type = clean_text(row.get("rel_type"))
+            rel_id = clean_text(row.get("rel_id"))
+            if src_uid:
+                rel_raw.append((src_uid, tgt_uid, rel_props, rel_type, rel_id))
+                if src_uid not in nodes:
+                    missing_uids.add(src_uid)
+                if tgt_uid and tgt_uid not in nodes:
+                    missing_uids.add(tgt_uid)
+
+        if missing_uids:
+            for node in self._batch_load_nodes(group_id, missing_uids):
+                nodes[node["uid"]] = node
+
+        for src_uid, tgt_uid, rel_props, rel_type, rel_id in rel_raw:
+            src_node = nodes.get(src_uid)
+            tgt_node = nodes.get(tgt_uid)
+            if not src_node or not tgt_node:
+                continue
+            rels.append({
+                "id": rel_id,
+                "source_uid": src_uid,
+                "target_uid": tgt_uid,
+                "rel_type": rel_type or DEFAULT_REL_TYPE,
+                "group_id": clean_text(rel_props.get("group_id")),
+                "description": clean_text(rel_props.get("description")),
+                "properties": {k: v for k, v in rel_props.items()
+                               if k not in RELATION_RESERVED_PROP_KEYS},
+            })
+
+        # ── 游标 ──
+
+        next_node_cursor = ""
+        next_rel_cursor = ""
+        if node_rows:
+            last_node = node_rows[-1].get("n")
+            if last_node is not None:
+                next_node_cursor = clean_text(getattr(last_node, "element_id", ""))
+                if not next_node_cursor and isinstance(last_node, Mapping):
+                    next_node_cursor = clean_text(last_node.get("element_id", ""))
+        if rel_rows:
+            next_rel_cursor = clean_text(rel_rows[-1].get("rel_id", ""))
+
+        result: dict[str, Any] = {
             "group_id": group_id,
             "page": page,
             "page_size": page_size,
@@ -224,6 +422,26 @@ RETURN count(*) AS redirected
             "relations_has_more": relations_has_more,
             "db_timings": db_timings,
         }
+        if next_node_cursor or next_rel_cursor:
+            result["next_node_cursor"] = next_node_cursor
+            result["next_rel_cursor"] = next_rel_cursor
+        return result
+
+    def _batch_load_nodes(self, group_id: str, uids: set[str]) -> list[dict[str, Any]]:
+        """批量补查缺失节点。"""
+        if not uids:
+            return []
+        kwargs = self._session_kwargs()
+        assert self._driver is not None
+        nodes: list[dict[str, Any]] = []
+        with self._driver.session(**kwargs) as session:
+            for row in session.run(self._BATCH_NODES_QUERY, {"uids": list(uids), "group_id": group_id}):
+                node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
+                if node:
+                    nodes.append(node)
+        return nodes
+
+    # ── CRUD ────────────────────────────────────────────────────────────
 
     def create_node(self, payload: Mapping[str, Any]) -> str:
         """幂等写入节点并返回 element id。"""
@@ -279,11 +497,21 @@ RETURN count(*) AS redirected
         if old_uid == new_uid:
             return 0
         params = {"group_id": group_id, "old_uid": old_uid, "new_uid": new_uid}
-        out_rows = self._run(self._REDIRECT_OUTGOING_RELS, params, write=True)
-        in_rows = self._run(self._REDIRECT_INCOMING_RELS, params, write=True)
-        out_count = int((out_rows[0] if out_rows else {}).get("redirected", 0) or 0)
-        in_count = int((in_rows[0] if in_rows else {}).get("redirected", 0) or 0)
+        out_count = self._try_redirect(self._REDIRECT_OUTGOING_RELS, self._REDIRECT_OUTGOING_RELS_FALLBACK, params)
+        in_count = self._try_redirect(self._REDIRECT_INCOMING_RELS, self._REDIRECT_INCOMING_RELS_FALLBACK, params)
         return out_count + in_count
+
+    def _try_redirect(self, primary: str, fallback: str, params: dict[str, Any]) -> int:
+        """优先使用 APOC，失败则降级为固定类型。"""
+        try:
+            rows = self._run(primary, params, write=True)
+            return int((rows[0] if rows else {}).get("redirected", 0) or 0)
+        except Exception:
+            self._log.warning("APOC 不可用，降级为 RELATED 固定类型")
+            rows = self._run(fallback, params, write=True)
+            return int((rows[0] if rows else {}).get("redirected", 0) or 0)
+
+    # ── 参数构建 ────────────────────────────────────────────────────────
 
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = node_payload_to_cypher_row(
@@ -370,11 +598,11 @@ RETURN count(*) AS redirected
             "props": row["props"],
         }
 
+    # ── 通用查询执行 ────────────────────────────────────────────────────
+
     def _run(self, query: str, parameters: dict[str, Any], write: bool = False) -> list[dict[str, Any]]:
         self._ensure_driver()
-        kwargs: dict[str, Any] = {}
-        if self.database:
-            kwargs["database"] = self.database
+        kwargs = self._session_kwargs()
         assert self._driver is not None
         with self._driver.session(**kwargs) as session:
             result = session.run(query, parameters)  # type: ignore[arg-type]
@@ -382,6 +610,8 @@ RETURN count(*) AS redirected
             if write:
                 result.consume()
             return rows
+
+    # ── 邻居/路径/统计 ─────────────────────────────────────────────────
 
     _NEIGHBORS_QUERY_TEMPLATE = """
 MATCH (start:KnowledgeNode {{uid: $uid, group_id: $group_id}})
@@ -408,27 +638,6 @@ MATCH path = shortestPath((src)-[*..15]-(tgt))
 RETURN [n IN nodes(path) | n] AS nodes,
        [r IN relationships(path) | r] AS rels,
        length(path) AS path_length
-"""
-
-    _STATS_QUERY = """
-CALL {
-  MATCH (n:KnowledgeNode {group_id: $group_id})
-  RETURN collect(DISTINCT n) AS all_nodes, count(n) AS node_count
-}
-CALL {
-  MATCH (a:KnowledgeNode {group_id: $group_id})-[r]->(b:KnowledgeNode)
-  WHERE r.group_id = $group_id OR b.group_id = $group_id
-  RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
-}
-RETURN node_count, rel_count,
-       [n IN all_nodes | {uid: n.uid, name: n.name, labels: n.labels}] AS node_samples,
-       [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).uid, target: endNode(r).uid}] AS rel_samples
-"""
-
-    _CLEAR_GROUP = """
-MATCH (n:KnowledgeNode {group_id: $group_id})
-DETACH DELETE n
-RETURN count(*) AS deleted
 """
 
     def expand_neighbors(self, group_id: str, uid: str, depth: int = 1) -> dict[str, Any]:
@@ -537,6 +746,8 @@ RETURN count(*) AS deleted
             "orphan_count": orphan_count,
         }
 
+    # ── 清空 / 导出 / 导入 ─────────────────────────────────────────────
+
     def clear_group(self, group_id: str) -> int:
         """删除指定 group_id 下的全部节点和关系。"""
         rows = self._run(self._CLEAR_GROUP, {"group_id": group_id}, write=True)
@@ -547,15 +758,16 @@ RETURN count(*) AS deleted
         nodes: dict[str, dict[str, Any]] = {}
         rels: list[dict[str, Any]] = []
         page_size = 500
-        page = 1
+        nc, rc = "", ""
         while True:
-            data = self.query_graph(group_id, page, page_size)
+            data = self.query_graph(group_id, page_size=page_size, node_cursor=nc, rel_cursor=rc)
             for n in data["nodes"]:
                 nodes[n["uid"]] = n
             rels.extend(data["relations"])
-            if not data["nodes_has_more"] and not data["relations_has_more"] and len(data["nodes"]) == 0 and len(data["relations"]) == 0:
+            if not data["nodes_has_more"] and not data["relations_has_more"]:
                 break
-            page += 1
+            nc = data.get("next_node_cursor", "")
+            rc = data.get("next_rel_cursor", "")
         return list(nodes.values()), rels
 
     def import_all(
@@ -634,11 +846,15 @@ RETURN count(*) AS deleted
             page += 1
         return uids
 
+    # ── 关闭 ───────────────────────────────────────────────────────────
+
     def close(self) -> None:
         """关闭 Neo4j driver。"""
         if self._driver is not None:
             self._driver.close()
             self._driver = None
+
+    # ── 序列化 ─────────────────────────────────────────────────────────
 
     def _serialize_node(self, value: Any, explicit_labels: Any = None) -> dict[str, Any] | None:
         if value is None:
@@ -703,6 +919,8 @@ RETURN count(*) AS deleted
             "description": clean_text(data.get("description")),
             "properties": extract_properties(data, RELATION_RESERVED_PROP_KEYS),
         }
+
+    # ── 工具方法 ───────────────────────────────────────────────────────
 
     def _mapping(self, value: Any) -> Mapping[str, Any]:
         if isinstance(value, Mapping):

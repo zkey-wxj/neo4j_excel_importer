@@ -71,6 +71,12 @@ def _ensure_group_id_index(session: Any, database: str) -> None:
             session.run(
                 "CREATE INDEX IF NOT EXISTS FOR ()-[r:RELATED]-() ON (r.group_id)"
             ).consume()
+            try:
+                session.run(
+                    "CREATE INDEX rel_group_id IF NOT EXISTS FOR ()-[r]-() ON (r.group_id)"
+                ).consume()
+            except Exception:
+                pass
         except Exception:
             pass
         _GROUP_ID_INDEX_CREATED.add(database)

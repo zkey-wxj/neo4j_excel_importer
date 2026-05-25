@@ -12,6 +12,12 @@ query:
     type: number
     required: false
     default: 300
+  - name: node_cursor
+    type: string
+    required: false
+  - name: rel_cursor
+    type: string
+    required: false
 extra:
   python:
     source: "endpoints/group_graph_endpoint.py"
