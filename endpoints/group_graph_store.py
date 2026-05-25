@@ -24,24 +24,27 @@ class GroupGraphStore:
     _COUNT_QUERY = """
 CALL {
   MATCH (n:KnowledgeNode {group_id: $group_id})
-  RETURN count(n) AS node_count
+  RETURN count(DISTINCT n) AS node_count
 }
 CALL {
   MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
-  RETURN count(r) AS rel_count
+  RETURN count(DISTINCT r) AS rel_count
 }
 RETURN node_count, rel_count
 """
 
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
+WITH DISTINCT n
 RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
+ORDER BY elementId(n)
 SKIP $offset
 LIMIT $limit
 """
 
     _NODES_CURSOR_QUERY = """
 MATCH (n:KnowledgeNode {group_id: $group_id})
+WITH DISTINCT n
 WHERE elementId(n) > $after_id
 RETURN n, labels(n) AS neo_labels, elementId(n) AS nid
 ORDER BY elementId(n)
@@ -50,6 +53,7 @@ LIMIT $limit
 
     _RELS_QUERY = """
 MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+WITH DISTINCT r, src, tgt
 RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
        properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
 SKIP $offset
@@ -58,6 +62,7 @@ LIMIT $limit
 
     _RELS_CURSOR_QUERY = """
 MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+WITH DISTINCT r, src, tgt
 WHERE elementId(r) > $after_id
 RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
        properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
@@ -194,7 +199,7 @@ RETURN count(*) AS redirected
     _STATS_QUERY = """
 CALL {
   MATCH (n:KnowledgeNode {group_id: $group_id})
-  RETURN collect(DISTINCT n) AS all_nodes, count(n) AS node_count
+  RETURN collect(DISTINCT n) AS all_nodes, count(DISTINCT n) AS node_count
 }
 CALL {
   MATCH (a:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(b:KnowledgeNode)
