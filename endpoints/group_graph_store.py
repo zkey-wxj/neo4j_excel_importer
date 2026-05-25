@@ -27,7 +27,8 @@ CALL {
   RETURN count(DISTINCT n) AS node_count
 }
 CALL {
-  MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+  MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+  WHERE r.group_id = $group_id
   RETURN count(DISTINCT r) AS rel_count
 }
 RETURN node_count, rel_count
@@ -52,16 +53,19 @@ LIMIT $limit
 """
 
     _RELS_QUERY = """
-MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+WHERE r.group_id = $group_id
 WITH DISTINCT r, src, tgt
 RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
        properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
+ORDER BY elementId(r)
 SKIP $offset
 LIMIT $limit
 """
 
     _RELS_CURSOR_QUERY = """
-MATCH (src:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(tgt:KnowledgeNode)
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+WHERE r.group_id = $group_id
 WITH DISTINCT r, src, tgt
 WHERE elementId(r) > $after_id
 RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
@@ -119,9 +123,8 @@ RETURN elementId(r) AS relation_id
 """
 
     _UPDATE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
-      -[r {group_id: $group_id}]->
-      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+WHERE r.group_id = $group_id
 SET r.rel_type = $rel_type,
     r.group_id = $group_id,
     r.description = $description
@@ -131,17 +134,16 @@ RETURN elementId(r) AS relation_id
 """
 
     _DELETE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
-      -[r {group_id: $group_id}]->
-      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+WHERE r.group_id = $group_id
 DELETE r
 RETURN count(*) AS deleted
 """
 
     _REDIRECT_OUTGOING_RELS = """
-MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
-      -[r {group_id: $group_id}]->(tgt:KnowledgeNode)
-WHERE tgt.uid <> $new_uid OR tgt.group_id <> $group_id
+MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+WHERE r.group_id = $group_id
+  AND (tgt.uid <> $new_uid OR tgt.group_id <> $group_id)
 WITH old, tgt, r, type(r) AS rType, properties(r) AS rProps
 DELETE r
 WITH old, tgt, rType, rProps
@@ -152,9 +154,9 @@ RETURN count(*) AS redirected
 """
 
     _REDIRECT_OUTGOING_RELS_FALLBACK = """
-MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
-      -[r {group_id: $group_id}]->(tgt:KnowledgeNode)
-WHERE tgt.uid <> $new_uid OR tgt.group_id <> $group_id
+MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+WHERE r.group_id = $group_id
+  AND (tgt.uid <> $new_uid OR tgt.group_id <> $group_id)
 WITH old, tgt, r, properties(r) AS rProps
 DELETE r
 WITH old, tgt, rProps
@@ -166,10 +168,9 @@ RETURN count(*) AS redirected
 """
 
     _REDIRECT_INCOMING_RELS = """
-MATCH (src:KnowledgeNode)
-      -[r {group_id: $group_id}]->
-      (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
-WHERE src.uid <> $new_uid OR src.group_id <> $group_id
+MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+WHERE r.group_id = $group_id
+  AND (src.uid <> $new_uid OR src.group_id <> $group_id)
 WITH src, old, r, type(r) AS rType, properties(r) AS rProps
 DELETE r
 WITH src, old, rType, rProps
@@ -180,10 +181,9 @@ RETURN count(*) AS redirected
 """
 
     _REDIRECT_INCOMING_RELS_FALLBACK = """
-MATCH (src:KnowledgeNode)
-      -[r {group_id: $group_id}]->
-      (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
-WHERE src.uid <> $new_uid OR src.group_id <> $group_id
+MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+WHERE r.group_id = $group_id
+  AND (src.uid <> $new_uid OR src.group_id <> $group_id)
 WITH src, old, r, properties(r) AS rProps
 DELETE r
 WITH src, old, rProps
@@ -202,7 +202,8 @@ CALL {
   RETURN collect(DISTINCT n) AS all_nodes, count(DISTINCT n) AS node_count
 }
 CALL {
-  MATCH (a:KnowledgeNode {group_id: $group_id})-[r {group_id: $group_id}]->(b:KnowledgeNode)
+  MATCH (a:KnowledgeNode {group_id: $group_id})-[r]->(b:KnowledgeNode)
+  WHERE r.group_id = $group_id
   RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
 }
 RETURN node_count, rel_count,

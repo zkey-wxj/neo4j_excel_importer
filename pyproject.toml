@@ -10,8 +10,6 @@ dependencies = [
     "neo4j==6.2.0",
     "networkx==3.6.1",
     "matplotlib==3.10.9",
-    "python-dotenv==1.2.2",
-    "openai==2.36.0",
 ]
 
 [project.optional-dependencies]
