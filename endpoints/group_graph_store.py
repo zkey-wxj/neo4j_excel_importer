@@ -21,7 +21,7 @@ CALL {
   RETURN count(n) AS node_count
 }
 CALL {
-  MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+  MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
   WHERE r.group_id = $group_id OR tgt.group_id = $group_id
   RETURN count(r) AS rel_count
 }
@@ -37,7 +37,7 @@ LIMIT $limit
 """
 
     _RELS_QUERY = """
-MATCH (src:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(tgt:KnowledgeNode)
+MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id OR tgt.group_id = $group_id
 RETURN src, labels(src) AS src_labels, r, type(r) AS r_type, elementId(r) AS r_id, tgt, labels(tgt) AS tgt_labels
 ORDER BY src.uid ASC, tgt.uid ASC, coalesce(r.rel_type, type(r), '')
@@ -414,7 +414,7 @@ CALL {
   RETURN collect(DISTINCT n) AS all_nodes, count(n) AS node_count
 }
 CALL {
-  MATCH (a:KnowledgeNode {group_id: $group_id})-[r:RELATED]->(b:KnowledgeNode)
+  MATCH (a:KnowledgeNode {group_id: $group_id})-[r]->(b:KnowledgeNode)
   WHERE r.group_id = $group_id OR b.group_id = $group_id
   RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
 }
