@@ -21,6 +21,17 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Print working directory
         run: |
           pwd
