@@ -32,10 +32,32 @@ jobs:
           npm ci
           npm run build
 
-      - name: Print working directory
+      - name: Get plugin info
+        id: plugin_info
         run: |
-          pwd
-          ls -la
+          PLUGIN_NAME=$(grep "^name:" manifest.yaml | awk '{print $2}')
+          VERSION=$(grep "^version:" manifest.yaml | awk '{print $2}')
+
+          echo "Plugin name: $PLUGIN_NAME"
+          echo "Plugin version: $VERSION"
+
+          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Resolve previous version tag
+        id: previous_tag
+        run: |
+          CURRENT_TAG="v${{ steps.plugin_info.outputs.version }}"
+          PREVIOUS_TAG=$(git tag --list "v*" --sort=-v:refname | grep -vx "$CURRENT_TAG" | head -n 1 || true)
+
+          echo "Current tag: $CURRENT_TAG"
+          echo "Previous tag: ${PREVIOUS_TAG:-<none>}"
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+      - name: Clean up before packaging
+        run: |
+          rm -rf frontend/node_modules
+          rm -rf .git
 
       - name: Download CLI tool
         run: |
@@ -48,18 +70,6 @@ jobs:
 
           echo "CLI tool downloaded:"
           ls -la
-
-      - name: Get plugin info
-        id: plugin_info
-        run: |
-          PLUGIN_NAME=$(grep "^name:" manifest.yaml | awk '{print $2}')
-          VERSION=$(grep "^version:" manifest.yaml | awk '{print $2}')
-
-          echo "Plugin name: $PLUGIN_NAME"
-          echo "Plugin version: $VERSION"
-
-          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Package plugin
         id: package
@@ -77,16 +87,6 @@ jobs:
 
           echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
           echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
-
-      - name: Resolve previous version tag
-        id: previous_tag
-        run: |
-          CURRENT_TAG="v${{ steps.plugin_info.outputs.version }}"
-          PREVIOUS_TAG=$(git tag --list "v*" --sort=-v:refname | grep -vx "$CURRENT_TAG" | head -n 1 || true)
-
-          echo "Current tag: $CURRENT_TAG"
-          echo "Previous tag: ${PREVIOUS_TAG:-<none>}"
-          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
