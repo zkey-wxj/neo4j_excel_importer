@@ -9,7 +9,7 @@ description:
   human:
     en_US: Query relations connected to one KnowledgeNode.
     zh_Hans: 查询与指定节点相连的关系。
-  llm: Query neighboring relations for a uid, optional relation type/group_id/limit.
+  llm: Query neighboring relations for a nid, optional relation type/group_id/limit.
 
 parameters:
   - name: node_id
@@ -20,7 +20,7 @@ parameters:
       zh_Hans: 节点 ID
     human_description:
       en_US: NodeId of the center KnowledgeNode.
-      zh_Hans: 目标中心节点的 uid。
+      zh_Hans: 目标中心节点的 nid。
     llm_description: NodeId to query related edges.
     form: llm
 

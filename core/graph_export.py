@@ -14,7 +14,7 @@ logging.getLogger("openpyxl").setLevel(logging.ERROR)
 
 def nodes_to_rows(nodes: list[dict[str, Any]]) -> tuple[list[str], list[list[Any]]]:
     """将节点列表转为 (headers, rows)，适用于 Excel 和 CSV 导出。"""
-    headers = ["uid", "name", "labels", "description"]
+    headers = ["nid", "name", "labels", "description"]
     extra_keys: set[str] = set()
     for n in nodes:
         extra_keys.update(n.get("properties", {}).keys())
@@ -23,7 +23,7 @@ def nodes_to_rows(nodes: list[dict[str, Any]]) -> tuple[list[str], list[list[Any
     rows: list[list[Any]] = []
     for n in nodes:
         row: list[Any] = [
-            n.get("uid", ""),
+            n.get("nid", ""),
             n.get("name", ""),
             ", ".join(n.get("labels", [])),
             n.get("description") or "",
@@ -37,7 +37,7 @@ def nodes_to_rows(nodes: list[dict[str, Any]]) -> tuple[list[str], list[list[Any
 
 def relations_to_rows(relations: list[dict[str, Any]]) -> tuple[list[str], list[list[Any]]]:
     """将关系列表转为 (headers, rows)，适用于 Excel 和 CSV 导出。"""
-    headers = ["source_uid", "rel_type", "target_uid", "description"]
+    headers = ["source_nid", "rel_type", "target_nid", "description"]
     extra_keys: set[str] = set()
     for r in relations:
         extra_keys.update(r.get("properties", {}).keys())
@@ -46,9 +46,9 @@ def relations_to_rows(relations: list[dict[str, Any]]) -> tuple[list[str], list[
     rows: list[list[Any]] = []
     for r in relations:
         row: list[Any] = [
-            r.get("source_uid", ""),
+            r.get("source_nid", ""),
             r.get("rel_type", ""),
-            r.get("target_uid", ""),
+            r.get("target_nid", ""),
             r.get("description") or "",
         ]
         props = r.get("properties", {})

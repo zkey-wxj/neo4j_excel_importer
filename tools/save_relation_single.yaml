@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save one relation object to Neo4j.
     zh_Hans: 保存单条关系对象到 Neo4j。
-  llm: Save one relation. JSON uses source_uid/target_uid/rel_type/direction/description/group_id/properties/meta.
+  llm: Save one relation. JSON uses source_nid/target_nid/rel_type/direction/description/group_id/properties/meta.
 
 parameters:
   - name: relation_json
@@ -20,22 +20,22 @@ parameters:
       zh_Hans: 关系 JSON
     human_description:
       en_US: >
-        Relation object. Required fields: source_uid, target_uid, rel_type.
+        Relation object. Required fields: source_nid, target_nid, rel_type.
         Optional fields: direction, description, group_id, properties, meta.
       zh_Hans: >
-        关系对象。必填字段：source_uid、target_uid、rel_type。
+        关系对象。必填字段：source_nid、target_nid、rel_type。
         可选字段：direction、description、group_id、properties、meta。
     llm_description: >
       Object fields:
-      source_uid(string, required), target_uid(string, required), rel_type(string, required),
+      source_nid(string, required), target_nid(string, required), rel_type(string, required),
       direction(forward|bidirectional, optional), description(string, optional),
       group_id(string, optional), properties(object, optional), meta(object, optional).
     schema:
       type: object
       properties:
-        source_uid:
+        source_nid:
           type: string
-        target_uid:
+        target_nid:
           type: string
         rel_type:
           type: string
@@ -60,8 +60,8 @@ parameters:
             version:
               type: integer
       required:
-        - source_uid
-        - target_uid
+        - source_nid
+        - target_nid
         - rel_type
     form: llm
 

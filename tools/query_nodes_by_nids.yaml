@@ -1,27 +1,27 @@
 identity:
-  name: query_nodes_by_uids
+  name: query_nodes_by_nids
   author: wxj
   label:
     en_US: Query Nodes By UIDs
-    zh_Hans: 批量按 uid 查询节点
+    zh_Hans: 批量按 nid 查询节点
 
 description:
   human:
-    en_US: Query multiple KnowledgeNode records by a list of uids.
-    zh_Hans: 根据 uid 列表批量查询节点信息。
-  llm: Query multiple KnowledgeNode records by uids. Accepts comma-separated uid string. Returns matched nodes with optional group_id filter.
+    en_US: Query multiple KnowledgeNode records by a list of nids.
+    zh_Hans: 根据 nid 列表批量查询节点信息。
+  llm: Query multiple KnowledgeNode records by nids. Accepts comma-separated nid string. Returns matched nodes with optional group_id filter.
 
 parameters:
-  - name: uids
+  - name: nids
     type: string
     required: true
     label:
-      en_US: UIDs
-      zh_Hans: 节点 UID 列表
+      en_US: NIDs
+      zh_Hans: 节点 NID 列表
     human_description:
-      en_US: Comma-separated uid values, e.g. "uid1,uid2,uid3".
-      zh_Hans: 逗号分隔的 uid 列表，如 "uid1,uid2,uid3"。
-    llm_description: Comma-separated uid values to query.
+      en_US: Comma-separated nid values, e.g. "nid1,nid2,nid3".
+      zh_Hans: 逗号分隔的 nid 列表，如 "nid1,nid2,nid3"。
+    llm_description: Comma-separated nid values to query.
     form: llm
 
   - name: group_id
@@ -57,7 +57,7 @@ output_schema:
     nodes:
       type: array
       description: Matched node list.
-    missing_uids:
+    missing_nids:
       type: array
       description: UIDs not found.
     summary:
@@ -69,4 +69,4 @@ output_schema:
 
 extra:
   python:
-    source: tools/query_nodes_by_uids.py
+    source: tools/query_nodes_by_nids.py

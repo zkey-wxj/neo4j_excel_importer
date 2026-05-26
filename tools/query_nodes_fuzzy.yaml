@@ -7,8 +7,8 @@ identity:
 
 description:
   human:
-    en_US: Fuzzy query KnowledgeNode by keyword in uid/name/description.
-    zh_Hans: 按关键字在 uid/name/description 中进行模糊查询。
+    en_US: Fuzzy query KnowledgeNode by keyword in nid/name/description.
+    zh_Hans: 按关键字在 nid/name/description 中进行模糊查询。
   llm: Fuzzy query KnowledgeNode by keyword with optional group_id and limit.
 
 parameters:
@@ -19,8 +19,8 @@ parameters:
       en_US: Keyword
       zh_Hans: 关键词
     human_description:
-      en_US: Search keyword for uid, name, and description.
-      zh_Hans: 用于搜索 uid、name、description 的关键词。
+      en_US: Search keyword for nid, name, and description.
+      zh_Hans: 用于搜索 nid、name、description 的关键词。
     llm_description: Keyword used for fuzzy matching.
     form: llm
 

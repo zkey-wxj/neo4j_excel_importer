@@ -28,13 +28,13 @@ from core.types import (
 
 
 class CopyGroupDataTool(Tool):
-    """将 source group 数据复制到 target group，并处理 uid 冲突。"""
+    """将 source group 数据复制到 target group，并处理 nid 冲突。"""
 
     _NODE_QUERY = """
 MATCH (n:KnowledgeNode)
 WHERE n.group_id = $group_id
 RETURN n
-ORDER BY n.name ASC, n.uid ASC
+ORDER BY n.name ASC, n.nid ASC
 """
 
     _REL_QUERY = """
@@ -44,7 +44,7 @@ WHERE (
   OR (src.group_id = $group_id AND tgt.group_id = $group_id)
 )
 RETURN src, r, tgt
-ORDER BY src.uid ASC, tgt.uid ASC, type(r)
+ORDER BY src.nid ASC, tgt.nid ASC, type(r)
 """
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
@@ -80,25 +80,25 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
             return
 
         target_node_index = self._build_target_node_index(target_node_rows)
-        uid_usage = self._build_target_uid_usage(target_node_rows)
-        source_uid_to_target_uid: dict[str, str] = {}
+        nid_usage = self._build_target_nid_usage(target_node_rows)
+        source_nid_to_target_nid: dict[str, str] = {}
         node_payloads: list[NodePayload] = []
         merged_nodes_count = 0
         renamed_nodes_count = 0
         direct_insert_nodes_count = 0
 
-        # 先处理节点冲突策略：uid 重复时，判断 name；同名则合并，否则重命名。
+        # 先处理节点冲突策略：nid 重复时，判断 name；同名则合并，否则重命名。
         for row in source_node_rows:
             source_node_map = as_mapping(row.get("n"))
-            source_uid = clean_text(source_node_map.get("uid"))
-            source_name = clean_text(source_node_map.get("name")) or source_uid
-            if not source_uid:
+            source_nid = clean_text(source_node_map.get("nid"))
+            source_name = clean_text(source_node_map.get("name")) or source_nid
+            if not source_nid:
                 continue
 
-            target_uid = source_uid
-            target_node_map = target_node_index.get(target_uid)
+            target_nid = source_nid
+            target_node_map = target_node_index.get(target_nid)
             if target_node_map:
-                target_name = clean_text(target_node_map.get("name")) or target_uid
+                target_name = clean_text(target_node_map.get("name")) or target_nid
                 if target_name == source_name:
                     merged_nodes_count += 1
                     node_payload = self._build_merged_node_payload(
@@ -108,22 +108,22 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
                     )
                 else:
                     renamed_nodes_count += 1
-                    target_uid = self._allocate_renamed_uid(source_uid, uid_usage)
+                    target_nid = self._allocate_renamed_nid(source_nid, nid_usage)
                     node_payload = self._build_node_payload(
                         source_node_map,
-                        final_uid=target_uid,
+                        final_nid=target_nid,
                         target_group_id=target_group_id,
                     )
             else:
                 direct_insert_nodes_count += 1
-                uid_usage.add(target_uid)
+                nid_usage.add(target_nid)
                 node_payload = self._build_node_payload(
                     source_node_map,
-                    final_uid=target_uid,
+                    final_nid=target_nid,
                     target_group_id=target_group_id,
                 )
 
-            source_uid_to_target_uid[source_uid] = target_uid
+            source_nid_to_target_nid[source_nid] = target_nid
             if node_payload:
                 node_payloads.append(node_payload)
 
@@ -132,7 +132,7 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
             relation_payload = self._build_relation_payload(
                 row,
                 target_group_id=target_group_id,
-                uid_map=source_uid_to_target_uid,
+                nid_map=source_nid_to_target_nid,
             )
             if relation_payload:
                 relation_payloads.append(relation_payload)
@@ -151,7 +151,7 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
 
         summary = (
             f"已将 group `{source_group_id}` 复制到 `{target_group_id}`，"
-            f"节点写入 {nodes_count} 条（同 uid 同名合并 {merged_nodes_count} 条，"
+            f"节点写入 {nodes_count} 条（同 nid 同名合并 {merged_nodes_count} 条，"
             f"冲突重命名 {renamed_nodes_count} 条，直接新增 {direct_insert_nodes_count} 条），"
             f"关系写入 {rels_count} 条。"
         )
@@ -166,32 +166,32 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
         yield self.create_text_message(f"✅ {summary}")
 
     def _build_target_node_index(self, target_node_rows: list[dict[str, Any]]) -> dict[str, Mapping[str, Any]]:
-        """按 uid 建立目标组节点索引。"""
+        """按 nid 建立目标组节点索引。"""
         index: dict[str, Mapping[str, Any]] = {}
         for row in target_node_rows:
             node_map = as_mapping(row.get("n"))
-            uid = clean_text(node_map.get("uid"))
-            if uid and uid not in index:
-                index[uid] = node_map
+            nid = clean_text(node_map.get("nid"))
+            if nid and nid not in index:
+                index[nid] = node_map
         return index
 
-    def _build_target_uid_usage(self, target_node_rows: list[dict[str, Any]]) -> set[str]:
-        """提取目标组已占用 uid 集合，用于冲突重命名。"""
+    def _build_target_nid_usage(self, target_node_rows: list[dict[str, Any]]) -> set[str]:
+        """提取目标组已占用 nid 集合，用于冲突重命名。"""
         used: set[str] = set()
         for row in target_node_rows:
             node_map = as_mapping(row.get("n"))
-            uid = clean_text(node_map.get("uid"))
-            if uid:
-                used.add(uid)
+            nid = clean_text(node_map.get("nid"))
+            if nid:
+                used.add(nid)
         return used
 
-    def _allocate_renamed_uid(self, source_uid: str, used_uids: set[str]) -> str:
-        """为冲突节点生成新 uid，格式 uid__copy_N。"""
+    def _allocate_renamed_nid(self, source_nid: str, used_nids: set[str]) -> str:
+        """为冲突节点生成新 nid，格式 nid__copy_N。"""
         suffix = 1
         while True:
-            candidate = f"{source_uid}__copy_{suffix}"
-            if candidate not in used_uids:
-                used_uids.add(candidate)
+            candidate = f"{source_nid}__copy_{suffix}"
+            if candidate not in used_nids:
+                used_nids.add(candidate)
                 return candidate
             suffix += 1
 
@@ -199,17 +199,17 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
         self,
         node_map: Mapping[str, Any],
         *,
-        final_uid: str,
+        final_nid: str,
         target_group_id: str,
     ) -> NodePayload | None:
         """将源节点映射为目标节点。"""
-        source_name = clean_text(node_map.get("name")) or final_uid
+        source_name = clean_text(node_map.get("name")) or final_nid
         labels = normalize_labels(node_map.get("labels"))
         properties = extract_properties(node_map, NODE_RESERVED_PROP_KEYS)
         meta, clean_props = split_meta_from_props(properties)
 
         payload: NodePayload = {
-            "uid": final_uid,
+            "nid": final_nid,
             "name": source_name,
             "labels": labels or [DEFAULT_NODE_LABEL],
             "description": clean_text(node_map.get("description")),
@@ -231,9 +231,9 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
         source_node_map: Mapping[str, Any],
         target_group_id: str,
     ) -> NodePayload:
-        """同 uid 同 name 时合并属性：labels 取并集，properties/source 覆盖缺失字段。"""
-        uid = clean_text(target_node_map.get("uid"))
-        name = clean_text(target_node_map.get("name")) or uid
+        """同 nid 同 name 时合并属性：labels 取并集，properties/source 覆盖缺失字段。"""
+        nid = clean_text(target_node_map.get("nid"))
+        name = clean_text(target_node_map.get("name")) or nid
         target_labels = normalize_labels(target_node_map.get("labels"))
         source_labels = normalize_labels(source_node_map.get("labels"))
         merged_labels = list(target_labels)
@@ -260,7 +260,7 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
 
         description = clean_text(target_node_map.get("description")) or clean_text(source_node_map.get("description"))
         payload: NodePayload = {
-            "uid": uid,
+            "nid": nid,
             "name": name,
             "labels": merged_labels or [DEFAULT_NODE_LABEL],
             "description": description,
@@ -308,19 +308,19 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
         row: Mapping[str, Any],
         *,
         target_group_id: str,
-        uid_map: Mapping[str, str],
+        nid_map: Mapping[str, str],
     ) -> RelationPayload | None:
-        """将源关系映射为目标关系，并按节点映射重写 source/target uid。"""
+        """将源关系映射为目标关系，并按节点映射重写 source/target nid。"""
         src_map = as_mapping(row.get("src"))
         tgt_map = as_mapping(row.get("tgt"))
         rel_obj = row.get("r")
         rel_map = as_mapping(rel_obj)
 
-        source_uid = clean_text(src_map.get("uid"))
-        target_uid = clean_text(tgt_map.get("uid"))
-        mapped_source_uid = clean_text(uid_map.get(source_uid))
-        mapped_target_uid = clean_text(uid_map.get(target_uid))
-        if not mapped_source_uid or not mapped_target_uid:
+        source_nid = clean_text(src_map.get("nid"))
+        target_nid = clean_text(tgt_map.get("nid"))
+        mapped_source_nid = clean_text(nid_map.get(source_nid))
+        mapped_target_nid = clean_text(nid_map.get(target_nid))
+        if not mapped_source_nid or not mapped_target_nid:
             return None
 
         rel_type = clean_text(rel_map.get("rel_type"))
@@ -336,8 +336,8 @@ ORDER BY src.uid ASC, tgt.uid ASC, type(r)
             direction = DEFAULT_DIRECTION
 
         relation: RelationPayload = {
-            "source_uid": mapped_source_uid,
-            "target_uid": mapped_target_uid,
+            "source_nid": mapped_source_nid,
+            "target_nid": mapped_target_nid,
             "rel_type": rel_type,
             "direction": direction,  # type: ignore[assignment]
             "description": clean_text(rel_map.get("description")),

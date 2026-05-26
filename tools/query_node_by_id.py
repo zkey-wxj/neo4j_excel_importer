@@ -25,17 +25,17 @@ logger.addHandler(plugin_logger_handler)
 
 class QueryNodeByIdTool(Tool):
     _NODE_QUERY = """
-MATCH (n:KnowledgeNode {uid: $node_id})
+MATCH (n:KnowledgeNode {nid: $node_id})
 WHERE ($group_id = '' OR n.group_id = $group_id)
 RETURN n
 LIMIT 1
 """
     _GRAPH_QUERY = """
-MATCH (n:KnowledgeNode {uid: $node_id})-[r]->(m:KnowledgeNode)
+MATCH (n:KnowledgeNode {nid: $node_id})-[r]->(m:KnowledgeNode)
 WHERE ($group_id = '' OR r.group_id = $group_id)
 RETURN n, r, m
 UNION
-MATCH (n:KnowledgeNode {uid: $node_id})<-[r]-(m:KnowledgeNode)
+MATCH (n:KnowledgeNode {nid: $node_id})<-[r]-(m:KnowledgeNode)
 WHERE ($group_id = '' OR r.group_id = $group_id)
 RETURN n, r, m
 LIMIT $limit
@@ -118,7 +118,7 @@ LIMIT $limit
             if relation_obj is not None and neighbor_obj is not None:
                 relations.append({"r": relation_obj, "neighbor": neighbor_obj})
             neighbor_map = as_mapping(neighbor_obj)
-            neighbor_id = clean_text(neighbor_map.get("uid"))
+            neighbor_id = clean_text(neighbor_map.get("nid"))
             if neighbor_id and neighbor_id not in neighbors_map:
                 neighbors_map[neighbor_id] = neighbor_obj
 

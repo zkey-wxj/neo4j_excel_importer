@@ -555,7 +555,7 @@
 				line-height: 1.2;
 				margin-bottom: 12px;
 			}
-			#detail-panel .d-uid {
+			#detail-panel .d-nid {
 				font-size: 10px;
 				color: var(--muted);
 				margin-bottom: 14px;
@@ -885,7 +885,7 @@
 							<input type="radio" name="importMode" value="merge" checked style="margin-top:3px; accent-color:var(--blue);" />
 							<div>
 								<div style="font-size:12px; font-weight:600; color:var(--text);">合并导入</div>
-								<div style="font-size:10px; color:var(--muted); margin-top:2px;">按节点 uid 合并，已存在则更新，不存在则新增；关系按源节点+目标节点合并。不删除已有数据。</div>
+								<div style="font-size:10px; color:var(--muted); margin-top:2px;">按节点 nid 合并，已存在则更新，不存在则新增；关系按源节点+目标节点合并。不删除已有数据。</div>
 							</div>
 						</label>
 						<label style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border2); border-radius:8px; cursor:pointer; transition:all 0.15s;">
@@ -915,14 +915,14 @@
 			</div>
 
 			<div id="search-panel">
-				<input id="searchKeyword" placeholder="名称 / uid / 标签" />
+				<input id="searchKeyword" placeholder="名称 / nid / 标签" />
 			</div>
 
 			<div id="detail-panel">
 				<button class="d-close" id="detail-close">×</button>
 				<div class="d-type" id="d-type"></div>
 				<div class="d-name" id="d-name"></div>
-				<div class="d-uid" id="d-uid"></div>
+				<div class="d-nid" id="d-nid"></div>
 				<div class="d-section" id="d-props-section">
 					<div class="d-section-title">属性 / 描述</div>
 					<div id="d-props"></div>
@@ -959,7 +959,7 @@
 				<div class="ops-card">
 					<div class="ops-title">节点操作</div>
 					<div class="ops-grid">
-						<div class="ops-row"><label>节点ID（uid）</label><input id="nodeUid" placeholder="节点唯一ID" /></div>
+						<div class="ops-row"><label>节点ID（nid）</label><input id="nodeNid" placeholder="节点唯一ID" /></div>
 						<div class="ops-row"><label>名称（name）</label><input id="nodeName" placeholder="节点名称" /></div>
 					</div>
 					<div class="ops-row" style="margin-top: 6px"><label>标签（labels，逗号分隔）</label><input id="nodeLabels" placeholder="例如：Core,Service" /></div>
@@ -989,17 +989,17 @@
 					<div class="ops-title">关系操作</div>
 					<div class="ops-grid">
 						<div class="ops-row">
-							<label>源节点ID（source_uid）</label>
-							<div style="display: flex; gap: 4px"><input id="relSource" placeholder="源节点 uid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="relSource" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
+							<label>源节点ID（source_nid）</label>
+							<div style="display: flex; gap: 4px"><input id="relSource" placeholder="源节点 nid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="relSource" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 						<div class="ops-row">
-							<label>目标节点ID（target_uid）</label>
-							<div style="display: flex; gap: 4px"><input id="relTarget" placeholder="目标节点 uid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="relTarget" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
+							<label>目标节点ID（target_nid）</label>
+							<div style="display: flex; gap: 4px"><input id="relTarget" placeholder="目标节点 nid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="relTarget" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 					</div>
 					<div class="ops-grid" style="margin-top: 6px">
 						<div class="ops-row"><label>关系类型（rel_type）</label><input id="relType" placeholder="例如：RELATED" /></div>
-						<div class="ops-row"><label>说明</label><input value="按 source_uid + target_uid 编辑/删除关系" readonly /></div>
+						<div class="ops-row"><label>说明</label><input value="按 source_nid + target_nid 编辑/删除关系" readonly /></div>
 					</div>
 					<div class="ops-row" style="margin-top: 6px"><label>描述（description）</label><input id="relDesc" placeholder="关系描述" /></div>
 					<div class="ops-row" style="margin-top: 6px">
@@ -1020,11 +1020,11 @@
 					<div class="ops-title">路径查询</div>
 					<div class="ops-grid">
 						<div class="ops-row">
-							<label>起点（source_uid）</label>
+							<label>起点（source_nid）</label>
 							<div style="display: flex; gap: 4px"><input id="pathSource" placeholder="起始节点" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="pathSource" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 						<div class="ops-row">
-							<label>终点（target_uid）</label>
+							<label>终点（target_nid）</label>
 							<div style="display: flex; gap: 4px"><input id="pathTarget" placeholder="目标节点" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="pathTarget" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 					</div>
@@ -1038,12 +1038,12 @@
 					<div class="ops-title">节点关系替换</div>
 					<div class="ops-grid">
 						<div class="ops-row">
-							<label>旧节点ID（old_uid）</label>
-							<div style="display: flex; gap: 4px"><input id="replaceOldUid" placeholder="原节点 uid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="replaceOldUid" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
+							<label>旧节点ID（old_nid）</label>
+							<div style="display: flex; gap: 4px"><input id="replaceOldNid" placeholder="原节点 nid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="replaceOldNid" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 						<div class="ops-row">
-							<label>新节点ID（new_uid）</label>
-							<div style="display: flex; gap: 4px"><input id="replaceNewUid" placeholder="目标节点 uid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="replaceNewUid" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
+							<label>新节点ID（new_nid）</label>
+							<div style="display: flex; gap: 4px"><input id="replaceNewNid" placeholder="目标节点 nid" style="flex: 1" /><button class="ops-btn" type="button" data-pick-input="replaceNewNid" style="white-space: nowrap; padding: 6px 8px">抓取</button></div>
 						</div>
 					</div>
 					<div class="ops-actions" style="grid-template-columns: 1fr">
@@ -1134,7 +1134,7 @@
 				return o;
 			}
 			// 节点类型解析：优先取第一个标签，否则默认 Node
-			function parseType(labels, uid) {
+			function parseType(labels, nid) {
 				const a = Array.isArray(labels) ? labels.map((x) => clean(x)).filter(Boolean) : [];
 				if (a.length > 0) return a[0];
 				return "Node";
@@ -1148,18 +1148,18 @@
 				return 50;
 			}
 			function nodeLabel(n) {
-				return clean(n.name) || clean(n.uid) || "Node";
+				return clean(n.name) || clean(n.nid) || "Node";
 			}
 			function relLabel(r) {
 				return clean(r.rel_type) || "RELATED";
 			}
 			function relStoreKey(r) {
 				// 将节点原始数据填充到左侧编辑表单，用于查看和编辑
-				return `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}`;
+				return `${clean(r.source_nid)}=>${clean(r.target_nid)}:${relLabel(r)}`;
 			}
 			function fillNodeForm(n) {
 				if (!n) return;
-				document.getElementById("nodeUid").value = clean(n.uid);
+				document.getElementById("nodeNid").value = clean(n.nid);
 				document.getElementById("nodeName").value = clean(n.name);
 				document.getElementById("nodeLabels").value = Array.isArray(n.labels) ? n.labels.join(",") : "";
 				document.getElementById("nodeDesc").value = clean(n.description);
@@ -1169,8 +1169,8 @@
 			}
 			function fillRelForm(r) {
 				if (!r) return;
-				document.getElementById("relSource").value = clean(r.source_uid);
-				document.getElementById("relTarget").value = clean(r.target_uid);
+				document.getElementById("relSource").value = clean(r.source_nid);
+				document.getElementById("relTarget").value = clean(r.target_nid);
 				// 从节点编辑表单收集数据，构建 API 请求体
 				document.getElementById("relType").value = relLabel(r);
 				document.getElementById("relDesc").value = clean(r.description);
@@ -1178,14 +1178,14 @@
 			}
 			function nodePayload() {
 				const g = clean(document.getElementById("groupId").value),
-					u = clean(document.getElementById("nodeUid").value);
-				if (!g && !u) throw new Error("group_id 和 uid 不能为空");
+					u = clean(document.getElementById("nodeNid").value);
+				if (!g && !u) throw new Error("group_id 和 nid 不能为空");
 
 				if (!g) throw new Error("group_id 不能为空");
-				if (!u) throw new Error("uid 不能为空");
+				if (!u) throw new Error("nid 不能为空");
 				return {
 					group_id: g,
-					uid: u,
+					nid: u,
 					name: clean(document.getElementById("nodeName").value),
 					labels: document
 						.getElementById("nodeLabels")
@@ -1202,34 +1202,34 @@
 				const s = clean(document.getElementById("relSource").value);
 				const t = clean(document.getElementById("relTarget").value);
 				const rt = clean(document.getElementById("relType").value);
-				if (!g || !s || !t || !rt) throw new Error("group_id/source_uid/target_uid/rel_type 不能为空");
+				if (!g || !s || !t || !rt) throw new Error("group_id/source_nid/target_nid/rel_type 不能为空");
 				// 生成示例关系：先构建生成树保证连通性，再随机添加额外边达到 1.5 倍节点数
-				return { group_id: g, source_uid: s, target_uid: t, rel_type: rt, description: clean(document.getElementById("relDesc").value), properties: collectKv("relPropsList") };
+				return { group_id: g, source_nid: s, target_nid: t, rel_type: rt, description: clean(document.getElementById("relDesc").value), properties: collectKv("relPropsList") };
 			}
 			function genDemoNodes(c) {
 				const now = new Date().toISOString(),
 					m = { created_at: now, updated_at: now, source: "demo", version: 1 };
-				return Array.from({ length: c }, (_, i) => ({ uid: String(i + 1), name: DEMO_NAMES[i % DEMO_NAMES.length], labels: [DEMO_TYPES[i % DEMO_TYPES.length]], description: "", group_id: "demo", properties: { weight: Math.round(40 + Math.random() * 60) }, meta: m }));
+				return Array.from({ length: c }, (_, i) => ({ nid: String(i + 1), name: DEMO_NAMES[i % DEMO_NAMES.length], labels: [DEMO_TYPES[i % DEMO_TYPES.length]], description: "", group_id: "demo", properties: { weight: Math.round(40 + Math.random() * 60) }, meta: m }));
 			}
 			function genDemoLinks(nodes) {
 				const now = new Date().toISOString(),
 					m = { created_at: now, updated_at: now, source: "demo", version: 1 },
 					n = nodes.length;
 				if (n < 2) return [];
-				const uids = nodes.map((nd) => nd.uid),
+				const nids = nodes.map((nd) => nd.nid),
 					links = [],
 					seen = new Set();
 				const add = (s, t) => {
 					const k = `${s}->${t}`;
 					if (seen.has(k) || s === t) return;
 					seen.add(k);
-					links.push({ source_uid: s, target_uid: t, rel_type: DEMO_RELS[links.length % DEMO_RELS.length], direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: m });
+					links.push({ source_nid: s, target_nid: t, rel_type: DEMO_RELS[links.length % DEMO_RELS.length], direction: "forward", description: "", weight: 1, group_id: "demo", properties: {}, meta: m });
 				};
-				for (let i = 1; i < n; i++) add(uids[Math.floor(Math.random() * i)], uids[i]);
+				for (let i = 1; i < n; i++) add(nids[Math.floor(Math.random() * i)], nids[i]);
 				const tgt = Math.floor(n * 1.5);
 				let att = 0;
 				while (links.length < tgt && att < tgt * 4) {
-					add(uids[Math.floor(Math.random() * n)], uids[Math.floor(Math.random() * n)]);
+					add(nids[Math.floor(Math.random() * n)], nids[Math.floor(Math.random() * n)]);
 					att++;
 				}
 				return links;
@@ -1237,13 +1237,13 @@
 
 			/* ═══════════════════════════════════════════════════════════════════
 			 GraphStore — 图数据存储
-			 - nodeMap/linkMap：原始数据去重存储（uid → 节点，relationKey → 关系）
+			 - nodeMap/linkMap：原始数据去重存储（nid → 节点，relationKey → 关系）
 			 - mapGraphData()：将原始数据转换为渲染所需的节点/关系数组
 			 - computeNodeWeights()：基于图结构算法计算复合权重
 			 ═══════════════════════════════════════════════════════════════════ */
 			// 复合权重计算：融合 PageRank、HITS、度中心性等 5 种图算法
 			// 图数据存储层：管理节点/关系的去重存储和数据转换
-			// nodeMap 按 uid 去重，linkMap 按 relationKey 去重，支持增量追加
+			// nodeMap 按 nid 去重，linkMap 按 relationKey 去重，支持增量追加
 			/* ═══════════════════════════════════════════════════════════════════
 			 Toast 通知组件
 			 ═══════════════════════════════════════════════════════════════════ */
@@ -1314,16 +1314,16 @@
 					this.nodes = [];
 					this.links = [];
 				}
-				// 添加节点：按 uid 去重存储原始节点对象
-				// @param arr 节点数组 {uid, name, labels, description, properties, meta, ...}
+				// 添加节点：按 nid 去重存储原始节点对象
+				// @param arr 节点数组 {nid, name, labels, description, properties, meta, ...}
 				addNodes(arr) {
 					for (const n of arr) {
-						const uid = clean(n.uid);
-						if (uid) this.nodeMap.set(uid, n);
+						const nid = clean(n.nid);
+						if (nid) this.nodeMap.set(nid, n);
 					}
 				}
-				// 添加关系：按关系键（source_uid=>target_uid:rel_type）去重存储原始关系对象
-				// @param arr 关系数组 {source_uid, target_uid, rel_type, properties, meta, ...}
+				// 添加关系：按关系键（source_nid=>target_nid:rel_type）去重存储原始关系对象
+				// @param arr 关系数组 {source_nid, target_nid, rel_type, properties, meta, ...}
 				addLinks(arr) {
 					for (const r of arr) {
 						const k = relStoreKey(r);
@@ -1335,31 +1335,31 @@
 				mapGraphData() {
 					const raw = Array.from(this.nodeMap.values()),
 						rels = Array.from(this.linkMap.values()),
-						uidSet = new Set(this.nodeMap.keys()),
+						nidSet = new Set(this.nodeMap.keys()),
 						degMap = new Map(),
 						valid = [];
 					for (const r of rels) {
-						const s = clean(r.source_uid),
-							t = clean(r.target_uid);
-						if (!uidSet.has(s) || !uidSet.has(t) || !s || !t) continue;
+						const s = clean(r.source_nid),
+							t = clean(r.target_nid);
+						if (!nidSet.has(s) || !nidSet.has(t) || !s || !t) continue;
 						valid.push(r);
 						degMap.set(s, (degMap.get(s) || 0) + 1);
 						degMap.set(t, (degMap.get(t) || 0) + 1);
 					}
 					this.nodes = raw.map((n, i) => {
-						const type = parseType(n.labels, n.uid),
+						const type = parseType(n.labels, n.nid),
 							m = getTypeMeta(type),
-							uid = clean(n.uid),
-							deg = degMap.get(uid) || 0;
-						return { id: uid || String(i + 1), uid, label: nodeLabel(n), type, weight: parseWeight(n), color: m.color, bg: m.bg, r: Math.max(8, Math.min(26, m.r + deg * 0.9)), raw: n };
+							nid = clean(n.nid),
+							deg = degMap.get(nid) || 0;
+						return { id: nid || String(i + 1), nid, label: nodeLabel(n), type, weight: parseWeight(n), color: m.color, bg: m.bg, r: Math.max(8, Math.min(26, m.r + deg * 0.9)), raw: n };
 					});
-					const idMap = new Map(this.nodes.map((n) => [n.uid, n.id]));
+					const idMap = new Map(this.nodes.map((n) => [n.nid, n.id]));
 					this.links = valid
 						.map((r, i) => {
-							const s = idMap.get(clean(r.source_uid)),
-								t = idMap.get(clean(r.target_uid));
+							const s = idMap.get(clean(r.source_nid)),
+								t = idMap.get(clean(r.target_nid));
 							if (!s || !t) return null;
-							return { source: s, target: t, relation: relLabel(r), _key: relStoreKey(r) || `${clean(r.source_uid)}=>${clean(r.target_uid)}:${relLabel(r)}:${i}`, raw: r };
+							return { source: s, target: t, relation: relLabel(r), _key: relStoreKey(r) || `${clean(r.source_nid)}=>${clean(r.target_nid)}:${relLabel(r)}:${i}`, raw: r };
 						})
 						.filter(Boolean);
 					// ── 计算复合节点权重 ──
@@ -1369,10 +1369,10 @@
 					return { nodes: this.nodes, links: this.links };
 				}
 				computeStats() {
-					const connectedUids = new Set();
+					const connectedNids = new Set();
 					this.links.forEach((l) => {
-						connectedUids.add(clean(typeof l.source === "object" ? l.source?.id : l.source));
-						connectedUids.add(clean(typeof l.target === "object" ? l.target?.id : l.target));
+						connectedNids.add(clean(typeof l.source === "object" ? l.source?.id : l.source));
+						connectedNids.add(clean(typeof l.target === "object" ? l.target?.id : l.target));
 					});
 					const nodeTypes = new Set();
 					this.nodes.forEach((n) =>
@@ -1387,7 +1387,7 @@
 						if (t) relTypes.add(t);
 					});
 					this.stats = {
-						orphanCount: Math.max(0, this.nodes.length - connectedUids.size),
+						orphanCount: Math.max(0, this.nodes.length - connectedNids.size),
 						nodeTypeCount: nodeTypes.size,
 						relTypeCount: relTypes.size,
 					};
@@ -1395,14 +1395,14 @@
 				// 前端直接应用 CRUD 变更，不重新加载图谱
 				applyMutation(path, method, payload) {
 					if (path.includes("/node")) {
-						const uid = clean(payload.uid);
+						const nid = clean(payload.nid);
 						if (method === "POST" || method === "PUT") {
-							this.nodeMap.set(uid, payload);
+							this.nodeMap.set(nid, payload);
 						} else if (method === "DELETE") {
-							this.nodeMap.delete(uid);
+							this.nodeMap.delete(nid);
 							const toRemove = [];
 							for (const [k, r] of this.linkMap) {
-								if (clean(r.source_uid) === uid || clean(r.target_uid) === uid) toRemove.push(k);
+								if (clean(r.source_nid) === nid || clean(r.target_nid) === nid) toRemove.push(k);
 							}
 							toRemove.forEach((k) => this.linkMap.delete(k));
 						}
@@ -1415,10 +1415,10 @@
 						}
 					}
 				}
-				applyReplaceRelations(oldUid) {
+				applyReplaceRelations(oldNid) {
 					const toRemove = [];
 					for (const [k, r] of this.linkMap) {
-						if (clean(r.source_uid) === oldUid || clean(r.target_uid) === oldUid) toRemove.push(k);
+						if (clean(r.source_nid) === oldNid || clean(r.target_nid) === oldNid) toRemove.push(k);
 					}
 					toRemove.forEach((k) => this.linkMap.delete(k));
 				}
@@ -1650,7 +1650,7 @@
 							return null;
 						}
 						if (path.includes("/replace-node-relations")) {
-							this.store.applyReplaceRelations(payload.old_uid);
+							this.store.applyReplaceRelations(payload.old_nid);
 							await this.refreshAfterReplace();
 						} else {
 							this.store.applyMutation(path, method, payload);
@@ -1848,7 +1848,7 @@
 					}
 					if (!this.searchKeyword) return true;
 					const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : [];
-					return [clean(n?.label).toLowerCase(), clean(n?.uid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
+					return [clean(n?.label).toLowerCase(), clean(n?.nid).toLowerCase(), clean(n?.id).toLowerCase(), clean(n?.type).toLowerCase(), ...ll.map((x) => clean(x).toLowerCase())].join("|").includes(this.searchKeyword);
 				}
 				passEdgeFilter(edge) {
 					if (!this.selectedRelTypes.size) return true;
@@ -2521,9 +2521,9 @@
 						nd = cv.findNodeAt(wx, wy, 18);
 					if (nd) {
 						if (this._pickTarget) {
-							document.getElementById(this._pickTarget).value = clean(nd.raw.uid);
+							document.getElementById(this._pickTarget).value = clean(nd.raw.nid);
 							this._exitPickMode();
-							setStatus(`已抓取节点: ${clean(nd.raw.uid)}`);
+							setStatus(`已抓取节点: ${clean(nd.raw.nid)}`);
 							return;
 						}
 						if (this.selectedNodeId === nd.id) {
@@ -2591,7 +2591,7 @@
 						document.getElementById("d-type").style.color = node.color;
 						document.getElementById("d-name").textContent = node.label;
 						document.getElementById("d-name").style.color = node.color;
-						document.getElementById("d-uid").textContent = "uid: " + clean(raw.uid);
+						document.getElementById("d-nid").textContent = "nid: " + clean(raw.nid);
 						const propsEl = document.getElementById("d-props");
 						propsEl.innerHTML = "";
 						if (raw.description) propsEl.innerHTML += `<div class="d-row"><span class="d-key">描述</span><span class="d-val">${clean(raw.description).slice(0, 80)}</span></div>`;
@@ -2708,7 +2708,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = nodePayload();
-						if (!confirm(`确认新增节点 uid=${p.uid}？`)) return;
+						if (!confirm(`确认新增节点 nid=${p.nid}？`)) return;
 						await _api.mutate("/group-graph/api/node", "POST", p);
 					} catch (e) {
 						notify(`节点新增失败: ${e.message}`, "error");
@@ -2719,7 +2719,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = nodePayload();
-						if (!confirm(`确认更新节点 uid=${p.uid}？`)) return;
+						if (!confirm(`确认更新节点 nid=${p.nid}？`)) return;
 						await _api.mutate("/group-graph/api/node", "PUT", p);
 					} catch (e) {
 						notify(`节点更新失败: ${e.message}`, "error");
@@ -2730,8 +2730,8 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = nodePayload();
-						if (!confirm(`确认删除节点 uid=${p.uid}？此操作不可撤销。`)) return;
-						await _api.mutate("/group-graph/api/node", "DELETE", { group_id: p.group_id, uid: p.uid });
+						if (!confirm(`确认删除节点 nid=${p.nid}？此操作不可撤销。`)) return;
+						await _api.mutate("/group-graph/api/node", "DELETE", { group_id: p.group_id, nid: p.nid });
 					} catch (e) {
 						notify(`节点删除失败: ${e.message}`, "error");
 					}
@@ -2741,7 +2741,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = relPayload();
-						if (!confirm(`确认新增关系 ${p.source_uid} → ${p.target_uid}？`)) return;
+						if (!confirm(`确认新增关系 ${p.source_nid} → ${p.target_nid}？`)) return;
 						await _api.mutate("/group-graph/api/relation", "POST", p);
 					} catch (e) {
 						notify(`关系新增失败: ${e.message}`, "error");
@@ -2752,7 +2752,7 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = relPayload();
-						if (!confirm(`确认更新关系 ${p.source_uid} → ${p.target_uid}？`)) return;
+						if (!confirm(`确认更新关系 ${p.source_nid} → ${p.target_nid}？`)) return;
 						await _api.mutate("/group-graph/api/relation", "PUT", p);
 					} catch (e) {
 						notify(`关系更新失败: ${e.message}`, "error");
@@ -2763,8 +2763,8 @@
 				throttleBtn(this, async () => {
 					try {
 						const p = relPayload();
-						if (!confirm(`确认删除关系 ${p.source_uid} → ${p.target_uid}？此操作不可撤销。`)) return;
-						await _api.mutate("/group-graph/api/relation", "DELETE", { group_id: p.group_id, source_uid: p.source_uid, target_uid: p.target_uid });
+						if (!confirm(`确认删除关系 ${p.source_nid} → ${p.target_nid}？此操作不可撤销。`)) return;
+						await _api.mutate("/group-graph/api/relation", "DELETE", { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid });
 					} catch (e) {
 						notify(`关系删除失败: ${e.message}`, "error");
 					}
@@ -2772,24 +2772,24 @@
 			};
 			document.getElementById("btnReplaceRelations").onclick = function () {
 				const g = clean(document.getElementById("groupId").value);
-				const oldUid = clean(document.getElementById("replaceOldUid").value);
-				const newUid = clean(document.getElementById("replaceNewUid").value);
+				const oldNid = clean(document.getElementById("replaceOldNid").value);
+				const newNid = clean(document.getElementById("replaceNewNid").value);
 				if (!g) {
 					notify("group_id 不能为空", "error");
 					return;
 				}
-				if (!oldUid || !newUid) {
-					notify("old_uid 和 new_uid 不能为空", "error");
+				if (!oldNid || !newNid) {
+					notify("old_nid 和 new_nid 不能为空", "error");
 					return;
 				}
-				if (oldUid === newUid) {
-					notify("old_uid 和 new_uid 不能相同", "error");
+				if (oldNid === newNid) {
+					notify("old_nid 和 new_nid 不能相同", "error");
 					return;
 				}
-				if (!confirm(`确认将节点 ${oldUid} 的全部关系转移至 ${newUid} 吗？`)) return;
+				if (!confirm(`确认将节点 ${oldNid} 的全部关系转移至 ${newNid} 吗？`)) return;
 				throttleBtn(this, async () => {
 					try {
-						await _api.mutate("/group-graph/api/replace-node-relations", "POST", { group_id: g, old_uid: oldUid, new_uid: newUid });
+						await _api.mutate("/group-graph/api/replace-node-relations", "POST", { group_id: g, old_nid: oldNid, new_nid: newNid });
 					} catch (e) {
 						notify(`关系替换失败: ${e.message}`, "error");
 					}
@@ -2811,7 +2811,7 @@
 					const sn = _ia.selectedNodeId;
 					if (!gid || !sn) { setStatus("请先加载图谱并选中节点", true); return; }
 					setStatus("展开邻居中...");
-					const d = await _api.req(`/group-graph/api/neighbors?group_id=${encodeURIComponent(gid)}&uid=${encodeURIComponent(sn)}&depth=1`);
+					const d = await _api.req(`/group-graph/api/neighbors?group_id=${encodeURIComponent(gid)}&nid=${encodeURIComponent(sn)}&depth=1`);
 					_store.addNodes(d.nodes || []);
 					_store.addLinks(d.relations || []);
 					const g = _store.mapGraphData();
@@ -2825,7 +2825,7 @@
 				const src = clean(document.getElementById("pathSource").value);
 				const tgt = clean(document.getElementById("pathTarget").value);
 				if (!src || !tgt) {
-					setStatus("请输入起点和终点 uid", true);
+					setStatus("请输入起点和终点 nid", true);
 					return;
 				}
 				if (!_store.nodeMap.has(src)) {
@@ -2843,8 +2843,8 @@
 				// 构建邻接表（双向）
 				const adj = new Map();
 				_store.linkMap.forEach((r) => {
-					const s = clean(r.source_uid),
-						t = clean(r.target_uid);
+					const s = clean(r.source_nid),
+						t = clean(r.target_nid);
 					if (!s || !t) return;
 					if (!adj.has(s)) adj.set(s, []);
 					if (!adj.has(t)) adj.set(t, []);
@@ -2882,7 +2882,7 @@
 				}
 				// 高亮路径
 				_canvas._pathHighlight = new Set();
-				for (const uid of pathNodes) _canvas._pathHighlight.add(uid);
+				for (const nid of pathNodes) _canvas._pathHighlight.add(nid);
 				for (let i = 0; i < pathNodes.length - 1; i++) {
 					_canvas._pathHighlight.add(`${pathNodes[i]}=>${pathNodes[i + 1]}`);
 					_canvas._pathHighlight.add(`${pathNodes[i + 1]}=>${pathNodes[i]}`);
@@ -2936,18 +2936,18 @@
 				// ── 节点 sheet ──
 				const nodeExtra = new Set();
 				nodes.forEach((n) => Object.keys(n.properties || {}).forEach((k) => nodeExtra.add(k)));
-				const nodeHeaders = ["uid", "name", "labels", "description", ...[...nodeExtra].sort()];
+				const nodeHeaders = ["nid", "name", "labels", "description", ...[...nodeExtra].sort()];
 				const nodeRows = nodes.map((n) => {
-					const row = [n.uid || "", n.name || "", (n.labels || []).join(", "), n.description || ""];
+					const row = [n.nid || "", n.name || "", (n.labels || []).join(", "), n.description || ""];
 					nodeExtra.forEach((k) => row.push((n.properties || {})[k] ?? ""));
 					return row;
 				});
 				// ── 关系 sheet ──
 				const relExtra = new Set();
 				relations.forEach((r) => Object.keys(r.properties || {}).forEach((k) => relExtra.add(k)));
-				const relHeaders = ["source_uid", "rel_type", "target_uid", "description", ...[...relExtra].sort()];
+				const relHeaders = ["source_nid", "rel_type", "target_nid", "description", ...[...relExtra].sort()];
 				const relRows = relations.map((r) => {
-					const row = [r.source_uid || "", r.rel_type || "", r.target_uid || "", r.description || ""];
+					const row = [r.source_nid || "", r.rel_type || "", r.target_nid || "", r.description || ""];
 					relExtra.forEach((k) => row.push((r.properties || {})[k] ?? ""));
 					return row;
 				});
@@ -3048,7 +3048,7 @@
 			});
 
 			let _searchTmr = null;
-			// 模糊搜索：300ms 防抖，匹配节点名称/uid/类型/标签
+			// 模糊搜索：300ms 防抖，匹配节点名称/nid/类型/标签
 			document.getElementById("searchKeyword").addEventListener("input", (e) => {
 				const kw = clean(e.target.value).toLowerCase();
 				if (_searchTmr) clearTimeout(_searchTmr);

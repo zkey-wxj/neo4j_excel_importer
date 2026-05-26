@@ -18,7 +18,7 @@ logger.addHandler(plugin_logger_handler)
 
 class QueryRelationsBetweenNodesTool(Tool):
     _QUERY = """
-MATCH (src:KnowledgeNode {uid: $source_uid})-[r]->(tgt:KnowledgeNode {uid: $target_uid})
+MATCH (src:KnowledgeNode {nid: $source_nid})-[r]->(tgt:KnowledgeNode {nid: $target_nid})
 WHERE
     ($group_id = '' OR r.group_id = $group_id)
     AND (
@@ -32,14 +32,14 @@ LIMIT $limit
 """
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        source_uid = clean_text(tool_parameters.get("source_uid"))
-        target_uid = clean_text(tool_parameters.get("target_uid"))
+        source_nid = clean_text(tool_parameters.get("source_nid"))
+        target_nid = clean_text(tool_parameters.get("target_nid"))
         relation_type = clean_text(tool_parameters.get("relation_type"))
         database = clean_text(tool_parameters.get("database"))
         group_id = normalize_group_id(tool_parameters.get("group_id"))
-        logger.info("QueryRelationsBetweenNodesTool invoked | src=%s tgt=%s", source_uid, target_uid)
-        if not source_uid or not target_uid:
-            yield self.create_text_message("❌ source_uid 与 target_uid 不能为空。")
+        logger.info("QueryRelationsBetweenNodesTool invoked | src=%s tgt=%s", source_nid, target_nid)
+        if not source_nid or not target_nid:
+            yield self.create_text_message("❌ source_nid 与 target_nid 不能为空。")
             return
 
         try:
@@ -48,8 +48,8 @@ LIMIT $limit
                 self.runtime,
                 query=self._QUERY,
                 parameters={
-                    "source_uid": source_uid,
-                    "target_uid": target_uid,
+                    "source_nid": source_nid,
+                    "target_nid": target_nid,
                     "group_id": group_id,
                     "relation_type": relation_type,
                     "limit": limit,
@@ -62,10 +62,10 @@ LIMIT $limit
             return
 
         sanitized_rows = strip_embedding_fields(rows)
-        summary = f"节点间关系查询完成，source_uid={source_uid}，target_uid={target_uid}，命中 {len(rows)} 条。"
+        summary = f"节点间关系查询完成，source_nid={source_nid}，target_nid={target_nid}，命中 {len(rows)} 条。"
         request_echo = {
-            "source_uid": source_uid,
-            "target_uid": target_uid,
+            "source_nid": source_nid,
+            "target_nid": target_nid,
             "relation_type": relation_type,
             "group_id": group_id,
             "database": database,

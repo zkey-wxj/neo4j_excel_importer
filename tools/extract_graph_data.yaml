@@ -11,8 +11,8 @@ description:
     zh_Hans: 将 Markdown 表格解析为结构化的节点和关系数据，不写入 Neo4j。
   llm: |
     Parse Markdown table text into nodes and relations. Returns structured JSON.
-    Node table header: | uid | name | labels | description |
-    Relation table header: | source_uid | rel_type | target_uid |
+    Node table header: | nid | name | labels | description |
+    Relation table header: | source_nid | rel_type | target_nid |
     Additional columns are collected into properties.
     Title-only rows become section title nodes.
 
@@ -29,8 +29,8 @@ parameters:
     llm_description: |
       Markdown table content with node and relation data.
       The tool auto-detects node tables and relation tables by header row.
-      Node table header example: | uid | name | labels | description |
-      Relation table header example: | source_uid | rel_type | target_uid |
+      Node table header example: | nid | name | labels | description |
+      Relation table header example: | source_nid | rel_type | target_nid |
       Tables can have additional columns beyond the standard fields; they will be stored into corresponding fields according to the mapping.
       A title-only row (other columns empty) is treated as a section title node.
     form: llm
@@ -75,7 +75,7 @@ parameters:
       zh_Hans: 可选的 JSON 字符串，覆盖默认的节点/关系字段映射。
     llm_description: |
       Optional JSON string to customize field mapping. Default mapping:
-      {"node":{"uid":"uid","name":"name","labels":["labels"],"description":["description"],"properties":["grade_range","*"]},"relation":{"source_uid":"source_uid","rel_type":"rel_type","target_uid":"target_uid","description":["description"],"properties":["*"]}}
+      {"node":{"nid":"nid","name":"name","labels":["labels"],"description":["description"],"properties":["grade_range","*"]},"relation":{"source_nid":"source_nid","rel_type":"rel_type","target_nid":"target_nid","description":["description"],"properties":["*"]}}
       In properties, "*" means collect all remaining columns not already mapped to standard fields.
     form: llm
 

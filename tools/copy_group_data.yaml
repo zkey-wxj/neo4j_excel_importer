@@ -9,7 +9,7 @@ description:
   human:
     en_US: Copy all nodes and relations from one group_id to another group_id.
     zh_Hans: 将一个 group_id 下的节点和关系复制到另一个 group_id。
-  llm: Copy graph data from source_group_id to target_group_id. When uid conflicts, merge by uid+name or auto rename and rewrite relations.
+  llm: Copy graph data from source_group_id to target_group_id. When nid conflicts, merge by nid+name or auto rename and rewrite relations.
 
 parameters:
   - name: source_group_id
@@ -78,13 +78,13 @@ output_schema:
       description: Number of copied relations.
     merged_nodes_count:
       type: integer
-      description: Number of nodes merged because uid and name both matched.
+      description: Number of nodes merged because nid and name both matched.
     renamed_nodes_count:
       type: integer
-      description: Number of nodes renamed because uid matched but name differed.
+      description: Number of nodes renamed because nid matched but name differed.
     direct_insert_nodes_count:
       type: integer
-      description: Number of nodes inserted directly with original uid.
+      description: Number of nodes inserted directly with original nid.
     summary:
       type: string
       description: Human-readable copy summary.

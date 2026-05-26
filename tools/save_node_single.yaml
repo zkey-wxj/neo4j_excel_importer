@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save one node object to Neo4j.
     zh_Hans: 保存单个节点对象到 Neo4j。
-  llm: Save one node. JSON uses uid/name/labels/description/group_id/properties/meta.
+  llm: Save one node. JSON uses nid/name/labels/description/group_id/properties/meta.
 
 parameters:
   - name: node_json
@@ -21,11 +21,11 @@ parameters:
     human_description:
       en_US: JSON object with node fields matching import_graph write format.
       zh_Hans: 节点 JSON 对象，字段与 import_graph 写库格式一致。
-    llm_description: Object with uid, name, labels, description, group_id, properties, meta.
+    llm_description: Object with nid, name, labels, description, group_id, properties, meta.
     schema:
       type: object
       properties:
-        uid:
+        nid:
           type: string
         name:
           type: string
@@ -51,7 +51,7 @@ parameters:
             version:
               type: integer
       required:
-        - uid
+        - nid
     form: llm
 
   - name: group_id

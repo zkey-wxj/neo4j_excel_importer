@@ -15,10 +15,10 @@ VECTOR_INDEX_NAME = "knowledge_node_embedding_idx"
 Direction = Literal["forward", "bidirectional"]
 
 NODE_RESERVED_PROP_KEYS = frozenset({
-    "uid", "name", "description", "group_id", "labels", "properties", "meta", "embedding",
+    "nid", "name", "description", "group_id", "labels", "properties", "meta", "embedding",
 })
 
 RELATION_RESERVED_PROP_KEYS = frozenset({
-    "source_uid", "target_uid", "rel_type", "group_id", "direction",
+    "source_nid", "target_nid", "rel_type", "group_id", "direction",
     "description", "weight", "properties", "meta",
 })

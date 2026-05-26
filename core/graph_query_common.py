@@ -113,7 +113,7 @@ def _ensure_fulltext_index(session: Any, database: str) -> bool:
         try:
             session.run(
                 "CREATE FULLTEXT INDEX node_fulltext IF NOT EXISTS "
-                "FOR (n:KnowledgeNode) ON EACH [n.name, n.description, n.uid]"
+                "FOR (n:KnowledgeNode) ON EACH [n.name, n.description, n.nid]"
             ).consume()
             _FULLTEXT_INDEX_CREATED.add(database)
             return True
@@ -382,7 +382,7 @@ def strip_embedding_fields(value: Any) -> Any:
 
 def node_display_name(node_obj: Mapping[str, Any]) -> str:
     name = clean_text(node_obj.get("name"))
-    node_id = clean_text(node_obj.get("uid"))
+    node_id = clean_text(node_obj.get("nid"))
     return name or node_id or "Node"
 
 
@@ -428,7 +428,7 @@ def build_group_graph_png(
     nodes_map: dict[str, str] = {}
     for row in nodes_rows:
         node = as_mapping(row.get("n"))
-        node_id = clean_text(node.get("uid"))
+        node_id = clean_text(node.get("nid"))
         if not node_id:
             continue
         if node_id not in nodes_map:
@@ -439,8 +439,8 @@ def build_group_graph_png(
         src = as_mapping(row.get("src"))
         tgt = as_mapping(row.get("tgt"))
         rel = row.get("r")
-        src_id = clean_text(src.get("uid"))
-        tgt_id = clean_text(tgt.get("uid"))
+        src_id = clean_text(src.get("nid"))
+        tgt_id = clean_text(tgt.get("nid"))
         if not src_id or not tgt_id:
             continue
         src_name = node_display_name(src)
@@ -471,16 +471,16 @@ def build_node_graph_png(
     rel_limit: int = 80,
 ) -> bytes:
     center_map = as_mapping(center_node)
-    center_id = clean_text(center_map.get("uid"))
+    center_id = clean_text(center_map.get("nid"))
     if not center_id:
-        raise ValueError("中心节点缺少 uid，无法绘图。")
+        raise ValueError("中心节点缺少 nid，无法绘图。")
 
     nodes_map: dict[str, str] = {center_id: node_display_name(center_map)}
     edges: list[tuple[str, str, str]] = []
     for row in graph_rows[:rel_limit]:
         rel = row.get("r")
         neighbor_map = as_mapping(row.get("m"))
-        neighbor_id = clean_text(neighbor_map.get("uid"))
+        neighbor_id = clean_text(neighbor_map.get("nid"))
         if not neighbor_id:
             continue
         nodes_map[neighbor_id] = node_display_name(neighbor_map)

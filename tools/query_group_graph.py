@@ -43,7 +43,7 @@ RETURN count(r) AS total
 MATCH (n:KnowledgeNode)
 WHERE n.group_id = $group_id
 RETURN n
-ORDER BY n.name ASC, n.uid ASC
+ORDER BY n.name ASC, n.nid ASC
 SKIP $skip
 LIMIT $limit
 """
@@ -52,7 +52,7 @@ LIMIT $limit
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
 RETURN src, r, tgt
-ORDER BY src.uid ASC, tgt.uid ASC, type(r)
+ORDER BY src.nid ASC, tgt.nid ASC, type(r)
 SKIP $skip
 LIMIT $limit
 """
@@ -64,7 +64,7 @@ LIMIT $limit
     def _serialize_node(self, node_obj: Any) -> dict[str, Any]:
         node_map = as_mapping(node_obj)
         return {
-            "uid": clean_text(node_map.get("uid")),
+            "nid": clean_text(node_map.get("nid")),
             "name": clean_text(node_map.get("name")),
             "group_id": clean_text(node_map.get("group_id")),
             "labels": list(node_map.get("labels", []) or []),
@@ -78,8 +78,8 @@ LIMIT $limit
         rel = row.get("r")
         rel_map = as_mapping(rel)
         return {
-            "source_uid": src.get("uid"),
-            "target_uid": tgt.get("uid"),
+            "source_nid": src.get("nid"),
+            "target_nid": tgt.get("nid"),
             "rel_type": relation_display_name(rel),
             "direction": "forward",
             "group_id": clean_text(rel_map.get("group_id")),

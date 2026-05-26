@@ -9,7 +9,7 @@ description:
   human:
     en_US: Save relation data to Neo4j in batch with JSON rows.
     zh_Hans: 使用 JSON 数组批量保存关系数据到 Neo4j。
-  llm: Save relations in batch. JSON items use source_uid/target_uid/rel_type/direction/description/group_id/properties/meta.
+  llm: Save relations in batch. JSON items use source_nid/target_nid/rel_type/direction/description/group_id/properties/meta.
 
 parameters:
   - name: relations_json
@@ -21,15 +21,15 @@ parameters:
     human_description:
       en_US: >
         Array of relation objects.
-        Each item required: source_uid, target_uid, rel_type.
+        Each item required: source_nid, target_nid, rel_type.
         Optional: direction, description, group_id, properties, meta.
       zh_Hans: >
         关系对象数组。
-        每项必填：source_uid、target_uid、rel_type。
+        每项必填：source_nid、target_nid、rel_type。
         可选：direction、description、group_id、properties、meta。
     llm_description: >
       Array item fields:
-      source_uid(string, required), target_uid(string, required), rel_type(string, required),
+      source_nid(string, required), target_nid(string, required), rel_type(string, required),
       direction(forward|bidirectional, optional), description(string, optional),
       group_id(string, optional), properties(object, optional), meta(object, optional).
     schema:
@@ -37,9 +37,9 @@ parameters:
       items:
         type: object
         properties:
-          source_uid:
+          source_nid:
             type: string
-          target_uid:
+          target_nid:
             type: string
           rel_type:
             type: string
@@ -64,8 +64,8 @@ parameters:
               version:
                 type: integer
         required:
-          - source_uid
-          - target_uid
+          - source_nid
+          - target_nid
           - rel_type
     form: llm
 

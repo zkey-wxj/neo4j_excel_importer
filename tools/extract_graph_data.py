@@ -25,16 +25,16 @@ logger.addHandler(plugin_logger_handler)
 
 _STANDARD_MAPPING: dict[str, Any] = {
     "node": {
-        "uid": "uid",
+        "nid": "nid",
         "name": "name",
         "labels": ["labels"],
         "description": ["description"],
         "properties": ["grade_range", "*"],
     },
     "relation": {
-        "source_uid": "source_uid",
+        "source_nid": "source_nid",
         "rel_type": "rel_type",
-        "target_uid": "target_uid",
+        "target_nid": "target_nid",
         "description": ["description"],
         "properties": ["*"],
     },
@@ -43,7 +43,7 @@ _STANDARD_MAPPING: dict[str, Any] = {
 
 def _node_to_dict(raw: dict[str, Any]) -> dict[str, Any]:
     return {
-        "uid": clean_text(raw.get("uid")),
+        "nid": clean_text(raw.get("nid")),
         "name": clean_text(raw.get("name")),
         "labels": [clean_text(l) for l in (raw.get("labels") or []) if clean_text(l)]
         or ["Node"],
@@ -57,8 +57,8 @@ def _node_to_dict(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _relation_to_dict(raw: dict[str, Any]) -> dict[str, Any]:
     return {
-        "source_uid": clean_text(raw.get("source_uid")),
-        "target_uid": clean_text(raw.get("target_uid")),
+        "source_nid": clean_text(raw.get("source_nid")),
+        "target_nid": clean_text(raw.get("target_nid")),
         "rel_type": clean_text(raw.get("rel_type")),
         "description": clean_text(raw.get("description")),
         "properties": (
@@ -93,23 +93,23 @@ class ExtractGraphDataTool(GraphParser, Tool):
             yield self.create_text_message(f"Parse failed: {exc}")
             return
 
-        nodes = [_node_to_dict(n) for n in raw_nodes if clean_text(n.get("uid"))]
+        nodes = [_node_to_dict(n) for n in raw_nodes if clean_text(n.get("nid"))]
         relations = [
             _relation_to_dict(r)
             for r in raw_relations
-            if clean_text(r.get("source_uid"))
-            and clean_text(r.get("target_uid"))
+            if clean_text(r.get("source_nid"))
+            and clean_text(r.get("target_nid"))
             and clean_text(r.get("rel_type"))
         ]
 
-        known_ids = {n["uid"] for n in nodes}
+        known_ids = {n["nid"] for n in nodes}
         skipped_rels = sum(
             1
             for r in relations
-            if r["source_uid"] not in known_ids
-            or r["target_uid"] not in known_ids
+            if r["source_nid"] not in known_ids
+            or r["target_nid"] not in known_ids
         )
-        valid_relations = [r for r in relations if r["source_uid"] in known_ids and r["target_uid"] in known_ids]
+        valid_relations = [r for r in relations if r["source_nid"] in known_ids and r["target_nid"] in known_ids]
 
         node_type_stats: dict[str, int] = {}
         for n in nodes:

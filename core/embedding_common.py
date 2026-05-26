@@ -20,14 +20,14 @@ def has_embedding_model(model_config: Any) -> bool:
 def build_node_embedding_text(node: NodePayload) -> str:
     parts: list[str] = []
 
-    uid = clean_text(node.get("uid"))
+    nid = clean_text(node.get("nid"))
     name = clean_text(node.get("name"))
     description = clean_text(node.get("description"))
     labels = node.get("labels") or []
     properties = node.get("properties") or {}
 
-    if uid:
-        parts.append(uid)
+    if nid:
+        parts.append(nid)
     if name:
         parts.append(name)
     if description:

@@ -19,7 +19,7 @@ logger.addHandler(plugin_logger_handler)
 
 class QueryRelationsByNodeTool(Tool):
     _QUERY_FORWARD = """
-MATCH (n:KnowledgeNode {uid: $node_id})-[r]->(m:KnowledgeNode)
+MATCH (n:KnowledgeNode {nid: $node_id})-[r]->(m:KnowledgeNode)
 WHERE
     ($group_id = '' OR r.group_id = $group_id)
     AND (
@@ -30,7 +30,7 @@ WHERE
 RETURN n, r, m
 """
     _QUERY_BACKWARD = """
-MATCH (n:KnowledgeNode {uid: $node_id})<-[r]-(m:KnowledgeNode)
+MATCH (n:KnowledgeNode {nid: $node_id})<-[r]-(m:KnowledgeNode)
 WHERE
     ($group_id = '' OR r.group_id = $group_id)
     AND (
@@ -75,8 +75,8 @@ RETURN n, r, m
                 r = row.get("r")
                 m = row.get("m")
                 r_id = str(getattr(r, "element_id", None) or getattr(r, "id", ""))
-                m_uid = clean_text(as_mapping(m).get("uid"))
-                dedup_key = f"{r_id}:{m_uid}"
+                m_nid = clean_text(as_mapping(m).get("nid"))
+                dedup_key = f"{r_id}:{m_nid}"
                 if dedup_key not in seen:
                     seen.add(dedup_key)
                     rows.append(row)

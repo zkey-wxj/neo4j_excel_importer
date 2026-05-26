@@ -22,16 +22,16 @@ from core.types import (
 
 DEFAULT_FIELD_MAPPING: dict[str, Any] = {
     "node": {
-        "uid": "NodeID",
+        "nid": "NodeID",
         "name": "name",
         "labels": ["node_type", "keywords"],
         "description": ["description", "definition", "说明", "备注", "简介"],
         "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
     "relation": {
-        "source_uid": "SourceID",
+        "source_nid": "SourceID",
         "rel_type": "RelationType",
-        "target_uid": "TargetID",
+        "target_nid": "TargetID",
         "description": ["description", "说明", "备注", "简介"],
         "properties": [],
     },
@@ -131,7 +131,7 @@ def _normalize_relation_type(rel_type: Any) -> str:
 class GraphParser:
     """Excel / Markdown 图谱解析逻辑，不继承 Tool。"""
 
-    class _TitleUidAllocator:
+    class _TitleNidAllocator:
         def __init__(self) -> None:
             self._counters: list[int] = []
 
@@ -321,11 +321,11 @@ class GraphParser:
         node = mapping["node"]
         if len(row) < 4:
             return False
-        uid_ok = clean_text(row[0]) in {clean_text(node["uid"]), clean_text("uid")}
+        nid_ok = clean_text(row[0]) in {clean_text(node["nid"]), clean_text("nid")}
         name_ok = clean_text(row[1]) in {clean_text(node["name"]), clean_text("name")}
-        
-        
-        if not uid_ok or not name_ok:
+
+
+        if not nid_ok or not name_ok:
             return False
         label_fields = self._normalize_label_fields(node.get("labels"))
         if not self._matches_any(row[2], label_fields or ["node_type", "labels"]):
@@ -335,8 +335,8 @@ class GraphParser:
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
         rel = mapping["relation"]
-        return self._starts_with(row, [rel["source_uid"], rel["rel_type"], rel["target_uid"]]) \
-            or self._starts_with(row, ["source_uid", "rel_type", "target_uid"])
+        return self._starts_with(row, [rel["source_nid"], rel["rel_type"], rel["target_nid"]]) \
+            or self._starts_with(row, ["source_nid", "rel_type", "target_nid"])
 
     @staticmethod
     def _build_index(header: list[str]) -> dict[str, int]:
@@ -384,7 +384,7 @@ class GraphParser:
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         node_rows: list[dict[str, Any]] = []
         rel_rows: list[dict[str, Any]] = []
-        title_uid_allocator = self._TitleUidAllocator()
+        title_nid_allocator = self._TitleNidAllocator()
         title_first_node_map: dict[str, tuple[str, str]] = {}
 
         node_map = mapping["node"]
@@ -424,14 +424,14 @@ class GraphParser:
                         level = inferred
                     while current_title_stack and current_title_stack[-1][0] >= level:
                         current_title_stack.pop()
-                    uid = title_uid_allocator.allocate(level)
-                    node_rows.append({"uid": uid, "name": title_name, "labels": ["Title"],
+                    nid = title_nid_allocator.allocate(level)
+                    node_rows.append({"nid": nid, "name": title_name, "labels": ["Title"],
                                       "group_id": "", "properties": {}, "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key})
-                    if current_title_stack and current_title_stack[-1][1] != uid:
-                        rel_rows.append({"source_uid": current_title_stack[-1][1], "rel_type": "包含",
-                                         "target_uid": uid, "direction": DEFAULT_DIRECTION, "group_id": "",
+                    if current_title_stack and current_title_stack[-1][1] != nid:
+                        rel_rows.append({"source_nid": current_title_stack[-1][1], "rel_type": "包含",
+                                         "target_nid": nid, "direction": DEFAULT_DIRECTION, "group_id": "",
                                          "properties": {}, "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key})
-                    current_title_stack.append((level, uid))
+                    current_title_stack.append((level, nid))
                     continue
 
                 if self._is_node_header(row, mapping):
@@ -444,9 +444,9 @@ class GraphParser:
                     continue
 
                 if current_kind == "node":
-                    uid_field = self._resolve_field(current_index, node_map["uid"], "uid")
+                    nid_field = self._resolve_field(current_index, node_map["nid"], "nid")
                     name_field = self._resolve_field(current_index, node_map["name"], "name")
-                    node_id = _normalize_edge_symbols(self._get_cell(row, current_index, uid_field))
+                    node_id = _normalize_edge_symbols(self._get_cell(row, current_index, nid_field))
                     if self._is_empty_like(node_id):
                         continue
                     labels: list[str] = []
@@ -456,31 +456,31 @@ class GraphParser:
                                 labels.append(lb)
                     if not labels:
                         labels = [DEFAULT_NODE_LABEL]
-                    reserved = {uid_field, name_field, *label_fields, *desc_fields}
+                    reserved = {nid_field, name_field, *label_fields, *desc_fields}
                     props = self._collect_properties(row, current_index, node_property_fields, reserved)
                     desc = self._extract_first_by_fields(row, current_index, desc_fields)
                     payload: dict[str, Any] = {
-                        "uid": node_id, "name": self._normalize_name(self._get_cell(row, current_index, name_field)),
+                        "nid": node_id, "name": self._normalize_name(self._get_cell(row, current_index, name_field)),
                         "labels": labels, "group_id": "", "properties": normalize_properties(props, field_name="properties"),
                         "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key,
                     }
                     if desc:
                         payload["description"] = desc
                     node_rows.append(payload)
-                    for _, tuid in current_title_stack:
-                        if tuid not in title_first_node_map:
-                            title_first_node_map[tuid] = (payload["uid"], clean_text(payload.get("name")))
-                    for _, tuid in current_title_stack:
-                        if tuid != payload["uid"]:
-                            rel_rows.append({"source_uid": tuid, "rel_type": "包含", "target_uid": payload["uid"],
+                    for _, tnid in current_title_stack:
+                        if tnid not in title_first_node_map:
+                            title_first_node_map[tnid] = (payload["nid"], clean_text(payload.get("name")))
+                    for _, tnid in current_title_stack:
+                        if tnid != payload["nid"]:
+                            rel_rows.append({"source_nid": tnid, "rel_type": "包含", "target_nid": payload["nid"],
                                              "direction": DEFAULT_DIRECTION, "group_id": "", "properties": {},
                                              "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key})
                     continue
 
                 if current_kind == "relation":
-                    src_f = self._resolve_field(current_index, rel_map["source_uid"], "source_uid")
+                    src_f = self._resolve_field(current_index, rel_map["source_nid"], "source_nid")
                     rt_f = self._resolve_field(current_index, rel_map["rel_type"], "rel_type")
-                    tgt_f = self._resolve_field(current_index, rel_map["target_uid"], "target_uid")
+                    tgt_f = self._resolve_field(current_index, rel_map["target_nid"], "target_nid")
                     src = _normalize_edge_symbols(self._get_cell(row, current_index, src_f))
                     rt = _normalize_relation_type(self._get_cell(row, current_index, rt_f))
                     tgt = _normalize_edge_symbols(self._get_cell(row, current_index, tgt_f))
@@ -490,7 +490,7 @@ class GraphParser:
                     props = self._collect_properties(row, current_index, rel_property_fields, reserved)
                     desc = self._extract_first_by_fields(row, current_index, rel_desc_fields)
                     rp: dict[str, Any] = {
-                        "source_uid": src, "rel_type": rt, "target_uid": tgt,
+                        "source_nid": src, "rel_type": rt, "target_nid": tgt,
                         "direction": DEFAULT_DIRECTION, "group_id": "",
                         "properties": normalize_properties(props, field_name="properties"),
                         "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key,
@@ -498,14 +498,14 @@ class GraphParser:
                     if desc:
                         rp["description"] = desc
                     rel_rows.append(rp)
-                    for _, tuid in current_title_stack:
-                        if tuid != src:
-                            rel_rows.append({"source_uid": tuid, "rel_type": "包含", "target_uid": src,
+                    for _, tnid in current_title_stack:
+                        if tnid != src:
+                            rel_rows.append({"source_nid": tnid, "rel_type": "包含", "target_nid": src,
                                              "direction": DEFAULT_DIRECTION, "group_id": "", "properties": {},
                                              "meta": _build_meta(source_name, source_row_num), "_scope_key": scope_key})
 
         n1, r1 = self._collapse_redundant_titles(node_rows, rel_rows, title_first_node_map)
-        n2, r2 = self._auto_rename_conflicted_uids(n1, r1)
+        n2, r2 = self._auto_rename_conflicted_nids(n1, r1)
         n3 = self._merge_nodes(n2)
         r3 = self._merge_relations(r2)
         n4, r4 = self._prune_single_link_title_to_title_nodes(n3, r3)
@@ -521,27 +521,27 @@ class GraphParser:
     def _collapse_redundant_titles(
         nodes: list[dict[str, Any]], relations: list[dict[str, Any]], title_first_node_map: dict[str, tuple[str, str]],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        title_name_map = {clean_text(n.get("uid")): clean_text(n.get("name")) for n in nodes if any(clean_text(l) == "Title" for l in (n.get("labels") or []))}
+        title_name_map = {clean_text(n.get("nid")): clean_text(n.get("name")) for n in nodes if any(clean_text(l) == "Title" for l in (n.get("labels") or []))}
         repl: dict[str, str] = {}
-        for tuid, tname in title_name_map.items():
-            first = title_first_node_map.get(tuid)
+        for tnid, tname in title_name_map.items():
+            first = title_first_node_map.get(tnid)
             if first and first[0] and first[1] and tname and tname == first[1]:
-                repl[tuid] = first[0]
+                repl[tnid] = first[0]
         if not repl:
             return nodes, relations
         rewritten = []
         for r in relations:
-            s = repl.get(clean_text(r.get("source_uid")), clean_text(r.get("source_uid")))
-            t = repl.get(clean_text(r.get("target_uid")), clean_text(r.get("target_uid")))
+            s = repl.get(clean_text(r.get("source_nid")), clean_text(r.get("source_nid")))
+            t = repl.get(clean_text(r.get("target_nid")), clean_text(r.get("target_nid")))
             if not s or not t or s == t:
                 continue
-            r["source_uid"], r["target_uid"] = s, t
+            r["source_nid"], r["target_nid"] = s, t
             rewritten.append(r)
-        return [n for n in nodes if clean_text(n.get("uid")) not in repl], rewritten
+        return [n for n in nodes if clean_text(n.get("nid")) not in repl], rewritten
 
     @staticmethod
-    def _build_scoped_uid(base_uid: str, scope_key: str) -> str:
-        clean_base = clean_text(base_uid) or "NODE"
+    def _build_scoped_nid(base_nid: str, scope_key: str) -> str:
+        clean_base = clean_text(base_nid) or "NODE"
         idx = scope_key.rfind("#T")
         ti = 0
         if idx >= 0:
@@ -550,36 +550,36 @@ class GraphParser:
                 ti = int(txt)
         return f"{clean_base}__T{ti:02d}"
 
-    def _auto_rename_conflicted_uids(
+    def _auto_rename_conflicted_nids(
         self, nodes: list[dict[str, Any]], relations: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        uid_groups: dict[str, list[dict[str, Any]]] = {}
+        nid_groups: dict[str, list[dict[str, Any]]] = {}
         for n in nodes:
-            uid_groups.setdefault(clean_text(n.get("uid")), []).append(n)
-        used = {clean_text(n.get("uid")) for n in nodes}
+            nid_groups.setdefault(clean_text(n.get("nid")), []).append(n)
+        used = {clean_text(n.get("nid")) for n in nodes}
         scope_map: dict[tuple[str, str], str] = {}
 
         def alloc(old: str, sk: str) -> str:
-            base = self._build_scoped_uid(old, sk)
+            base = self._build_scoped_nid(old, sk)
             c, seq = base, 2
             while c in used:
                 c, seq = f"{base}_{seq}", seq + 1
             used.add(c)
             return c
 
-        for uid, recs in uid_groups.items():
+        for nid, recs in nid_groups.items():
             names = list(dict.fromkeys(clean_text(r.get("name")) for r in recs if clean_text(r.get("name"))))
             if len(names) <= 1:
                 continue
             for r in recs[1:]:
                 cn = clean_text(r.get("name"))
                 if cn and cn != clean_text(recs[0].get("name")):
-                    new = alloc(clean_text(r.get("uid")), clean_text(r.get("_scope_key")))
-                    r["uid"] = new
-                    scope_map[(clean_text(r.get("_scope_key")), clean_text(recs[0].get("uid")) if False else uid)] = new
+                    new = alloc(clean_text(r.get("nid")), clean_text(r.get("_scope_key")))
+                    r["nid"] = new
+                    scope_map[(clean_text(r.get("_scope_key")), clean_text(recs[0].get("nid")) if False else nid)] = new
         for rel in relations:
             sk = clean_text(rel.get("_scope_key"))
-            for field in ("source_uid", "target_uid"):
+            for field in ("source_nid", "target_nid"):
                 mapped = scope_map.get((sk, clean_text(rel.get(field))))
                 if mapped:
                     rel[field] = mapped
@@ -589,11 +589,11 @@ class GraphParser:
     def _merge_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
         for n in nodes:
-            uid = clean_text(n.get("uid"))
-            if uid not in merged:
-                merged[uid] = n
+            nid = clean_text(n.get("nid"))
+            if nid not in merged:
+                merged[nid] = n
                 continue
-            e = merged[uid]
+            e = merged[nid]
             for l in n.get("labels", []):
                 if l not in e.get("labels", []):
                     e.setdefault("labels", []).append(l)
@@ -612,7 +612,7 @@ class GraphParser:
     def _merge_relations(relations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
         for r in relations:
-            key = (clean_text(r.get("source_uid")), clean_text(r.get("rel_type")), clean_text(r.get("target_uid")))
+            key = (clean_text(r.get("source_nid")), clean_text(r.get("rel_type")), clean_text(r.get("target_nid")))
             if key not in merged:
                 merged[key] = r
         return list(merged.values())
@@ -621,27 +621,27 @@ class GraphParser:
     def _prune_single_link_title_to_title_nodes(
         nodes: list[dict[str, Any]], relations: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        title_uids = {clean_text(n.get("uid")) for n in nodes if clean_text(n.get("uid")) and any(clean_text(l) == "Title" for l in (n.get("labels") or []))}
-        if not title_uids:
+        title_nids = {clean_text(n.get("nid")) for n in nodes if clean_text(n.get("nid")) and any(clean_text(l) == "Title" for l in (n.get("labels") or []))}
+        if not title_nids:
             return nodes, relations
-        incident: dict[str, set[int]] = {u: set() for u in title_uids}
+        incident: dict[str, set[int]] = {u: set() for u in title_nids}
         for i, r in enumerate(relations):
-            s, t = clean_text(r.get("source_uid")), clean_text(r.get("target_uid"))
+            s, t = clean_text(r.get("source_nid")), clean_text(r.get("target_nid"))
             if s in incident:
                 incident[s].add(i)
             if t in incident:
                 incident[t].add(i)
         remove = set()
-        for uid, idxs in incident.items():
+        for nid, idxs in incident.items():
             if len(idxs) != 1:
                 continue
             r = relations[next(iter(idxs))]
-            other = clean_text(r.get("target_uid")) if clean_text(r.get("source_uid")) == uid else clean_text(r.get("source_uid"))
-            if other in title_uids:
-                remove.add(uid)
+            other = clean_text(r.get("target_nid")) if clean_text(r.get("source_nid")) == nid else clean_text(r.get("source_nid"))
+            if other in title_nids:
+                remove.add(nid)
         if not remove:
             return nodes, relations
         return (
-            [n for n in nodes if clean_text(n.get("uid")) not in remove],
-            [r for r in relations if clean_text(r.get("source_uid")) not in remove and clean_text(r.get("target_uid")) not in remove],
+            [n for n in nodes if clean_text(n.get("nid")) not in remove],
+            [r for r in relations if clean_text(r.get("source_nid")) not in remove and clean_text(r.get("target_nid")) not in remove],
         )

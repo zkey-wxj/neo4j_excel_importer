@@ -114,16 +114,16 @@ parameters:
         JSON object for explicit field mapping. If omitted, the following default mapping is used:
         {
           "node": {
-            "uid": "NodeID",
+            "nid": "NodeID",
             "name": "name",
             "labels": ["node_type", "keywords"],
             "description": ["description", "definition", "说明", "备注", "简介"],
             "properties": ["level", "grade_range", "keywords", "teaching_tip"]
           },
           "relation": {
-            "source_uid": "SourceID",
+            "source_nid": "SourceID",
             "rel_type": "RelationType",
-            "target_uid": "TargetID",
+            "target_nid": "TargetID",
             "description": ["description", "说明", "备注", "简介"],
             "properties": []
           }
@@ -132,31 +132,31 @@ parameters:
         字段映射 JSON 对象。不传时使用以下默认映射：
         {
           "node": {
-            "uid": "NodeID",
+            "nid": "NodeID",
             "name": "name",
             "labels": ["node_type", "keywords"],
             "description": ["description", "definition", "说明", "备注", "简介"],
             "properties": ["level", "grade_range", "keywords", "teaching_tip"]
           },
           "relation": {
-            "source_uid": "SourceID",
+            "source_nid": "SourceID",
             "rel_type": "RelationType",
-            "target_uid": "TargetID",
+            "target_nid": "TargetID",
             "description": ["description", "说明", "备注", "简介"],
             "properties": []
           }
         }
     llm_description: >
       Optional mapping JSON object for node/relation fields:
-      node.uid, node.name, node.labels, node.description, node.properties[],
-      relation.source_uid, relation.rel_type, relation.target_uid, relation.description, relation.properties[].
+      node.nid, node.name, node.labels, node.description, node.properties[],
+      relation.source_nid, relation.rel_type, relation.target_nid, relation.description, relation.properties[].
     schema:
       type: object
       properties:
         node:
           type: object
           properties:
-            uid:
+            nid:
               type: string
             name:
               type: string
@@ -177,11 +177,11 @@ parameters:
         relation:
           type: object
           properties:
-            source_uid:
+            source_nid:
               type: string
             rel_type:
               type: string
-            target_uid:
+            target_nid:
               type: string
             description:
               oneOf:

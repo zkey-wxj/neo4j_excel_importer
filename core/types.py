@@ -22,7 +22,7 @@ class GraphMeta(TypedDict):
 
 
 class NodePayload(TypedDict):
-    uid: str
+    nid: str
     name: str
     labels: list[str]
     description: NotRequired[str]
@@ -33,8 +33,8 @@ class NodePayload(TypedDict):
 
 
 class RelationPayload(TypedDict):
-    source_uid: str
-    target_uid: str
+    source_nid: str
+    target_nid: str
     rel_type: str
     direction: Direction
     description: NotRequired[str]
@@ -289,9 +289,9 @@ def parse_relation_json(relation_json: str) -> RelationPayload:
 def normalize_node(payload: Any, *, index: int) -> NodePayload:
     payload = ensure_mapping(payload, field_name=f"nodes_json[{index}]")
 
-    uid = clean_text(payload.get("uid"))
-    if not uid:
-        raise ValueError(f"nodes_json[{index}].uid 不能为空。")
+    nid = clean_text(payload.get("nid"))
+    if not nid:
+        raise ValueError(f"nodes_json[{index}].nid 不能为空。")
 
     labels = normalize_labels(payload.get("labels"))
     if not labels:
@@ -310,7 +310,7 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
     meta = normalize_meta(payload.get("meta"), field_name=f"nodes_json[{index}].meta")
 
     node: NodePayload = {
-        "uid": uid,
+        "nid": nid,
         "name": clean_text(payload.get("name")),
         "labels": labels,
         "group_id": group_id,
@@ -327,13 +327,13 @@ def normalize_node(payload: Any, *, index: int) -> NodePayload:
 def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
     payload = ensure_mapping(payload, field_name=f"relations_json[{index}]")
 
-    source_uid = clean_text(payload.get("source_uid"))
-    target_uid = clean_text(payload.get("target_uid"))
+    source_nid = clean_text(payload.get("source_nid"))
+    target_nid = clean_text(payload.get("target_nid"))
     rel_type = clean_text(payload.get("rel_type"))
-    if not source_uid:
-        raise ValueError(f"relations_json[{index}].source_uid 不能为空。")
-    if not target_uid:
-        raise ValueError(f"relations_json[{index}].target_uid 不能为空。")
+    if not source_nid:
+        raise ValueError(f"relations_json[{index}].source_nid 不能为空。")
+    if not target_nid:
+        raise ValueError(f"relations_json[{index}].target_nid 不能为空。")
     if not rel_type:
         raise ValueError(f"relations_json[{index}].rel_type 不能为空。")
 
@@ -354,8 +354,8 @@ def normalize_relation(payload: Any, *, index: int) -> RelationPayload:
     )
 
     relation: RelationPayload = {
-        "source_uid": source_uid,
-        "target_uid": target_uid,
+        "source_nid": source_nid,
+        "target_nid": target_nid,
         "rel_type": rel_type,
         "direction": direction,  # type: ignore[assignment]
         "group_id": group_id,

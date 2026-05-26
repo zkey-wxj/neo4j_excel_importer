@@ -18,16 +18,16 @@ except Exception:  # pragma: no cover
 # 测试脚本内置映射（不读取 YAML）
 DEFAULT_MAPPING: dict[str, Any] = {
     "node": {
-        "uid": "NodeID",
+        "nid": "NodeID",
         "name": "name",
         "labels": ["node_type", "keywords"],
         "description": ["definition", "description", "说明", "备注", "简介"],
         "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
     "relation": {
-        "source_uid": "SourceID",
+        "source_nid": "SourceID",
         "rel_type": "RelationType",
-        "target_uid": "TargetID",
+        "target_nid": "TargetID",
         "description": ["description", "说明", "备注", "简介"],
         "properties": [],
     },
@@ -115,7 +115,7 @@ class Recognizer:
         self.node_map = self.mapping.get("node", {})
         self.rel_map = self.mapping.get("relation", {})
 
-        self.node_id_col = self.node_map.get("uid", "NodeID")
+        self.node_id_col = self.node_map.get("nid", "NodeID")
         self.node_name_col = self.node_map.get("name", "name")
         self.node_labels_cols = _normalize_labels(self.node_map.get("labels", self.node_map.get("primary_label", "node_type")))
         self.node_desc_cols = _normalize_labels(
@@ -123,9 +123,9 @@ class Recognizer:
         )
         self.node_prop_cols = self.node_map.get("properties", ["*"])
 
-        self.rel_src_col = self.rel_map.get("source_uid", "SourceID")
+        self.rel_src_col = self.rel_map.get("source_nid", "SourceID")
         self.rel_type_col = self.rel_map.get("rel_type", "RelationType")
-        self.rel_tgt_col = self.rel_map.get("target_uid", "TargetID")
+        self.rel_tgt_col = self.rel_map.get("target_nid", "TargetID")
         self.rel_desc_cols = _normalize_labels(self.rel_map.get("description", ["description", "说明", "备注", "简介"]))
         self.rel_prop_cols = self.rel_map.get("properties", ["*"])
 
@@ -228,12 +228,12 @@ class Recognizer:
                 node = self._build_node(row_dict)
                 if node:
                     self._upsert_node(node)
-                    if current_title_node_id and current_title_node_id != node["uid"]:
+                    if current_title_node_id and current_title_node_id != node["nid"]:
                         self._upsert_relation(
                             {
-                                "source_uid": current_title_node_id,
+                                "source_nid": current_title_node_id,
                                 "rel_type": CONTAINS_REL,
-                                "target_uid": node["uid"],
+                                "target_nid": node["nid"],
                                 "direction": "forward",
                                 "group_id": node.get("group_id", ""),
                                 "properties": {},
@@ -376,7 +376,7 @@ class Recognizer:
         props = self._collect_properties(data, self.node_prop_cols, reserved)
 
         node: dict[str, Any] = {
-            "uid": node_id,
+            "nid": node_id,
             "name": name,
             "labels": dedup_labels,
             "group_id": group_id,
@@ -408,8 +408,8 @@ class Recognizer:
         props = self._collect_properties(data, self.rel_prop_cols, reserved)
 
         relation: dict[str, Any] = {
-            "source_uid": src,
-            "target_uid": tgt,
+            "source_nid": src,
+            "target_nid": tgt,
             "rel_type": rel_type,
             "direction": "forward",
             "group_id": group_id,
@@ -428,7 +428,7 @@ class Recognizer:
         node_id = f"title_{uuid.uuid4().hex[:12]}"
         self._upsert_node(
             {
-                "uid": node_id,
+                "nid": node_id,
                 "name": title,
                 "labels": [TITLE_LABEL],
                 "group_id": "",
@@ -446,7 +446,7 @@ class Recognizer:
         return None
 
     def _upsert_node(self, node: dict[str, Any]) -> None:
-        node_id = node["uid"]
+        node_id = node["nid"]
         existing = self.nodes.get(node_id)
         if not existing:
             self.nodes[node_id] = node
@@ -474,7 +474,7 @@ class Recognizer:
         existing["properties"] = props
 
     def _upsert_relation(self, relation: dict[str, Any]) -> None:
-        key = (relation["source_uid"], relation["rel_type"], relation["target_uid"])
+        key = (relation["source_nid"], relation["rel_type"], relation["target_nid"])
         existing = self.relations.get(key)
         if not existing:
             self.relations[key] = relation

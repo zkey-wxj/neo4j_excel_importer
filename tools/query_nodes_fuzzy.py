@@ -25,11 +25,11 @@ MATCH (n:KnowledgeNode)
 WHERE (
     toLower(coalesce(n.name, '')) CONTAINS toLower($keyword)
     OR toLower(coalesce(n.description, '')) CONTAINS toLower($keyword)
-    OR toLower(coalesce(n.uid, '')) CONTAINS toLower($keyword)
+    OR toLower(coalesce(n.nid, '')) CONTAINS toLower($keyword)
 )
 AND ($group_id = '' OR n.group_id = $group_id)
 RETURN n
-ORDER BY coalesce(n.name, n.uid) ASC
+ORDER BY coalesce(n.name, n.nid) ASC
 LIMIT $limit
 """
     _VECTOR_QUERY = """

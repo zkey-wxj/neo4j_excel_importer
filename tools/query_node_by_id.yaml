@@ -3,13 +3,13 @@ identity:
   author: wxj
   label:
     en_US: Query Node By ID
-    zh_Hans: 按 uid 查询节点
+    zh_Hans: 按 nid 查询节点
 
 description:
   human:
-    en_US: Query one KnowledgeNode by uid with its relations and neighbor nodes.
-    zh_Hans: 根据 uid 查询节点本体，并返回其关系与相邻节点。
-  llm: Query center node by uid, plus relations and neighbors, with optional group_id.
+    en_US: Query one KnowledgeNode by nid with its relations and neighbor nodes.
+    zh_Hans: 根据 nid 查询节点本体，并返回其关系与相邻节点。
+  llm: Query center node by nid, plus relations and neighbors, with optional group_id.
 
 parameters:
   - name: node_id
@@ -19,9 +19,9 @@ parameters:
       en_US: Node ID
       zh_Hans: 节点 ID
     human_description:
-      en_US: Exact uid value in KnowledgeNode.
-      zh_Hans: KnowledgeNode 中的精确 uid 值。
-    llm_description: Exact uid value to query.
+      en_US: Exact nid value in KnowledgeNode.
+      zh_Hans: KnowledgeNode 中的精确 nid 值。
+    llm_description: Exact nid value to query.
     form: llm
 
   - name: group_id

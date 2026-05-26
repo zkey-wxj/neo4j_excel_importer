@@ -112,13 +112,13 @@ class ImportGraphTool(GraphParser, Tool):
 
             parsed_nodes: list[NodePayload] = []
             for row_data in parsed_nodes_input:
-                uid = clean_text(row_data.get("uid"))
-                if not uid:
+                nid = clean_text(row_data.get("nid"))
+                if not nid:
                     continue
                 labels = normalize_labels(row_data.get("labels")) or [DEFAULT_NODE_LABEL]
                 properties = row_data.get("properties") if isinstance(row_data.get("properties"), dict) else {}
                 parsed_nodes.append(NodePayload(
-                    uid=uid, name=clean_text(row_data.get("name")), labels=labels,
+                    nid=nid, name=clean_text(row_data.get("name")), labels=labels,
                     description=clean_text(row_data.get("description") or row_data.get("definition") or row_data.get("说明") or row_data.get("备注") or row_data.get("简介")),
                     group_id=group_id, properties=normalize_properties(properties, field_name="node.properties"),
                     meta=cast("GraphMeta", ensure_mapping(row_data.get("meta"), field_name="node.meta") or _build_meta()),
@@ -138,9 +138,9 @@ class ImportGraphTool(GraphParser, Tool):
                         parsed_nodes[ni]["embedding"] = vecs[vi]
 
             parsed_relations: list[RelationPayload] = []
-            known_ids = {r["uid"] for r in parsed_nodes}
+            known_ids = {r["nid"] for r in parsed_nodes}
             for row_data in parsed_relations_input:
-                su, tu = clean_text(row_data.get("source_uid")), clean_text(row_data.get("target_uid"))
+                su, tu = clean_text(row_data.get("source_nid")), clean_text(row_data.get("target_nid"))
                 if su not in known_ids or tu not in known_ids:
                     skipped_rels += 1
                     continue
@@ -149,7 +149,7 @@ class ImportGraphTool(GraphParser, Tool):
                     continue
                 properties = row_data.get("properties") if isinstance(row_data.get("properties"), dict) else {}
                 parsed_relations.append(RelationPayload(
-                    source_uid=su, target_uid=tu, rel_type=rt, direction=DEFAULT_DIRECTION,
+                    source_nid=su, target_nid=tu, rel_type=rt, direction=DEFAULT_DIRECTION,
                     description=clean_text(row_data.get("description") or row_data.get("说明") or row_data.get("备注") or row_data.get("简介")),
                     group_id=group_id, properties=normalize_properties(properties, field_name="relation.properties"),
                     meta=cast("GraphMeta", ensure_mapping(row_data.get("meta"), field_name="relation.meta") or _build_meta()),

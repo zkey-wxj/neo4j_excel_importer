@@ -48,22 +48,22 @@ MATCH (src:KnowledgeNode {group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
 WITH DISTINCT r, src, tgt
 WHERE $after_id = '' OR elementId(r) > $after_id
-RETURN src.uid AS src_uid, tgt.uid AS tgt_uid,
+RETURN src.nid AS src_nid, tgt.nid AS tgt_nid,
        properties(r) AS rel_props, type(r) AS rel_type, elementId(r) AS rel_id
 ORDER BY elementId(r)
 LIMIT $limit
 """
 
     _BATCH_NODES_QUERY = """
-UNWIND $uids AS uid
-MATCH (n:KnowledgeNode {uid: uid, group_id: $group_id})
+UNWIND $nids AS nid
+MATCH (n:KnowledgeNode {nid: nid, group_id: $group_id})
 RETURN n, labels(n) AS neo_labels
 """
 
     # ── 写查询：不限关系类型，用属性匹配 ──────────────────────────────────
 
     _UPSERT_NODE = """
-MERGE (n:KnowledgeNode {uid: $uid, group_id: $group_id})
+MERGE (n:KnowledgeNode {nid: $nid, group_id: $group_id})
 SET n.name = $name,
     n.description = $description,
     n.labels = $labels
@@ -76,14 +76,14 @@ RETURN elementId(n) AS node_id
 """
 
     _DELETE_NODE = """
-MATCH (n:KnowledgeNode {uid: $uid, group_id: $group_id})
+MATCH (n:KnowledgeNode {nid: $nid, group_id: $group_id})
 DETACH DELETE n
 RETURN count(*) AS deleted
 """
 
     _CREATE_REL = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
-MATCH (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
+MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 CREATE (src)-[r:RELATED {
   rel_type: $rel_type,
   group_id: $group_id
@@ -93,8 +93,8 @@ RETURN elementId(r) AS relation_id
 """
 
     _MERGE_REL = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})
-MATCH (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
+MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 MERGE (src)-[r:RELATED]->(tgt)
 SET r.rel_type = $rel_type,
     r.group_id = $group_id
@@ -103,7 +103,7 @@ RETURN elementId(r) AS relation_id
 """
 
     _UPDATE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 WHERE r.group_id = $group_id
 SET r.rel_type = $rel_type,
     r.group_id = $group_id,
@@ -114,33 +114,33 @@ RETURN elementId(r) AS relation_id
 """
 
     _DELETE_REL_BY_ENDPOINTS = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})-[r]->(tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 WHERE r.group_id = $group_id
 DELETE r
 RETURN count(*) AS deleted
 """
 
     _REDIRECT_OUTGOING_RELS = """
-MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+MATCH (old:KnowledgeNode {nid: $old_nid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
-  AND (tgt.uid <> $new_uid OR tgt.group_id <> $group_id)
+  AND (tgt.nid <> $new_nid OR tgt.group_id <> $group_id)
 WITH old, tgt, r, type(r) AS rType, properties(r) AS rProps
 DELETE r
 WITH old, tgt, rType, rProps
-MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+MERGE (new:KnowledgeNode {nid: $new_nid, group_id: $group_id})
 CALL apoc.create.relationship(new, rType, rProps, tgt) YIELD rel
 SET rel.group_id = $group_id
 RETURN count(*) AS redirected
 """
 
     _REDIRECT_OUTGOING_RELS_FALLBACK = """
-MATCH (old:KnowledgeNode {uid: $old_uid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
+MATCH (old:KnowledgeNode {nid: $old_nid, group_id: $group_id})-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
-  AND (tgt.uid <> $new_uid OR tgt.group_id <> $group_id)
+  AND (tgt.nid <> $new_nid OR tgt.group_id <> $group_id)
 WITH old, tgt, r, properties(r) AS rProps
 DELETE r
 WITH old, tgt, rProps
-MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+MERGE (new:KnowledgeNode {nid: $new_nid, group_id: $group_id})
 CREATE (new)-[nr:RELATED]->(tgt)
 SET nr = rProps
 SET nr.group_id = $group_id
@@ -148,26 +148,26 @@ RETURN count(*) AS redirected
 """
 
     _REDIRECT_INCOMING_RELS = """
-MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {nid: $old_nid, group_id: $group_id})
 WHERE r.group_id = $group_id
-  AND (src.uid <> $new_uid OR src.group_id <> $group_id)
+  AND (src.nid <> $new_nid OR src.group_id <> $group_id)
 WITH src, old, r, type(r) AS rType, properties(r) AS rProps
 DELETE r
 WITH src, old, rType, rProps
-MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+MERGE (new:KnowledgeNode {nid: $new_nid, group_id: $group_id})
 CALL apoc.create.relationship(src, rType, rProps, new) YIELD rel
 SET rel.group_id = $group_id
 RETURN count(*) AS redirected
 """
 
     _REDIRECT_INCOMING_RELS_FALLBACK = """
-MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {uid: $old_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode)-[r]->(old:KnowledgeNode {nid: $old_nid, group_id: $group_id})
 WHERE r.group_id = $group_id
-  AND (src.uid <> $new_uid OR src.group_id <> $group_id)
+  AND (src.nid <> $new_nid OR src.group_id <> $group_id)
 WITH src, old, r, properties(r) AS rProps
 DELETE r
 WITH src, old, rProps
-MERGE (new:KnowledgeNode {uid: $new_uid, group_id: $group_id})
+MERGE (new:KnowledgeNode {nid: $new_nid, group_id: $group_id})
 CREATE (src)-[nr:RELATED]->(new)
 SET nr = rProps
 SET nr.group_id = $group_id
@@ -187,8 +187,8 @@ CALL {
   RETURN collect(DISTINCT r) AS all_rels, count(DISTINCT r) AS rel_count
 }
 RETURN node_count, rel_count,
-       [n IN all_nodes | {uid: n.uid, name: n.name, labels: n.labels}] AS node_samples,
-       [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).uid, target: endNode(r).uid}] AS rel_samples
+       [n IN all_nodes | {nid: n.nid, name: n.name, labels: n.labels}] AS node_samples,
+       [r IN all_rels | {rel_type: coalesce(r.rel_type, type(r)), source: startNode(r).nid, target: endNode(r).nid}] AS rel_samples
 """
 
     _CLEAR_GROUP = """
@@ -328,40 +328,40 @@ RETURN count(*) AS deleted
         for row in node_rows:
             node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
             if node:
-                nodes[node["uid"]] = node
+                nodes[node["nid"]] = node
 
-        # ── 序列化关系（仅 uid + properties，不含完整节点）──
+        # ── 序列化关系（仅 nid + properties，不含完整节点）──
 
         rels: list[dict[str, Any]] = []
-        missing_uids: set[str] = set()
+        missing_nids: set[str] = set()
         rel_raw: list[tuple[str, str, dict[str, Any], str, str]] = []
 
         for row in rel_rows:
-            src_uid = clean_text(row.get("src_uid"))
-            tgt_uid = clean_text(row.get("tgt_uid"))
+            src_nid = clean_text(row.get("src_nid"))
+            tgt_nid = clean_text(row.get("tgt_nid"))
             rel_props = row.get("rel_props") or {}
             rel_type = clean_text(row.get("rel_type"))
             rel_id = clean_text(row.get("rel_id"))
-            if src_uid:
-                rel_raw.append((src_uid, tgt_uid, rel_props, rel_type, rel_id))
-                if src_uid not in nodes:
-                    missing_uids.add(src_uid)
-                if tgt_uid and tgt_uid not in nodes:
-                    missing_uids.add(tgt_uid)
+            if src_nid:
+                rel_raw.append((src_nid, tgt_nid, rel_props, rel_type, rel_id))
+                if src_nid not in nodes:
+                    missing_nids.add(src_nid)
+                if tgt_nid and tgt_nid not in nodes:
+                    missing_nids.add(tgt_nid)
 
-        if missing_uids:
-            for node in self._batch_load_nodes(group_id, missing_uids):
-                nodes[node["uid"]] = node
+        if missing_nids:
+            for node in self._batch_load_nodes(group_id, missing_nids):
+                nodes[node["nid"]] = node
 
-        for src_uid, tgt_uid, rel_props, rel_type, rel_id in rel_raw:
-            src_node = nodes.get(src_uid)
-            tgt_node = nodes.get(tgt_uid)
+        for src_nid, tgt_nid, rel_props, rel_type, rel_id in rel_raw:
+            src_node = nodes.get(src_nid)
+            tgt_node = nodes.get(tgt_nid)
             if not src_node or not tgt_node:
                 continue
             rels.append({
                 "id": rel_id,
-                "source_uid": src_uid,
-                "target_uid": tgt_uid,
+                "source_nid": src_nid,
+                "target_nid": tgt_nid,
                 "rel_type": rel_type or DEFAULT_REL_TYPE,
                 "group_id": clean_text(rel_props.get("group_id")),
                 "description": clean_text(rel_props.get("description")),
@@ -396,15 +396,15 @@ RETURN count(*) AS deleted
         }
         return result
 
-    def _batch_load_nodes(self, group_id: str, uids: set[str]) -> list[dict[str, Any]]:
+    def _batch_load_nodes(self, group_id: str, nids: set[str]) -> list[dict[str, Any]]:
         """批量补查缺失节点。"""
-        if not uids:
+        if not nids:
             return []
         kwargs = self._session_kwargs()
         assert self._driver is not None
         nodes: list[dict[str, Any]] = []
         with self._driver.session(**kwargs) as session:
-            for row in session.run(self._BATCH_NODES_QUERY, {"uids": list(uids), "group_id": group_id}):
+            for row in session.run(self._BATCH_NODES_QUERY, {"nids": list(nids), "group_id": group_id}):
                 node = self._serialize_node(row.get("n"), explicit_labels=row.get("neo_labels"))
                 if node:
                     nodes.append(node)
@@ -425,10 +425,10 @@ RETURN count(*) AS deleted
         return clean_text((rows[0] if rows else {}).get("node_id"))
 
     def delete_node(self, payload: Mapping[str, Any]) -> int:
-        """按 uid + group_id 删除节点。"""
+        """按 nid + group_id 删除节点。"""
         params = {
             "group_id": clean_text(payload.get("group_id")),
-            "uid": clean_text(payload.get("uid")),
+            "nid": clean_text(payload.get("nid")),
         }
         rows = self._run(self._DELETE_NODE, params, write=True)
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
@@ -438,34 +438,34 @@ RETURN count(*) AS deleted
         params = self._relation_create_params(payload)
         rows = self._run(self._CREATE_REL, params, write=True)
         if rows:
-            return f"{params['source_uid']}->{params['target_uid']}"
+            return f"{params['source_nid']}->{params['target_nid']}"
         return ""
 
     def update_relation(self, payload: Mapping[str, Any]) -> str:
-        """通过 group_id + source_uid + target_uid 更新关系并返回引用键。"""
+        """通过 group_id + source_nid + target_nid 更新关系并返回引用键。"""
         params = self._relation_update_params(payload)
         rows = self._run(self._UPDATE_REL_BY_ENDPOINTS, params, write=True)
         if rows:
-            return f"{params['source_uid']}->{params['target_uid']}"
+            return f"{params['source_nid']}->{params['target_nid']}"
         return ""
 
     def delete_relation(self, payload: Mapping[str, Any]) -> int:
-        """通过 group_id + source_uid + target_uid 删除关系。"""
+        """通过 group_id + source_nid + target_nid 删除关系。"""
         group_id = clean_text(payload.get("group_id"))
-        source_uid = clean_text(payload.get("source_uid"))
-        target_uid = clean_text(payload.get("target_uid"))
+        source_nid = clean_text(payload.get("source_nid"))
+        target_nid = clean_text(payload.get("target_nid"))
         rows = self._run(
             self._DELETE_REL_BY_ENDPOINTS,
-            {"group_id": group_id, "source_uid": source_uid, "target_uid": target_uid},
+            {"group_id": group_id, "source_nid": source_nid, "target_nid": target_nid},
             write=True,
         )
         return int((rows[0] if rows else {}).get("deleted", 0) or 0)
 
-    def replace_node_relations(self, group_id: str, old_uid: str, new_uid: str) -> int:
-        """将 old_uid 节点的全部关系转移至 new_uid 节点，返回转移的关系数。"""
-        if old_uid == new_uid:
+    def replace_node_relations(self, group_id: str, old_nid: str, new_nid: str) -> int:
+        """将 old_nid 节点的全部关系转移至 new_nid 节点，返回转移的关系数。"""
+        if old_nid == new_nid:
             return 0
-        params = {"group_id": group_id, "old_uid": old_uid, "new_uid": new_uid}
+        params = {"group_id": group_id, "old_nid": old_nid, "new_nid": new_nid}
         out_count = self._try_redirect(self._REDIRECT_OUTGOING_RELS, self._REDIRECT_OUTGOING_RELS_FALLBACK, params)
         in_count = self._try_redirect(self._REDIRECT_INCOMING_RELS, self._REDIRECT_INCOMING_RELS_FALLBACK, params)
         return out_count + in_count
@@ -485,8 +485,8 @@ RETURN count(*) AS deleted
     def _node_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = node_payload_to_cypher_row(
             cast(NodePayload, {
-                "uid": clean_text(payload.get("uid")),
-                "name": clean_text(payload.get("name")) or clean_text(payload.get("uid")),
+                "nid": clean_text(payload.get("nid")),
+                "name": clean_text(payload.get("name")) or clean_text(payload.get("nid")),
                 "labels": self._str_list(payload.get("labels")) or ["Node"],
                 "description": clean_text(payload.get("description")),
                 "group_id": clean_text(payload.get("group_id")),
@@ -496,7 +496,7 @@ RETURN count(*) AS deleted
         )
         return {
             "group_id": row["group_id"],
-            "uid": row["uid"],
+            "nid": row["nid"],
             "name": row["name"],
             "description": row["description"],
             "labels": row["labels"],
@@ -507,8 +507,8 @@ RETURN count(*) AS deleted
     def _relation_create_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         row = relation_payload_to_cypher_row(
             cast(RelationPayload, {
-                "source_uid": clean_text(payload.get("source_uid")),
-                "target_uid": clean_text(payload.get("target_uid")),
+                "source_nid": clean_text(payload.get("source_nid")),
+                "target_nid": clean_text(payload.get("target_nid")),
                 "rel_type": clean_text(payload.get("rel_type")) or "RELATED",
                 "direction": "forward",
                 "group_id": clean_text(payload.get("group_id")),
@@ -518,8 +518,8 @@ RETURN count(*) AS deleted
             })
         )
         return {
-            "source_uid": row["source_uid"],
-            "target_uid": row["target_uid"],
+            "source_nid": row["source_nid"],
+            "target_nid": row["target_nid"],
             "rel_type": row["rel_type"],
             "group_id": row["group_id"],
             "props": row["props"],
@@ -527,15 +527,15 @@ RETURN count(*) AS deleted
 
     def _relation_update_params(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         group_id = clean_text(payload.get("group_id"))
-        source_uid = clean_text(payload.get("source_uid"))
-        target_uid = clean_text(payload.get("target_uid"))
+        source_nid = clean_text(payload.get("source_nid"))
+        target_nid = clean_text(payload.get("target_nid"))
         rel_type = clean_text(payload.get("rel_type")) or "RELATED"
         if not group_id:
             raise ValueError("group_id 不能为空")
-        if not source_uid:
-            raise ValueError("source_uid 不能为空")
-        if not target_uid:
-            raise ValueError("target_uid 不能为空")
+        if not source_nid:
+            raise ValueError("source_nid 不能为空")
+        if not target_nid:
+            raise ValueError("target_nid 不能为空")
 
         input_props = payload.get("properties")
         input_meta = payload.get("meta")
@@ -547,8 +547,8 @@ RETURN count(*) AS deleted
 
         row = relation_payload_to_cypher_row(
             cast(RelationPayload, {
-                "source_uid": source_uid,
-                "target_uid": target_uid,
+                "source_nid": source_nid,
+                "target_nid": target_nid,
                 "rel_type": rel_type,
                 "direction": direction,
                 "group_id": group_id,
@@ -559,8 +559,8 @@ RETURN count(*) AS deleted
             })
         )
         return {
-            "source_uid": source_uid,
-            "target_uid": target_uid,
+            "source_nid": source_nid,
+            "target_nid": target_nid,
             "rel_type": row["rel_type"],
             "group_id": row["group_id"],
             "description": row["props"].get("description", ""),
@@ -583,7 +583,7 @@ RETURN count(*) AS deleted
     # ── 邻居/路径/统计 ─────────────────────────────────────────────────
 
     _NEIGHBORS_QUERY_TEMPLATE = """
-MATCH (start:KnowledgeNode {{uid: $uid, group_id: $group_id}})
+MATCH (start:KnowledgeNode {{nid: $nid, group_id: $group_id}})
 CALL {{
   WITH start
   MATCH path = (start)-[*1..{depth}]->(n:KnowledgeNode)
@@ -601,19 +601,19 @@ RETURN collect(DISTINCT pn) AS nodes, collect(DISTINCT pr) AS rels
 """
 
     _PATH_QUERY = """
-MATCH (src:KnowledgeNode {uid: $source_uid, group_id: $group_id}),
-      (tgt:KnowledgeNode {uid: $target_uid, group_id: $group_id})
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id}),
+      (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 MATCH path = shortestPath((src)-[*..15]-(tgt))
 RETURN [n IN nodes(path) | n] AS nodes,
        [r IN relationships(path) | r] AS rels,
        length(path) AS path_length
 """
 
-    def expand_neighbors(self, group_id: str, uid: str, depth: int = 1) -> dict[str, Any]:
+    def expand_neighbors(self, group_id: str, nid: str, depth: int = 1) -> dict[str, Any]:
         """查询指定节点的 N 跳邻居（双向）。"""
         safe_depth = max(1, min(depth, 5))
         query = self._NEIGHBORS_QUERY_TEMPLATE.format(depth=safe_depth)
-        rows = self._run(query, {"group_id": group_id, "uid": uid})
+        rows = self._run(query, {"group_id": group_id, "nid": nid})
         if not rows:
             return {"nodes": [], "relations": []}
         row = rows[0]
@@ -621,21 +621,21 @@ RETURN [n IN nodes(path) | n] AS nodes,
         rels = []
         for r in (row.get("rels") or []):
             data = self._mapping(r)
-            src_uid = ""
-            tgt_uid = ""
+            src_nid = ""
+            tgt_nid = ""
             try:
                 start = getattr(r, "start_node", lambda: None)()
                 end = getattr(r, "end_node", lambda: None)()
                 if start is not None:
-                    src_uid = clean_text(start.get("uid", ""))
+                    src_nid = clean_text(start.get("nid", ""))
                 if end is not None:
-                    tgt_uid = clean_text(end.get("uid", ""))
+                    tgt_nid = clean_text(end.get("nid", ""))
             except Exception:
                 pass
             rels.append({
                 "id": clean_text(getattr(r, "element_id", "")),
-                "source_uid": src_uid,
-                "target_uid": tgt_uid,
+                "source_nid": src_nid,
+                "target_nid": tgt_nid,
                 "rel_type": clean_text(data.get("rel_type")) or DEFAULT_REL_TYPE,
                 "group_id": clean_text(data.get("group_id")),
                 "description": clean_text(data.get("description")),
@@ -643,12 +643,12 @@ RETURN [n IN nodes(path) | n] AS nodes,
             })
         return {"nodes": [n for n in nodes if n], "relations": rels}
 
-    def find_path(self, group_id: str, source_uid: str, target_uid: str) -> dict[str, Any]:
+    def find_path(self, group_id: str, source_nid: str, target_nid: str) -> dict[str, Any]:
         """查找两节点间最短路径。"""
         rows = self._run(self._PATH_QUERY, {
             "group_id": group_id,
-            "source_uid": source_uid,
-            "target_uid": target_uid,
+            "source_nid": source_nid,
+            "target_nid": target_nid,
         })
         if not rows or not rows[0].get("nodes"):
             return {"nodes": [], "relations": [], "path_length": -1}
@@ -659,16 +659,16 @@ RETURN [n IN nodes(path) | n] AS nodes,
         raw_nodes = row.get("nodes") or []
         for i, r in enumerate(raw_rels):
             data = self._mapping(r)
-            src_uid = ""
-            tgt_uid = ""
+            src_nid = ""
+            tgt_nid = ""
             if i < len(raw_nodes):
-                src_uid = clean_text(self._mapping(raw_nodes[i]).get("uid"))
+                src_nid = clean_text(self._mapping(raw_nodes[i]).get("nid"))
             if i + 1 < len(raw_nodes):
-                tgt_uid = clean_text(self._mapping(raw_nodes[i + 1]).get("uid"))
+                tgt_nid = clean_text(self._mapping(raw_nodes[i + 1]).get("nid"))
             rels.append({
                 "id": clean_text(getattr(r, "element_id", "")),
-                "source_uid": src_uid,
-                "target_uid": tgt_uid,
+                "source_nid": src_nid,
+                "target_nid": tgt_nid,
                 "rel_type": clean_text(data.get("rel_type")) or DEFAULT_REL_TYPE,
                 "group_id": clean_text(data.get("group_id")),
                 "description": clean_text(data.get("description")),
@@ -695,7 +695,7 @@ RETURN [n IN nodes(path) | n] AS nodes,
                 if label:
                     node_types[label] = node_types.get(label, 0) + 1
         rel_types: dict[str, int] = {}
-        connected_uids: set[str] = set()
+        connected_nids: set[str] = set()
         for r in (row.get("rel_samples") or []):
             rt = clean_text(r.get("rel_type"))
             if rt:
@@ -703,10 +703,10 @@ RETURN [n IN nodes(path) | n] AS nodes,
             s = clean_text(r.get("source"))
             t = clean_text(r.get("target"))
             if s:
-                connected_uids.add(s)
+                connected_nids.add(s)
             if t:
-                connected_uids.add(t)
-        orphan_count = max(0, node_count - len(connected_uids))
+                connected_nids.add(t)
+        orphan_count = max(0, node_count - len(connected_nids))
         return {
             "node_count": node_count,
             "rel_count": rel_count,
@@ -731,7 +731,7 @@ RETURN [n IN nodes(path) | n] AS nodes,
         while True:
             data = self.query_graph(group_id, page_size=page_size, node_cursor=nc, rel_cursor=rc)
             for n in data["nodes"]:
-                nodes[n["uid"]] = n
+                nodes[n["nid"]] = n
             rels.extend(data["relations"])
             if not data["nodes_has_more"] and not data["relations_has_more"]:
                 break
@@ -752,11 +752,11 @@ RETURN [n IN nodes(path) | n] AS nodes,
 
         rel_count = 0
         skipped = 0
-        known_ids = {clean_text(n.get("uid")) for n in nodes}
+        known_ids = {clean_text(n.get("nid")) for n in nodes}
         for r in relations:
             r["group_id"] = group_id
-            src = clean_text(r.get("source_uid"))
-            tgt = clean_text(r.get("target_uid"))
+            src = clean_text(r.get("source_nid"))
+            tgt = clean_text(r.get("target_nid"))
             if src not in known_ids or tgt not in known_ids:
                 skipped += 1
                 continue
@@ -769,23 +769,23 @@ RETURN [n IN nodes(path) | n] AS nodes,
         self, group_id: str, nodes: list[dict[str, Any]], relations: list[dict[str, Any]],
         settings: Mapping[str, Any],
     ) -> dict[str, Any]:
-        """按 uid MERGE 节点，按 src+tgt MERGE 关系，不删除已有数据。"""
-        known_ids = self._collect_group_uids(group_id)
+        """按 nid MERGE 节点，按 src+tgt MERGE 关系，不删除已有数据。"""
+        known_ids = self._collect_group_nids(group_id)
         node_count = 0
         for n in nodes:
             n["group_id"] = group_id
             self.create_node(n)
-            uid = clean_text(n.get("uid"))
-            if uid:
-                known_ids.add(uid)
+            nid = clean_text(n.get("nid"))
+            if nid:
+                known_ids.add(nid)
             node_count += 1
 
         rel_count = 0
         skipped = 0
         for r in relations:
             r["group_id"] = group_id
-            src = clean_text(r.get("source_uid"))
-            tgt = clean_text(r.get("target_uid"))
+            src = clean_text(r.get("source_nid"))
+            tgt = clean_text(r.get("target_nid"))
             if src not in known_ids or tgt not in known_ids:
                 skipped += 1
                 continue
@@ -795,25 +795,25 @@ RETURN [n IN nodes(path) | n] AS nodes,
 
         return {"nodes_imported": node_count, "relations_imported": rel_count, "relations_skipped": skipped}
 
-    def _collect_group_uids(self, group_id: str) -> set[str]:
-        """收集指定 group_id 下的全部节点 uid，用于关系导入前校验。"""
-        uids: set[str] = set()
+    def _collect_group_nids(self, group_id: str) -> set[str]:
+        """收集指定 group_id 下的全部节点 nid，用于关系导入前校验。"""
+        nids: set[str] = set()
         page_size = 500
         page = 1
         while True:
             offset = (page - 1) * page_size
             rows = self._run(
-                "MATCH (n:KnowledgeNode {group_id: $group_id}) RETURN n.uid AS uid SKIP $offset LIMIT $limit",
+                "MATCH (n:KnowledgeNode {group_id: $group_id}) RETURN n.nid AS nid SKIP $offset LIMIT $limit",
                 {"group_id": group_id, "offset": offset, "limit": page_size},
             )
             for row in rows:
-                uid = clean_text(row.get("uid"))
-                if uid:
-                    uids.add(uid)
+                nid = clean_text(row.get("nid"))
+                if nid:
+                    nids.add(nid)
             if len(rows) < page_size:
                 break
             page += 1
-        return uids
+        return nids
 
     # ── 关闭 ───────────────────────────────────────────────────────────
 
@@ -829,8 +829,8 @@ RETURN [n IN nodes(path) | n] AS nodes,
         if value is None:
             return None
         data = self._mapping(value)
-        uid = clean_text(data.get("uid"))
-        if not uid:
+        nid = clean_text(data.get("nid"))
+        if not nid:
             return None
         labels = self._str_list(data.get("labels"))
         explicit = self._str_list(explicit_labels)
@@ -846,8 +846,8 @@ RETURN [n IN nodes(path) | n] AS nodes,
         properties = extract_properties(data, NODE_RESERVED_PROP_KEYS)
         meta, properties = split_meta_from_props(properties)
         return {
-            "uid": uid,
-            "name": clean_text(data.get("name")) or uid,
+            "nid": nid,
+            "name": clean_text(data.get("name")) or nid,
             "group_id": clean_text(data.get("group_id")),
             "description": clean_text(data.get("description")),
             "labels": labels,
@@ -881,8 +881,8 @@ RETURN [n IN nodes(path) | n] AS nodes,
 
         return {
             "id": rel_id,
-            "source_uid": src_node.get("uid"),
-            "target_uid": tgt_node.get("uid"),
+            "source_nid": src_node.get("nid"),
+            "target_nid": tgt_node.get("nid"),
             "rel_type": rel_type or DEFAULT_REL_TYPE,
             "group_id": clean_text(data.get("group_id")),
             "description": clean_text(data.get("description")),

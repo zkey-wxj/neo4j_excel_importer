@@ -10,12 +10,12 @@ from core.types import NodePayload, RelationPayload, clean_text
 
 CONSTRAINT_CYPHER = (
     "CREATE CONSTRAINT IF NOT EXISTS "
-    f"FOR (n:{NODE_LABEL}) REQUIRE n.uid IS UNIQUE"
+    f"FOR (n:{NODE_LABEL}) REQUIRE n.nid IS UNIQUE"
 )
 
 UPSERT_NODES = """
 UNWIND $rows AS row
-MERGE (n:KnowledgeNode {uid: row.uid})
+MERGE (n:KnowledgeNode {nid: row.nid})
 SET n.name        = row.name,
     n.description = row.description,
     n.group_id    = row.group_id
@@ -30,7 +30,7 @@ RETURN count(node)
 
 UPSERT_NODES_GENERIC = """
 UNWIND $rows AS row
-MERGE (n:KnowledgeNode {uid: row.uid})
+MERGE (n:KnowledgeNode {nid: row.nid})
 SET n.name        = row.name,
     n.description = row.description,
     n.group_id    = row.group_id
@@ -42,23 +42,23 @@ SET n += row.props
 
 UPSERT_RELS_APOC = """
 UNWIND $rows AS row
-MATCH (src:KnowledgeNode {uid: row.source_uid})
-MATCH (tgt:KnowledgeNode {uid: row.target_uid})
+MATCH (src:KnowledgeNode {nid: row.source_nid})
+MATCH (tgt:KnowledgeNode {nid: row.target_nid})
 CALL apoc.merge.relationship(src, row.rel_type, {group_id: row.group_id}, row.props, tgt)
 YIELD rel RETURN count(rel)
 """
 
 UPSERT_RELS_GENERIC = """
 UNWIND $rows AS row
-MATCH (src:KnowledgeNode {uid: row.source_uid})
-MATCH (tgt:KnowledgeNode {uid: row.target_uid})
+MATCH (src:KnowledgeNode {nid: row.source_nid})
+MATCH (tgt:KnowledgeNode {nid: row.target_nid})
 MERGE (src)-[r:RELATED {rel_type: row.rel_type, group_id: row.group_id}]->(tgt)
 SET r += row.props
 """
 
 _PRIMITIVE_TYPES = (str, bool, int, float)
-_NODE_RESERVED_PROP_KEYS = {"uid", "name", "description", "group_id", "labels"}
-_REL_RESERVED_PROP_KEYS = {"source_uid", "target_uid", "rel_type", "group_id"}
+_NODE_RESERVED_PROP_KEYS = {"nid", "name", "description", "group_id", "labels"}
+_REL_RESERVED_PROP_KEYS = {"source_nid", "target_nid", "rel_type", "group_id"}
 
 
 def _is_primitive_list(values: list[Any]) -> bool:
@@ -138,7 +138,7 @@ def node_payload_to_cypher_row(payload: NodePayload) -> dict[str, Any]:
             embedding_value = None
 
     return {
-        "uid": clean_text(payload.get("uid")),
+        "nid": clean_text(payload.get("nid")),
         "name": clean_text(payload.get("name")),
         "description": clean_text(payload.get("description")),
         "group_id": clean_text(payload.get("group_id")),
@@ -173,8 +173,8 @@ def relation_payload_to_cypher_row(payload: RelationPayload) -> dict[str, Any]:
         props["weight"] = float(weight)
 
     return {
-        "source_uid": clean_text(payload.get("source_uid")),
-        "target_uid": clean_text(payload.get("target_uid")),
+        "source_nid": clean_text(payload.get("source_nid")),
+        "target_nid": clean_text(payload.get("target_nid")),
         "rel_type": clean_text(payload.get("rel_type")),
         "group_id": clean_text(payload.get("group_id")),
         "props": props,

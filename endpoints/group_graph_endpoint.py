@@ -104,7 +104,7 @@ class GroupGraphEndpoint(Endpoint):
     def _create_node(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
         """新增节点。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "uid"])
+        err = self._validate_required(body, ["group_id", "nid"])
         if err:
             return self._json_response({"error": err}, 400)
         try:
@@ -120,7 +120,7 @@ class GroupGraphEndpoint(Endpoint):
     def _update_node(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
         """更新节点。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "uid"])
+        err = self._validate_required(body, ["group_id", "nid"])
         if err:
             return self._json_response({"error": err}, 400)
         try:
@@ -136,7 +136,7 @@ class GroupGraphEndpoint(Endpoint):
     def _delete_node(self, r: Request, store: GroupGraphStore) -> Response:
         """删除节点。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "uid"])
+        err = self._validate_required(body, ["group_id", "nid"])
         if err:
             return self._json_response({"error": err}, 400)
         deleted = store.delete_node(body)
@@ -147,7 +147,7 @@ class GroupGraphEndpoint(Endpoint):
     def _create_relation(self, r: Request, store: GroupGraphStore) -> Response:
         """新增关系。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "source_uid", "target_uid", "rel_type"])
+        err = self._validate_required(body, ["group_id", "source_nid", "target_nid", "rel_type"])
         if err:
             return self._json_response({"error": err}, 400)
         relation_ref = store.create_relation(body)
@@ -158,7 +158,7 @@ class GroupGraphEndpoint(Endpoint):
     def _update_relation(self, r: Request, store: GroupGraphStore) -> Response:
         """更新关系。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "source_uid", "target_uid", "rel_type"])
+        err = self._validate_required(body, ["group_id", "source_nid", "target_nid", "rel_type"])
         if err:
             return self._json_response({"error": err}, 400)
         relation_ref = store.update_relation(body)
@@ -169,7 +169,7 @@ class GroupGraphEndpoint(Endpoint):
     def _delete_relation(self, r: Request, store: GroupGraphStore) -> Response:
         """删除关系。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "source_uid", "target_uid"])
+        err = self._validate_required(body, ["group_id", "source_nid", "target_nid"])
         if err:
             return self._json_response({"error": err}, 400)
         deleted = store.delete_relation(body)
@@ -178,37 +178,37 @@ class GroupGraphEndpoint(Endpoint):
         return self._json_response({"ok": True, "deleted": deleted}, 200)
 
     def _replace_node_relations(self, r: Request, store: GroupGraphStore) -> Response:
-        """将 old_uid 节点的全部关系转移至 new_uid 节点。"""
+        """将 old_nid 节点的全部关系转移至 new_nid 节点。"""
         body = self._body_json(r)
-        err = self._validate_required(body, ["group_id", "old_uid", "new_uid"])
+        err = self._validate_required(body, ["group_id", "old_nid", "new_nid"])
         if err:
             return self._json_response({"error": err}, 400)
         group_id = clean_text(body["group_id"])
-        old_uid = clean_text(body["old_uid"])
-        new_uid = clean_text(body["new_uid"])
-        if old_uid == new_uid:
-            return self._json_response({"error": "old_uid 和 new_uid 不能相同"}, 400)
-        redirected = store.replace_node_relations(group_id, old_uid, new_uid)
+        old_nid = clean_text(body["old_nid"])
+        new_nid = clean_text(body["new_nid"])
+        if old_nid == new_nid:
+            return self._json_response({"error": "old_nid 和 new_nid 不能相同"}, 400)
+        redirected = store.replace_node_relations(group_id, old_nid, new_nid)
         return self._json_response({"ok": True, "redirected": redirected}, 200)
 
     def _expand_neighbors(self, r: Request, store: GroupGraphStore) -> Response:
         """查询节点的 N 跳邻居。"""
         group_id = clean_text(r.args.get("group_id"))
-        uid = clean_text(r.args.get("uid"))
-        if not group_id or not uid:
-            return self._json_response({"error": "group_id 和 uid 不能为空"}, 400)
+        nid = clean_text(r.args.get("nid"))
+        if not group_id or not nid:
+            return self._json_response({"error": "group_id 和 nid 不能为空"}, 400)
         depth = self._limit(r.args.get("depth"), default=1, max_value=5)
-        result = store.expand_neighbors(group_id, uid, depth)
+        result = store.expand_neighbors(group_id, nid, depth)
         return self._json_response(result, 200)
 
     def _find_path(self, r: Request, store: GroupGraphStore) -> Response:
         """查找两节点间最短路径。"""
         group_id = clean_text(r.args.get("group_id"))
-        source_uid = clean_text(r.args.get("source_uid"))
-        target_uid = clean_text(r.args.get("target_uid"))
-        if not group_id or not source_uid or not target_uid:
-            return self._json_response({"error": "group_id、source_uid、target_uid 不能为空"}, 400)
-        result = store.find_path(group_id, source_uid, target_uid)
+        source_nid = clean_text(r.args.get("source_nid"))
+        target_nid = clean_text(r.args.get("target_nid"))
+        if not group_id or not source_nid or not target_nid:
+            return self._json_response({"error": "group_id、source_nid、target_nid 不能为空"}, 400)
+        result = store.find_path(group_id, source_nid, target_nid)
         return self._json_response(result, 200)
 
     def _get_stats(self, r: Request, store: GroupGraphStore) -> Response:
@@ -258,7 +258,7 @@ class GroupGraphEndpoint(Endpoint):
 
     def _import_data(self, r: Request, store: GroupGraphStore, settings: Mapping[str, Any]) -> Response:
         """从上传的 Excel/JSON 文件导入节点和关系到指定 group_id。
-        mode=override：清空分组后导入；mode=merge：按 uid UPSERT 合并。
+        mode=override：清空分组后导入；mode=merge：按 nid UPSERT 合并。
         """
         group_id = clean_text(r.args.get("group_id"))
         mode = clean_text(r.args.get("mode") or "merge").lower()
@@ -358,7 +358,7 @@ class GroupGraphEndpoint(Endpoint):
 
         node_payload = dict(normalize_node(payload, index=0))
         if not clean_text(node_payload.get("name")):
-            node_payload["name"] = clean_text(node_payload.get("uid"))
+            node_payload["name"] = clean_text(node_payload.get("nid"))
 
         raw_meta = node_payload.get("meta")
         normalized_meta = dict(raw_meta) if isinstance(raw_meta, dict) else {}
