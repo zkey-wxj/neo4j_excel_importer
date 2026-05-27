@@ -42,6 +42,10 @@ export default function useGraphCanvas(canvasRef) {
   const pathHighlight = useAppStore((s) => s.pathHighlight)
   const pickTarget = useAppStore((s) => s.pickTarget)
   const showMinimap = useAppStore((s) => s.showMinimap)
+  const edgeCreating = useAppStore((s) => s.edgeCreating)
+  const edgeSourceId = useAppStore((s) => s.edgeSourceId)
+  const edgeMouseWorld = useAppStore((s) => s.edgeMouseWorld)
+  const edgeTargetId = useAppStore((s) => s.edgeTargetId)
 
   const setSelectedNode = useAppStore((s) => s.setSelectedNode)
   const setHoveredNode = useAppStore((s) => s.setHoveredNode)
@@ -50,6 +54,11 @@ export default function useGraphCanvas(canvasRef) {
   const setPickTarget = useAppStore((s) => s.setPickTarget)
   const setPickedNid = useAppStore((s) => s.setPickedNid)
   const setStatus = useAppStore((s) => s.setStatus)
+  const setEdgeCreating = useAppStore((s) => s.setEdgeCreating)
+  const setEdgeSourceId = useAppStore((s) => s.setEdgeSourceId)
+  const setEdgeMouseWorld = useAppStore((s) => s.setEdgeMouseWorld)
+  const setEdgeTargetId = useAppStore((s) => s.setEdgeTargetId)
+  const setEdgePopoverPos = useAppStore((s) => s.setEdgePopoverPos)
 
   // ── Refs（可变内部状态，不触发重渲染）────────────────────────────────
   const ctxRef = useRef(null)      // Canvas 2D 渲染上下文
@@ -89,6 +98,10 @@ export default function useGraphCanvas(canvasRef) {
     selectedRelTypes: new Set(),
     pathHighlight: null,
     pickTarget: null,
+    edgeCreating: false,
+    edgeSourceId: null,
+    edgeMouseWorld: null,
+    edgeTargetId: null,
   })
 
   // 保持快照与 store 同步
@@ -102,6 +115,10 @@ export default function useGraphCanvas(canvasRef) {
       selectedRelTypes,
       pathHighlight,
       pickTarget,
+      edgeCreating,
+      edgeSourceId,
+      edgeMouseWorld,
+      edgeTargetId,
     }
   }, [
     selectedNodeId,
@@ -112,6 +129,10 @@ export default function useGraphCanvas(canvasRef) {
     selectedRelTypes,
     pathHighlight,
     pickTarget,
+    edgeCreating,
+    edgeSourceId,
+    edgeMouseWorld,
+    edgeTargetId,
   ])
 
   // ── Canvas 初始化 ────────────────────────────────────────────────────
@@ -730,6 +751,55 @@ export default function useGraphCanvas(canvasRef) {
     drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae)
     drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn)
 
+    // 建边预览：源节点到光标的蓝色虚线箭头
+    if (snap.edgeCreating && snap.edgeMouseWorld) {
+      const srcNode = nodesRef.current.find((n) => n.id === snap.edgeSourceId)
+      const mw = snap.edgeMouseWorld
+      if (srcNode && Number.isFinite(mw.x)) {
+        c.save()
+        c.setLineDash([6 / k, 4 / k])
+        c.strokeStyle = '#3b82f6'
+        c.lineWidth = 2 / k
+        c.globalAlpha = 0.8
+        c.beginPath()
+        c.moveTo(srcNode.x ?? 0, srcNode.y ?? 0)
+        c.lineTo(mw.x, mw.y)
+        c.stroke()
+        // 箭头
+        const angle = Math.atan2(mw.y - (srcNode.y ?? 0), mw.x - (srcNode.x ?? 0))
+        const sz = 10 / k
+        c.setLineDash([])
+        c.fillStyle = '#3b82f6'
+        c.beginPath()
+        c.moveTo(mw.x, mw.y)
+        c.lineTo(mw.x - sz * Math.cos(angle - 0.4), mw.y - sz * Math.sin(angle - 0.4))
+        c.lineTo(mw.x - sz * Math.cos(angle + 0.4), mw.y - sz * Math.sin(angle + 0.4))
+        c.closePath()
+        c.fill()
+        c.restore()
+      }
+      // 目标节点高亮：蓝色脉冲光晕
+      if (snap.edgeTargetId) {
+        const tgtNode = nodesRef.current.find((n) => n.id === snap.edgeTargetId)
+        if (tgtNode && Number.isFinite(tgtNode.x)) {
+          const tr = tgtNode.r ?? 10
+          c.save()
+          c.globalAlpha = 0.35
+          c.strokeStyle = '#3b82f6'
+          c.lineWidth = 3 / k
+          c.beginPath()
+          c.arc(tgtNode.x, tgtNode.y, tr + 6 / k, 0, Math.PI * 2)
+          c.stroke()
+          c.globalAlpha = 0.12
+          c.fillStyle = '#3b82f6'
+          c.beginPath()
+          c.arc(tgtNode.x, tgtNode.y, tr + 10 / k, 0, Math.PI * 2)
+          c.fill()
+          c.restore()
+        }
+      }
+    }
+
     c.restore()
 
     if (showMinimap) drawMinimap()
@@ -979,6 +1049,18 @@ export default function useGraphCanvas(canvasRef) {
       const canvas = canvasRef.current
       if (!canvas) return
 
+      // 建边拖拽：更新鼠标坐标和悬停目标节点
+      if (storeSnap.current.edgeCreating) {
+        const [mwx, mwy] = toWorld(e.clientX, e.clientY)
+        setEdgeMouseWorld({ x: mwx, y: mwy })
+        const tgt = findNodeAt(mwx, mwy)
+        const srcId = storeSnap.current.edgeSourceId
+        setEdgeTargetId(tgt && tgt.id !== srcId ? tgt.id : null)
+        canvas.style.cursor = tgt ? 'copy' : 'crosshair'
+        scheduleRender()
+        return
+      }
+
       // 拖拽节点：将鼠标位置转换为世界坐标并更新节点固定位置
       if (dragging.current) {
         const [wx, wy] = toWorld(e.clientX, e.clientY)
@@ -1063,6 +1145,8 @@ export default function useGraphCanvas(canvasRef) {
       isNeighbor,
       setHoveredNode,
       setDetailNode,
+      setEdgeMouseWorld,
+      setEdgeTargetId,
       scheduleRender,
     ],
   )
@@ -1080,6 +1164,15 @@ export default function useGraphCanvas(canvasRef) {
       const snap = storeSnap.current
 
       if (nd && !snap.selectedNodeId) {
+        if (e.shiftKey) {
+          canvas.setPointerCapture(e.pointerId)
+          setEdgeCreating(true)
+          setEdgeSourceId(nd.id)
+          setEdgeMouseWorld({ x: wx, y: wy })
+          setEdgeTargetId(null)
+          canvas.style.cursor = 'crosshair'
+          return
+        }
         canvas.setPointerCapture(e.pointerId)
         dragging.current = nd
         dragWX.current = wx
@@ -1097,11 +1190,34 @@ export default function useGraphCanvas(canvasRef) {
         canvas.style.cursor = 'grabbing'
       }
     },
-    [canvasRef, toWorld, findNodeAt],
+    [canvasRef, toWorld, findNodeAt, setEdgeCreating, setEdgeSourceId, setEdgeMouseWorld, setEdgeTargetId],
   )
 
   /** 指针释放事件：结束拖拽或平移操作 */
   const onPtrUp = useCallback(() => {
+    // 建边模式：释放到目标节点上则弹浮窗，否则取消
+    if (storeSnap.current.edgeCreating) {
+      const canvas = canvasRef.current
+      const tgtId = storeSnap.current.edgeTargetId
+      if (tgtId) {
+        const t = transformRef.current
+        const tgtNode = nodesRef.current.find((n) => n.id === tgtId)
+        if (tgtNode) {
+          const sx = tgtNode.x * t.k + t.x
+          const sy = tgtNode.y * t.k + t.y
+          setEdgePopoverPos({ x: sx, y: sy })
+        }
+      } else {
+        setEdgeCreating(false)
+        setEdgeSourceId(null)
+        setEdgeMouseWorld(null)
+        setEdgeTargetId(null)
+        if (canvas) canvas.style.cursor = 'default'
+      }
+      scheduleRender()
+      return
+    }
+
     if (dragging.current) {
       if (isDrag.current) simRef.current?.alphaTarget(0)
       dragging.current.fx = null
@@ -1114,7 +1230,7 @@ export default function useGraphCanvas(canvasRef) {
       const canvas = canvasRef.current
       if (canvas) canvas.style.cursor = 'default'
     }
-  }, [canvasRef])
+  }, [canvasRef, setEdgePopoverPos, setEdgeCreating, setEdgeSourceId, setEdgeMouseWorld, setEdgeTargetId, scheduleRender])
 
   /** 指针离开画布：清除悬停状态和光标样式 */
   const onPtrLeave = useCallback(() => {
@@ -1212,12 +1328,27 @@ export default function useGraphCanvas(canvasRef) {
   // ── 键盘事件（ESC 退出抓取模式）──────────────────────────────────────
   const onKeyDown = useCallback(
     (e) => {
-      if (e.key === 'Escape' && storeSnap.current.pickTarget) {
-        setPickTarget(null)
-        setStatus('Pick mode cancelled')
+      if (e.key === 'Escape') {
+        if (storeSnap.current.edgeCreating) {
+          setEdgeCreating(false)
+          setEdgeSourceId(null)
+          setEdgeMouseWorld(null)
+          setEdgeTargetId(null)
+          setEdgePopoverPos(null)
+          setStatus('已取消建边')
+          const canvas = canvasRef.current
+          if (canvas) canvas.style.cursor = 'default'
+          scheduleRender()
+          return
+        }
+        if (storeSnap.current.pickTarget) {
+          setPickTarget(null)
+          setStatus('Pick mode cancelled')
+        }
       }
     },
-    [setPickTarget, setStatus],
+    [setPickTarget, setStatus, setEdgeCreating, setEdgeSourceId,
+      setEdgeMouseWorld, setEdgeTargetId, setEdgePopoverPos, scheduleRender, canvasRef],
   )
 
   // ── 窗口尺寸变化处理 ─────────────────────────────────────────────────

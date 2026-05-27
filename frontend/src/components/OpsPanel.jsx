@@ -170,18 +170,18 @@ export default function OpsPanel() {
   // 加载图谱
   const handleLoad = wrap(async () => { const g = clean(groupId); if (!g) { setStatus('group_id 不能为空', true); return }; await loadGroup(g) })
   // 节点 CRUD
-  const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认新增节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'POST', p) })
-  const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认更新节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'PUT', p) })
-  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }) })
-  const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'POST', p) })
-  const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'PUT', p) })
-  const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }) })
+  const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认新增节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'POST', p); r ? notify('新增成功') : notify('新增失败', 'error') })
+  const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认更新节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'PUT', p); r ? notify('更新成功') : notify('更新失败', 'error') })
+  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }); r ? notify('删除成功') : notify('删除失败', 'error') })
+  const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'POST', p); r ? notify('新增成功') : notify('新增失败', 'error') })
+  const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'PUT', p); r ? notify('更新成功') : notify('更新失败', 'error') })
+  const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }); r ? notify('删除成功') : notify('删除失败', 'error') })
   // 路径查询：BFS 最短路径
   const handleFindPath = () => { const s = clean(pathSource), t = clean(pathTarget); if (!s || !t) { setStatus('请输入起点和终点', true); return }; if (s === t) { setStatus('起点和终点相同', true); return }; const r = findPath(s, t); if (r.error) { setStatus(r.error, true); return }; setPathHighlight(r.highlight); setHasPath(true); setStatus(`路径: ${r.hops} 跳, ${r.pathNodes.length} 节点`) }
   // 清除路径高亮
   const handleClearPath = () => { setPathHighlight(null); setHasPath(false); setStatus('已清除路径高亮') }
   // 关系替换：将旧节点的所有关系转移到新节点
-  const handleReplace = wrap(async () => { const g = clean(groupId), o = clean(replaceOld), n = clean(replaceNew); if (!g || !o || !n) { notify('字段不能为空', 'error'); return }; if (o === n) { notify('不能相同', 'error'); return }; if (!await confirm(`确认将全部关系从 ${o} 转移至 ${n}？`)) return; await mutate('/group-graph/api/replace-node-relations', 'POST', { group_id: g, old_nid: o, new_nid: n }) })
+  const handleReplace = wrap(async () => { const g = clean(groupId), o = clean(replaceOld), n = clean(replaceNew); if (!g || !o || !n) { notify('字段不能为空', 'error'); return }; if (o === n) { notify('不能相同', 'error'); return }; if (!await confirm(`确认将全部关系从 ${o} 转移至 ${n}？`)) return; const r = await mutate('/group-graph/api/replace-node-relations', 'POST', { group_id: g, old_nid: o, new_nid: n }); r ? notify('替换成功') : notify('替换失败', 'error') })
 
   const [panelOffset, setPanelOffset] = useState(0)
   const [panelReady, setPanelReady] = useState(false)

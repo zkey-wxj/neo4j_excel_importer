@@ -55,9 +55,9 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional group_id filter on both sides.
-      zh_Hans: 可选 group_id 过滤（同时作用于两端节点）。
-    llm_description: Optional group_id filter.
+      en_US: Optional group_id filter on both sides. If omitted, uses the default from provider config.
+      zh_Hans: 可选 group_id 过滤（同时作用于两端节点）；不填时取插件默认配置。
+    llm_description: Optional group_id filter. Falls back to provider default when not set.
     form: llm
 
   - name: limit

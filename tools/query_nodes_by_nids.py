@@ -28,7 +28,7 @@ LIMIT $limit
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         raw_nids = clean_text(tool_parameters.get("nids"))
-        group_id = normalize_group_id(tool_parameters.get("group_id"))
+        group_id = normalize_group_id(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         database = clean_text(tool_parameters.get("database"))
         logger.info("QueryNodesByNidsTool invoked | nids=%s group_id=%s", raw_nids, group_id)
         if not raw_nids:

@@ -20,9 +20,9 @@ logger.addHandler(plugin_logger_handler)
 class SaveNodesBatchTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         nodes_payload = tool_parameters.get("nodes_json")
-        embedding_model = tool_parameters.get("embedding_model")
+        embedding_model = self.runtime.credentials.get("embedding_model")
         batch_size = int(tool_parameters.get("batch_size") or 500)
-        group_id = clean_text(tool_parameters.get("group_id"))
+        group_id = clean_text(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("SaveNodesBatchTool invoked | count=%s group_id=%s", len(nodes_payload) if isinstance(nodes_payload, list) else "?", group_id)
         if nodes_payload is None:
             yield self.create_text_message("❌ nodes_json 不能为空。")

@@ -56,6 +56,13 @@ export const useAppStore = create((set, get) => ({
   // ── 操作面板触发器 ──
   opsExpand: false,    // 从详情面板「编辑」按钮触发展开操作面板的信号
 
+  // ── 拖拽建边 ──
+  edgeCreating: false,        // 是否处于建边模式
+  edgeSourceId: null,          // 源节点 ID
+  edgeMouseWorld: null,        // 当前鼠标世界坐标 {x, y}
+  edgeTargetId: null,          // 悬停的目标节点 ID
+  edgePopoverPos: null,        // 浮窗屏幕坐标 {x, y}
+
   // ── 确认对话框 ──
   confirmOpen: false,       // 是否显示确认对话框
   confirmMessage: '',       // 确认对话框的提示文本
@@ -81,6 +88,16 @@ export const useAppStore = create((set, get) => ({
   setImportMode: (v) => set({ importMode: v }),
   setPickTarget: (v) => set({ pickTarget: v }),
   setPickedNid: (v) => set({ pickedNid: v }),
+  setEdgeCreating: (v) => set({ edgeCreating: v }),
+  setEdgeSourceId: (v) => set({ edgeSourceId: v }),
+  setEdgeMouseWorld: (v) => set({ edgeMouseWorld: v }),
+  setEdgeTargetId: (v) => set({ edgeTargetId: v }),
+  setEdgePopoverPos: (v) => set({ edgePopoverPos: v }),
+  /** 重置所有建边状态 */
+  resetEdgeCreation: () => set({
+    edgeCreating: false, edgeSourceId: null,
+    edgeMouseWorld: null, edgeTargetId: null, edgePopoverPos: null,
+  }),
   setPathHighlight: (v) => set({ pathHighlight: v }),
   setDetailNode: (v) => set({ detailNode: v }),
   setConfirmOpen: (v) => set({ confirmOpen: v }),

@@ -20,7 +20,7 @@ class SaveRelationsBatchTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         relations_payload = tool_parameters.get("relations_json")
         batch_size = int(tool_parameters.get("batch_size") or 500)
-        group_id = clean_text(tool_parameters.get("group_id"))
+        group_id = clean_text(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("SaveRelationsBatchTool invoked | count=%s group_id=%s", len(relations_payload) if isinstance(relations_payload, list) else "?", group_id)
         if relations_payload is None:
             yield self.create_text_message("❌ relations_json 不能为空。")

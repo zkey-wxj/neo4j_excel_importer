@@ -90,7 +90,7 @@ LIMIT $limit
         }
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        group_id = clean_text(tool_parameters.get("group_id"))
+        group_id = clean_text(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         database = clean_text(tool_parameters.get("database"))
         logger.info("QueryGroupGraphTool invoked | group_id=%s database=%s", group_id, database)
         if not group_id:

@@ -94,13 +94,14 @@ parameters:
     human_description:
       en_US: >
         Optional group identifier for this import batch. If omitted, the tool reuses the last group_id
-        in current Dify session storage; if none exists, a new UUID will be generated.
+        in current Dify session storage; if none exists, falls back to the default from provider config,
+        or generates a new UUID if still empty.
       zh_Hans: >
         本次导入的可选分组标识。若不传，工具会优先复用当前 Dify 会话存储中的上次 group_id；
-        若会话中不存在，则自动生成新的 UUID。
+        若会话中不存在，则取插件默认配置；若仍未配置，则自动生成新的 UUID。
     llm_description: >
       Optional import group id. If absent, load from current session storage key `import_graph:last_group_id`,
-      otherwise auto-generate a UUID.
+      then fall back to provider default, otherwise auto-generate a UUID.
     form: llm
 
   - name: mapping
@@ -194,19 +195,6 @@ parameters:
               items:
                 type: string
     form: llm
-
-  - name: embedding_model
-    type: model-selector
-    scope: text-embedding
-    required: false
-    label:
-      en_US: Embedding Model
-      zh_Hans: 向量模型
-    human_description:
-      en_US: Optional Dify text-embedding model for generating node embeddings during import.
-      zh_Hans: 可选 Dify text-embedding 模型，在导入时生成节点向量。
-    llm_description: Optional text-embedding model selector for node embeddings.
-    form: form
 
   - name: embedding_batch_size
     type: number

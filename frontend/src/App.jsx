@@ -11,6 +11,7 @@ import DetailPanel from '@/components/DetailPanel'
 import LegendPanel from '@/components/LegendPanel'
 import ImportModal from '@/components/ImportModal'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import EdgeCreatePopover from '@/components/EdgeCreatePopover'
 import FullscreenLoading from '@/components/FullscreenLoading'
 import TopLoadingBar from '@/components/TopLoadingBar'
 import Minimap from '@/components/Minimap'
@@ -97,6 +98,9 @@ export default function App() {
 
         {/* 确认对话框：通用确认弹窗，用于危险操作前的二次确认 */}
         <ConfirmDialog />
+
+        {/* 建边浮窗：拖拽建边完成后弹出，输入关系类型并创建 */}
+        <EdgeCreatePopover />
 
         {/* 消息通知：顶部居中显示操作结果的 Toast 提示 */}
         <Toaster

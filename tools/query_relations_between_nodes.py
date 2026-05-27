@@ -36,7 +36,7 @@ LIMIT $limit
         target_nid = clean_text(tool_parameters.get("target_nid"))
         relation_type = clean_text(tool_parameters.get("relation_type"))
         database = clean_text(tool_parameters.get("database"))
-        group_id = normalize_group_id(tool_parameters.get("group_id"))
+        group_id = normalize_group_id(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("QueryRelationsBetweenNodesTool invoked | src=%s tgt=%s", source_nid, target_nid)
         if not source_nid or not target_nid:
             yield self.create_text_message("❌ source_nid 与 target_nid 不能为空。")

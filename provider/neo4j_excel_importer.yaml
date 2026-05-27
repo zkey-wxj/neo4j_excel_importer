@@ -38,6 +38,29 @@ credentials_for_provider:
       en_US: Neo4j Password
       zh_Hans: Neo4j 密码
 
+  group_id:
+    type: text-input
+    required: false
+    label:
+      en_US: Default Group ID
+      zh_Hans: 默认分组 ID
+    placeholder:
+      en_US: "e.g. my-project"
+      zh_Hans: "如 my-project"
+    help:
+      en_US: Default group_id for all tools. Tool-level parameter takes precedence when set.
+      zh_Hans: 所有工具的默认 group_id。工具参数单独设置时优先使用工具参数。
+  embedding_model:
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Default Embedding Model
+      zh_Hans: 默认向量模型
+    help:
+      en_US: Default text-embedding model for all tools. Tool-level parameter takes precedence when set.
+      zh_Hans: 所有工具的默认向量模型。工具参数单独设置时优先使用工具参数。
+
 tools:
   - tools/import_graph.yaml
   - tools/extract_graph_data.yaml

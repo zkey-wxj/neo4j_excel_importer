@@ -72,9 +72,9 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional default group id for this write. Used when relation_json has no group_id.
-      zh_Hans: 本次写入的可选默认分组 ID；当 relation_json 未提供 group_id 时使用。
-    llm_description: Optional default group id for this write operation.
+      en_US: Optional default group id for this write. Used when relation_json has no group_id. If omitted, uses the default from provider config.
+      zh_Hans: 本次写入的可选默认分组 ID；当 relation_json 未提供 group_id 时使用；不填时取插件默认配置。
+    llm_description: Optional default group id for this write. Falls back to provider default when not set.
     form: llm
 
 output_schema:

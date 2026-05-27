@@ -31,9 +31,9 @@ parameters:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Optional group_id filter.
-      zh_Hans: 可选 group_id 过滤条件。
-    llm_description: Optional group_id filter.
+      en_US: Optional group_id filter. If omitted, uses the default from provider config.
+      zh_Hans: 可选 group_id 过滤条件；不填时取插件默认配置。
+    llm_description: Optional group_id filter. Falls back to provider default when not set.
     form: llm
 
   - name: limit
@@ -59,19 +59,6 @@ parameters:
       en_US: Optional Neo4j database name.
       zh_Hans: 可选 Neo4j 数据库名称。
     llm_description: Optional Neo4j database name.
-    form: form
-
-  - name: embedding_model
-    type: model-selector
-    scope: text-embedding
-    required: false
-    label:
-      en_US: Embedding Model
-      zh_Hans: 向量模型
-    human_description:
-      en_US: Optional Dify text-embedding model. When provided, vector retrieval is attempted before text fallback.
-      zh_Hans: 可选 Dify text-embedding 模型。提供后会优先尝试向量检索，失败时回退文本检索。
-    llm_description: Optional text-embedding model selector for vector retrieval.
     form: form
 
 output_schema:

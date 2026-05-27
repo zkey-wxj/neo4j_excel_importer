@@ -14,14 +14,14 @@ description:
 parameters:
   - name: group_id
     type: string
-    required: true
+    required: false
     label:
       en_US: Group ID
       zh_Hans: 分组 ID
     human_description:
-      en_US: Group id used when importing graph data.
-      zh_Hans: 图谱导入时使用的分组 ID。
-    llm_description: Required group_id.
+      en_US: Group id used when importing graph data. If omitted, uses the default from provider config.
+      zh_Hans: 图谱导入时使用的分组 ID；不填时取插件默认配置。
+    llm_description: Optional group_id. Falls back to provider default when not set.
     form: llm
 
   - name: database

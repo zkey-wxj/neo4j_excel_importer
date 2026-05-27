@@ -40,8 +40,8 @@ class ImportGraphTool(GraphParser, Tool):
         embedding_batch_size = max(1, int(params.get("embedding_batch_size") or 50))
         clear_first = bool(params.get("clear_before_import", False))
         input_group_id = str(params.get("group_id") or "").strip()
-        embedding_model = params.get("embedding_model")
-        group_id = input_group_id or self._load_last_group_id_from_session() or uuid.uuid4().hex
+        embedding_model = credentials.get("embedding_model")
+        group_id = input_group_id or self._load_last_group_id_from_session() or clean_text(credentials.get("group_id")) or uuid.uuid4().hex
         mapping = self.resolve_mapping(params.get("mapping"))
 
         neo4j_uri = str(credentials.get("neo4j_uri", "")).strip()

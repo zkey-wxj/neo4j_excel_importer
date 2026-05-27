@@ -29,7 +29,7 @@ ORDER BY label ASC
 """
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
-        group_id = clean_text(tool_parameters.get("group_id"))
+        group_id = clean_text(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         database = clean_text(tool_parameters.get("database"))
         logger.info("GetGroupLabelsTool invoked | group_id=%s", group_id)
         if not group_id:

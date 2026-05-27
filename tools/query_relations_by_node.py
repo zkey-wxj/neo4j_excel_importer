@@ -45,7 +45,7 @@ RETURN n, r, m
         node_id = clean_text(tool_parameters.get("node_id"))
         relation_type = clean_text(tool_parameters.get("relation_type"))
         database = clean_text(tool_parameters.get("database"))
-        group_id = normalize_group_id(tool_parameters.get("group_id"))
+        group_id = normalize_group_id(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("QueryRelationsByNodeTool invoked | node_id=%s group_id=%s", node_id, group_id)
         if not node_id:
             yield self.create_text_message("❌ node_id 不能为空。")
