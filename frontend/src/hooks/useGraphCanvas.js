@@ -810,8 +810,8 @@ export default function useGraphCanvas(canvasRef) {
 
   // ── 渲染入口 ──────────────────────────────────────────────────────
   /**
-   * 主渲染入口：初始化画布 → 数据清洗 → 保留旧坐标 → 计算边曲率 →
-   * 计算节点度数和半径 → 创建/重启 D3 力导向仿真
+   * 主渲染入口：初始化画布 → 数据清洗 → 增量保留旧坐标 → 计算边曲率 →
+   * 计算节点度数和半径 → 首次创建或增量更新 D3 力导向仿真
    */
   const render = useCallback(
     (nodes, links) => {
@@ -833,15 +833,24 @@ export default function useGraphCanvas(canvasRef) {
           target: clean(typeof l.target === 'object' ? l.target?.id : l.target),
         }))
 
-      // 保留前一次仿真中节点的位置和速度，避免重新加载时图谱跳动
-      const prev = new Map(nodesRef.current.map((n) => [n.id, n]))
+      // ── 增量追加：保留已有节点的仿真坐标 ───────────────────────────
+      const existingMap = new Map(nodesRef.current.map((n) => [n.id, n]))
       safeN.forEach((n) => {
-        const p = prev.get(n.id)
+        const p = existingMap.get(n.id)
         if (!p) return
         if (Number.isFinite(p.x)) n.x = p.x
         if (Number.isFinite(p.y)) n.y = p.y
         if (Number.isFinite(p.vx)) n.vx = p.vx
         if (Number.isFinite(p.vy)) n.vy = p.vy
+      })
+
+      // 为新增节点设定接近图中心的初始位置，避免从随机位置弹入
+      const prevIds = existingMap
+      safeN.forEach((n) => {
+        if (!prevIds.has(n.id)) {
+          n.x = W.current / 2 + (Math.random() - 0.5) * 100
+          n.y = H.current / 2 + (Math.random() - 0.5) * 100
+        }
       })
 
       graphNodesRef.current = safeN
@@ -892,37 +901,44 @@ export default function useGraphCanvas(canvasRef) {
         name: n.label,
       }))
 
-      // 停止旧仿真
-      simRef.current?.stop()
-
-      // 创建新的 D3 力导向仿真，配置各力模型参数
-      simRef.current = d3
-        .forceSimulation(nodesRef.current)
-        .force(
-          'link',
-          d3
-            .forceLink(edgesRef.current)
-            .id((d) => d.id)
-            .distance((d) => FORCE_LINK_DIST + ((d.pairTotal || 1) - 1) * 50)
-            .iterations(1),
-        )
-        .force(
-          'charge',
-          d3.forceManyBody().strength(FORCE_CHARGE).distanceMax(600),
-        )
-        .force('center', d3.forceCenter(W.current / 2, H.current / 2))
-        .force(
-          'collide',
-          d3.forceCollide((d) => (d.r ?? 10) + FORCE_COLLISION).iterations(3),
-        )
-        .force('x', d3.forceX(W.current / 2).strength(FORCE_PULL))
-        .force('y', d3.forceY(H.current / 2).strength(FORCE_PULL))
-        .alphaDecay(0.02)
-        .velocityDecay(0.3)
-        .on('tick', () => {
-          buildQuadtree()
-          scheduleRender()
-        })
+      // ── 仿真：首次创建或增量更新 ────────────────────────────────
+      if (!simRef.current) {
+        // 首次：创建 D3 力导向仿真，配置各力模型参数
+        simRef.current = d3
+          .forceSimulation(nodesRef.current)
+          .force(
+            'link',
+            d3
+              .forceLink(edgesRef.current)
+              .id((d) => d.id)
+              .distance((d) => FORCE_LINK_DIST + ((d.pairTotal || 1) - 1) * 50)
+              .iterations(1),
+          )
+          .force(
+            'charge',
+            d3.forceManyBody().strength(FORCE_CHARGE).distanceMax(600),
+          )
+          .force('center', d3.forceCenter(W.current / 2, H.current / 2))
+          .force(
+            'collide',
+            d3.forceCollide((d) => (d.r ?? 10) + FORCE_COLLISION).iterations(3),
+          )
+          .force('x', d3.forceX(W.current / 2).strength(FORCE_PULL))
+          .force('y', d3.forceY(H.current / 2).strength(FORCE_PULL))
+          .alphaDecay(0.02)
+          .velocityDecay(0.3)
+          .on('tick', () => {
+            buildQuadtree()
+            scheduleRender()
+          })
+      } else {
+        // 增量：向存活的 simulation 追加节点和边，保留已有布局
+        const sim = simRef.current
+        sim.nodes(nodesRef.current)
+        sim.force('link').links(edgesRef.current)
+        // 低热度重启——已有节点几乎不动，新节点快速收敛
+        sim.alpha(0.15).restart()
+      }
 
       buildQuadtree()
       scheduleRender()
