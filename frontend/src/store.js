@@ -23,6 +23,7 @@ export const useAppStore = create((set, get) => ({
   status: '',           // 底部状态栏显示的文本信息
   statusError: false,   // 状态信息是否为错误样式
   isLoading: false,     // 是否正在执行异步操作（如 CRUD 操作）
+  isLoadingData: false, // 是否正在分页加载图谱数据（含后续分页）
   isFullscreenLoading: true,  // 是否显示全屏加载遮罩（初始加载/切换分组时）
 
   // ── 交互状态 ──
@@ -136,7 +137,7 @@ export const useAppStore = create((set, get) => ({
   /** 按分组 ID 加载图谱，支持游标分页，每加载一页更新一次 UI */
   loadGroup: async (gid) => {
     const { graphAPI, updateGraphData } = get()
-    set({ isFullscreenLoading: true })
+    set({ isFullscreenLoading: true, isLoadingData: true })
     try {
       const ps = get().pageSize
       await graphAPI.loadGroup(gid, ps, (_, pg) => {
@@ -149,20 +150,20 @@ export const useAppStore = create((set, get) => ({
     } catch (e) {
       set({ status: `加载失败: ${e.message}`, statusError: true })
     } finally {
-      set({ isFullscreenLoading: false })
+      set({ isFullscreenLoading: false, isLoadingData: false })
     }
   },
 
   /** 加载示例图谱数据，模拟分页加载效果 */
   loadDemo: async () => {
     const { graphAPI, updateGraphData } = get()
-    set({ isFullscreenLoading: true })
+    set({ isFullscreenLoading: true, isLoadingData: true })
     await graphAPI.loadDemoPaged(() => {
       updateGraphData()
       set({ isFullscreenLoading: false })
     })
     updateGraphData()
-    set({ status: '已加载示例图谱' })
+    set({ status: '已加载示例图谱', isLoadingData: false })
   },
 
   /** 执行 CRUD 操作（POST/PUT/DELETE），成功后同步图谱数据到 React 状态 */

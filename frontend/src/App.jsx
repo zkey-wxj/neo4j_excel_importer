@@ -12,6 +12,7 @@ import LegendPanel from '@/components/LegendPanel'
 import ImportModal from '@/components/ImportModal'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import FullscreenLoading from '@/components/FullscreenLoading'
+import TopLoadingBar from '@/components/TopLoadingBar'
 import Minimap from '@/components/Minimap'
 
 export default function App() {
@@ -60,6 +61,9 @@ export default function App() {
       <div className="relative w-full h-dvh overflow-hidden graph-bg">
         {/* 全屏加载遮罩层：图谱数据加载期间显示旋转动画 */}
         <FullscreenLoading />
+
+        {/* 顶部加载条：CRUD/导入操作时从顶部弹出 */}
+        <TopLoadingBar />
 
         {/* 顶部统计栏：显示节点数、关系数、孤立节点数等图谱统计信息 */}
         <StatsBar graphCanvas={graphCanvas} />
