@@ -1,37 +1,43 @@
 import { clean, relStoreKey, genDemoNodes, genDemoLinks } from "./graph-store";
 
 /* ═══════════════════════════════════════════════════════════════════
- GraphAPI – HTTP communication layer
+ GraphAPI – HTTP 通信层
 
- - req():     unified fetch wrapper, auto-prefixes plugin base path
- - loadGroup(): paginated graph loading with cursor support
- - loadDemoPaged(): generate & load demo data with simulated pagination
- - mutate():  CRUD operations that apply changes to the store
+ 负责与后端服务进行所有网络交互，包括：
+ - req():           统一的 fetch 请求封装，自动拼接插件基础路径
+ - loadGroup():     按分组图谱加载，支持游标分页，每页回调通知 UI 增量渲染
+ - loadDemoPaged(): 生成模拟数据并模拟分页加载效果
+ - mutate():        执行增删改操作，并同步更新前端 store
 
- Auto-detects base path from window.location.pathname matching /e/{id}.
+ 基础路径自动检测：从 window.location.pathname 匹配 /e/{plugin_id} 格式
  ═══════════════════════════════════════════════════════════════════ */
 
 export class GraphAPI {
   /**
-   * @param {import('./graph-store').GraphStore} store
+   * @param {import('./graph-store').GraphStore} store - 底层图数据存储实例
    */
   constructor(store) {
     this.store = store;
-    // Auto-detect plugin base path: /e/{plugin_id}
+    // 自动检测插件基础路径：/e/{plugin_id}
     const m = typeof window !== "undefined" ? window.location.pathname.match(/^\/e\/[^/]+/) : null;
     this.base = m ? m[0] : "";
   }
 
-  /** Prepend base path to a relative URL */
+  /** 将相对路径拼接上插件基础路径，生成完整的请求 URL */
   url(p) {
     return this.base.replace(/\/+$/, "") + (String(p).startsWith("/") ? p : `/${p}`);
   }
 
   /**
-   * Unified HTTP request wrapper.
-   * @param {string} path - request path (relative or absolute)
-   * @param {object} [opt] - { method, body } – body is already stringified for JSON
-   * @returns {Promise<object>} parsed JSON response
+   * 统一的 HTTP 请求封装
+   * 自动处理 JSON 解析、错误抛出，以及 multipart 表单数据的特殊处理
+   * @param {string} path - 请求路径（相对路径或绝对 URL）
+   * @param {object} [opt] - 配置项：{ method, body, formData }
+   *   - method: HTTP 方法，默认 GET
+   *   - body: 已 JSON.stringify 的请求体
+   *   - formData: FormData 对象（用于文件上传，会自动移除 Content-Type 让浏览器设置 boundary）
+   * @returns {Promise<object>} 解析后的 JSON 响应
+   * @throws {Error} 接口返回非 JSON 或 HTTP 状态码非 2xx 时抛出异常
    */
   async req(path, opt = {}) {
     const m = (opt.method || "GET").toUpperCase();
@@ -43,7 +49,7 @@ export class GraphAPI {
       init.body = opt.body;
     }
 
-    // For multipart form data, remove Content-Type so the browser sets the boundary
+    // multipart 表单数据：移除 Content-Type，让浏览器自动设置 boundary 分隔符
     if (opt.formData) {
       delete init.headers["Content-Type"];
       init.body = opt.formData;
@@ -64,14 +70,13 @@ export class GraphAPI {
   }
 
   /**
-   * Paginated graph loading with cursor support.
-   * Fetches all pages, calling `onPage(data, pageNum)` after each page
-   * so the UI can render incrementally.
+   * 按分组 ID 加载图谱数据，支持游标分页
+   * 逐页获取节点和关系数据，每页加载完成后通过 onPage 回调通知 UI 更新
    *
-   * @param {string} gid - group_id
-   * @param {number} pageSize - items per page
-   * @param {function} [onPage] - callback(graphData, pageNum)
-   * @returns {Promise<{nodes: object[], links: object[]}>}
+   * @param {string} gid - 分组 ID（group_id）
+   * @param {number} pageSize - 每页条目数
+   * @param {function} [onPage] - 每页加载完成的回调函数，参数为 (graphData, pageNum)
+   * @returns {Promise<{nodes: object[], links: object[]}>} 最终的图谱数据
    */
   async loadGroup(gid, pageSize, onPage) {
     this.store.reset();
@@ -106,12 +111,11 @@ export class GraphAPI {
   }
 
   /**
-   * Generate and load demo data with simulated pagination.
-   * Creates 1000 nodes and associated links, loaded in pages of 200
-   * with a 2-second delay between pages to simulate real loading.
+   * 生成并加载示例图谱数据，模拟分页加载效果
+   * 创建 1000 个节点和关联关系，每 200 条为一页，页间延迟 2 秒模拟网络加载
    *
-   * @param {function} [onPage] - callback(graphData, pageNum)
-   * @returns {Promise<{nodes: object[], links: object[]}>}
+   * @param {function} [onPage] - 每页加载完成的回调函数，参数为 (graphData, pageNum)
+   * @returns {Promise<{nodes: object[], links: object[]}>} 最终的图谱数据
    */
   async loadDemoPaged(onPage) {
     this.store.reset();
@@ -127,7 +131,7 @@ export class GraphAPI {
       const g = this.store.mapGraphData();
       if (onPage) onPage(g, pg);
       pg++;
-      // Simulate network delay between pages
+      // 模拟网络延迟，每页间隔 2 秒
       await new Promise((r) => setTimeout(r, 2000));
     }
 
@@ -135,13 +139,13 @@ export class GraphAPI {
   }
 
   /**
-   * Execute a CRUD mutation (POST/PUT/DELETE) against the backend,
-   * then apply the change to the frontend store.
+   * 执行 CRUD 增删改操作（POST/PUT/DELETE）
+   * 先向后端发送请求，成功后将变更同步到前端 store，实现乐观更新
    *
-   * @param {string} path - API endpoint path
-   * @param {string} method - HTTP method
-   * @param {object} payload - request body
-   * @returns {Promise<object|null>} graph data after mutation, or null on failure
+   * @param {string} path - API 端点路径
+   * @param {string} method - HTTP 方法（POST/PUT/DELETE）
+   * @param {object} payload - 请求体对象
+   * @returns {Promise<object|null>} 变更后的图谱数据，失败时返回 null
    */
   async mutate(path, method, payload) {
     const result = await this.req(path, { method, body: JSON.stringify(payload) });
@@ -151,7 +155,7 @@ export class GraphAPI {
 
     if (path.includes("/replace-node-relations")) {
       this.store.applyReplaceRelations(payload.old_nid);
-      // After replace, refresh first page to pick up new relations from backend
+      // 关系替换操作：清空旧节点的所有关系，然后刷新第一页获取后端最新关系数据
       await this._refreshAfterReplace();
     } else {
       this.store.applyMutation(path, method, payload);
@@ -162,12 +166,13 @@ export class GraphAPI {
   }
 
   /**
-   * After replace-node-relations the backend doesn't return new relation data,
-   * so we do a lightweight refresh of the first page to pick them up.
+   * 关系替换后的轻量刷新
+   * 因为 replace-node-relations 接口不返回新的关系数据，
+   * 所以需要重新请求第一页来获取后端新增的关系
    * @private
    */
   async _refreshAfterReplace() {
-    // We need a gid to refresh; if the store has no nodes, nothing to refresh.
+    // 需要 group_id 才能刷新；如果 store 中没有节点则无需操作
     const anyNode = this.store.nodeMap.values().next().value;
     if (!anyNode?.group_id) return;
 
@@ -188,11 +193,11 @@ export class GraphAPI {
   }
 
   /**
-   * Import a file (Excel/JSON) via multipart form upload.
-   * @param {string} gid - group_id
-   * @param {File} file - the file to upload
-   * @param {string} mode - 'merge' or 'override'
-   * @returns {Promise<object>} server response
+   * 通过 multipart 表单上传文件（Excel/JSON）到后端进行导入
+   * @param {string} gid - 分组 ID（group_id）
+   * @param {File} file - 待上传的文件对象
+   * @param {string} mode - 导入模式：'merge'（合并）或 'override'（覆盖）
+   * @returns {Promise<object>} 服务端响应（含 nodes_imported、relations_imported、relations_skipped 等统计字段）
    */
   async importFile(gid, file, mode) {
     const fd = new FormData();

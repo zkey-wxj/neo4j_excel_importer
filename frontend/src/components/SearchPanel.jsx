@@ -4,6 +4,11 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { X } from 'lucide-react'
 
+/**
+ * 搜索面板组件
+ * 位于左上角的搜索输入框，支持按节点名称、nid、标签进行模糊搜索
+ * 使用防抖（300ms）策略减少频繁搜索触发
+ */
 export default function SearchPanel() {
   const setSearchKeyword = useAppStore((s) => s.setSearchKeyword)
   const [value, setValue] = useState('')
@@ -15,6 +20,7 @@ export default function SearchPanel() {
     }
   }, [])
 
+  // 输入变化处理：更新本地值，防抖 300ms 后同步关键词到全局 store
   const handleChange = (e) => {
     const v = e.target.value
     setValue(v)
@@ -24,6 +30,7 @@ export default function SearchPanel() {
     }, 300)
   }
 
+  /** 清空搜索：重置输入值和全局关键词 */
   const handleClear = () => {
     setValue('')
     if (timerRef.current) clearTimeout(timerRef.current)

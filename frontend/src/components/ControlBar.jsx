@@ -9,6 +9,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+/**
+ * 控制栏按钮组件：带工具提示的图标按钮
+ * @param {string} title - 工具提示文本
+ * @param {function} onClick - 点击回调
+ * @param {boolean} active - 是否为激活状态（高亮显示）
+ * @param {React.ReactNode} children - 按钮图标内容
+ */
 function CtrlBtn({ title, onClick, active, children }) {
   return (
     <Tooltip>
@@ -36,6 +43,11 @@ function CtrlBtn({ title, onClick, active, children }) {
   )
 }
 
+/**
+ * 底部控制栏组件
+ * 提供图谱画布的操作按钮：缩放（放大/缩小/重置）、小地图开关、
+ * 数据导出（JSON/PNG/Excel）和数据导入功能
+ */
 export default function ControlBar({ graphCanvas }) {
   const setShowImportModal = useAppStore((s) => s.setShowImportModal)
   const setImportFile = useAppStore((s) => s.setImportFile)
@@ -49,16 +61,19 @@ export default function ControlBar({ graphCanvas }) {
   const setStatus = useAppStore((s) => s.setStatus)
   const fileInputRef = useRef(null)
 
+  /** 放大画布：缩放比例增加 35%，最大 4 倍 */
   const handleZoomIn = () => {
     const newK = Math.min(4, (zoom ?? 1) * 1.35)
     graphCanvas?.zoomTo?.(newK)
   }
 
+  /** 缩小画布：缩放比例减少 26%，最小 0.1 倍 */
   const handleZoomOut = () => {
     const newK = Math.max(0.1, (zoom ?? 1) * 0.74)
     graphCanvas?.zoomTo?.(newK)
   }
 
+  /** 重置视图：将画布变换重置为初始状态（缩放 1x，无平移） */
   const handleReset = () => {
     if (graphCanvas?.transform) {
       graphCanvas.transform.current = d3.zoomIdentity
@@ -67,6 +82,7 @@ export default function ControlBar({ graphCanvas }) {
     graphCanvas?.scheduleRender?.()
   }
 
+  /** 导出图谱数据为 JSON 文件，包含节点和关系的原始数据 */
   const handleExportJSON = () => {
     const data = {
       nodes: (nodes || []).map((n) => n.raw || n),
@@ -80,6 +96,7 @@ export default function ControlBar({ graphCanvas }) {
     setStatus('JSON 已导出')
   }
 
+  /** 将当前画布内容导出为 PNG 图片 */
   const handleExportPNG = () => {
     const canvas = document.querySelector('canvas')
     if (!canvas) return
@@ -93,6 +110,10 @@ export default function ControlBar({ graphCanvas }) {
     })
   }
 
+  /**
+   * 导出图谱数据为 Excel 文件
+   * 生成两个工作表：「节点」和「关系」，自动收集动态属性列
+   */
   const handleExportExcel = async () => {
     const rawNodes = (nodes || []).map((n) => n.raw || n)
     const rawLinks = (links || []).map((l) => l.raw || l)
@@ -104,7 +125,7 @@ export default function ControlBar({ graphCanvas }) {
 
     const XLSX = await import('xlsx')
 
-    // Nodes sheet
+    // 收集节点的动态属性字段作为额外表头
     const nodeExtra = new Set()
     rawNodes.forEach((n) =>
       Object.keys(n.properties || {}).forEach((k) => nodeExtra.add(k))
@@ -116,7 +137,7 @@ export default function ControlBar({ graphCanvas }) {
       return row
     })
 
-    // Relations sheet
+    // 收集关系的动态属性字段作为额外表头
     const relExtra = new Set()
     rawLinks.forEach((r) =>
       Object.keys(r.properties || {}).forEach((k) => relExtra.add(k))
@@ -137,6 +158,7 @@ export default function ControlBar({ graphCanvas }) {
     setStatus('Excel 导出完成')
   }
 
+  /** 点击导入按钮：校验 group_id 后触发文件选择对话框 */
   const handleImportClick = () => {
     if (!groupId) {
       import('sonner').then(({ toast }) => toast.error('请先输入 group_id'))
@@ -145,6 +167,7 @@ export default function ControlBar({ graphCanvas }) {
     fileInputRef.current?.click()
   }
 
+  /** 文件选择完成：将选中文件存入 store 并打开导入确认弹窗 */
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (!file) return

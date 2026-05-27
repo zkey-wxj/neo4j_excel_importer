@@ -13,6 +13,13 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 
+/**
+ * 导入弹窗组件
+ * 支持选择 Excel 或 JSON 文件导入图谱数据
+ * 提供两种导入模式：
+ *   - 合并导入：按 nid 合并，已存在更新、不存在新增，不删除已有数据
+ *   - 覆盖导入：清空当前分组所有数据后重新导入（不可撤销）
+ */
 export default function ImportModal() {
   const showImportModal = useAppStore((s) => s.showImportModal)
   const setShowImportModal = useAppStore((s) => s.setShowImportModal)
@@ -27,6 +34,7 @@ export default function ImportModal() {
   const confirm = useAppStore((s) => s.confirm)
   const fileInputRef = useRef(null)
 
+  /** 确认导入：校验参数 → 二次确认 → 上传文件 → 刷新图谱 */
   const handleConfirm = async () => {
     if (!importFile) return
     const gid = groupId
@@ -64,6 +72,7 @@ export default function ImportModal() {
     }
   }
 
+  /** 取消导入：清理文件引用并关闭弹窗 */
   const handleCancel = () => {
     setImportFile(null)
     setShowImportModal(false)

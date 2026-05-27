@@ -2,9 +2,15 @@ import { useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 
+// 小地图的固定宽高（像素）
 const MW = 180
 const MH = 130
 
+/**
+ * 小地图组件
+ * 在右下角显示图谱的缩略视图，包含当前视口矩形框，
+ * 帮助用户了解当前可视区域在全图中的位置
+ */
 export default function Minimap({ graphCanvas }) {
   const showMinimap = useAppStore((s) => s.showMinimap)
   const nodes = useAppStore((s) => s.nodes)
@@ -12,9 +18,8 @@ export default function Minimap({ graphCanvas }) {
   const canvasRef = useRef(null)
   const viewportRef = useRef(null)
 
-  // Stable draw function: draws graph nodes + edges on the minimap canvas.
-  // Uses resetTransform() before scaling to avoid compounding DPR scale
-  // across repeated animation frames.
+  // 稳定的绘制函数：在小地图 Canvas 上绘制所有节点和边
+  // 每次绘制前调用 resetTransform() 避免 DPR 缩放在动画帧间累积
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -39,7 +44,7 @@ export default function Minimap({ graphCanvas }) {
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, MW, MH)
 
-    // Compute bounds
+    // 计算所有节点的包围盒，用于坐标映射
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     simNodes.forEach((n) => {
       const x = n.x ?? 0
@@ -60,7 +65,7 @@ export default function Minimap({ graphCanvas }) {
     const mapX = (x) => ox + (x - minX) * scale
     const mapY = (y) => oy + (y - minY) * scale
 
-    // Draw edges
+    // 绘制关系边（半透明灰色线条）
     ctx.globalAlpha = 0.3
     simEdges.forEach((e) => {
       const s = e.source
@@ -74,7 +79,7 @@ export default function Minimap({ graphCanvas }) {
       ctx.stroke()
     })
 
-    // Draw nodes
+    // 绘制节点（实心小圆点，使用节点自身的颜色）
     ctx.globalAlpha = 1
     simNodes.forEach((n) => {
       ctx.beginPath()
@@ -84,15 +89,14 @@ export default function Minimap({ graphCanvas }) {
     })
   }, [nodes, links])
 
-  // Draw graph when data changes
+  // 图谱数据变化时重新绘制小地图
   useEffect(() => {
     if (!showMinimap) return
     draw()
   }, [showMinimap, draw])
 
-  // Continuous animation loop for viewport rectangle updates.
-  // Uses a ref for graphCanvas to keep dependencies stable and avoid
-  // restarting the loop on every re-render.
+  // 持续动画循环：实时更新视口矩形框的位置和大小
+  // 使用 ref 缓存 graphCanvas 以保持依赖稳定，避免每次重渲染时重启循环
   const graphCanvasRef = useRef(graphCanvas)
   useEffect(() => {
     graphCanvasRef.current = graphCanvas
@@ -107,13 +111,13 @@ export default function Minimap({ graphCanvas }) {
       const gc = graphCanvasRef.current
       const t = gc?.transform?.current
       if (t) {
-        // Only update viewport position when transform actually changes
+        // 仅在 transform 实际变化时更新视口位置，减少不必要的 DOM 操作
         if (t.x !== lastX || t.y !== lastY || t.k !== lastK) {
           lastX = t.x; lastY = t.y; lastK = t.k
 
           const vp = viewportRef.current
           if (vp) {
-            // Compute bounds from current nodes
+            // 计算所有节点的包围盒，用于视口坐标映射
             const simNodes = gc.nodes?.current || []
             if (simNodes.length) {
               let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity

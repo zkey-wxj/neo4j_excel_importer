@@ -1,6 +1,10 @@
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 
+/**
+ * 统计单元格组件
+ * 显示单个统计指标的数值和标签，支持点击交互（如孤立节点筛选）
+ */
 function StatCell({ value, label, clickable, active, onClick }) {
   return (
     <div
@@ -28,6 +32,7 @@ function StatCell({ value, label, clickable, active, onClick }) {
   )
 }
 
+/** 旋转加载指示器：异步操作进行中时在统计栏左侧显示 */
 function Spinner() {
   return (
     <div className="flex items-center justify-center bg-card px-3 py-2">
@@ -38,6 +43,12 @@ function Spinner() {
   )
 }
 
+/**
+ * 顶部统计栏组件
+ * 居中显示图谱的核心统计指标：节点数、关系数、孤立节点数、
+ * 节点类型数、关系类型数和当前缩放比例
+ * 点击「孤立」可切换孤立节点筛选模式
+ */
 export default function StatsBar({ graphCanvas }) {
   const isLoading = useAppStore((s) => s.isLoading)
   const orphanFilter = useAppStore((s) => s.orphanFilter)

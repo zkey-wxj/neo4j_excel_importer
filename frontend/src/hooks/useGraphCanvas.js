@@ -8,28 +8,29 @@ import {
   FORCE_PULL,
 } from '@/lib/constants'
 
-// ── Constants ────────────────────────────────────────────────────────
-const MINIMAP_W = 180
-const MINIMAP_H = 130
-const ZOOM_MIN = 0.1
-const ZOOM_MAX = 4
-const HIT_RADIUS = 18
-const EDGE_HIT_TH = 8
-const DRAG_THRESHOLD = 4
+// ── 常量定义 ────────────────────────────────────────────────────────
+const MINIMAP_W = 180       // 小地图宽度（像素）
+const MINIMAP_H = 130       // 小地图高度（像素）
+const ZOOM_MIN = 0.1        // 最小缩放比例
+const ZOOM_MAX = 4          // 最大缩放比例
+const HIT_RADIUS = 18       // 节点点击检测半径（世界坐标）
+const EDGE_HIT_TH = 8       // 关系边点击检测阈值（像素）
+const DRAG_THRESHOLD = 4    // 拖拽判定阈值（像素），小于此值视为点击
 
-// ── Helper ───────────────────────────────────────────────────────────
+// ── 辅助函数 ───────────────────────────────────────────────────────
+/** 安全的字符串 trim */
 function clean(v) {
   return String(v ?? '').trim()
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // useGraphCanvas
-// Encapsulates ALL canvas rendering, D3 force simulation, and pointer
-// interaction logic. Replaces the original GraphCanvas + GraphInteraction
-// classes from group_graph.html.
+// 封装了所有的 Canvas 渲染、D3 力导向仿真和指针交互逻辑
+// 替代了原始 group_graph.html 中的 GraphCanvas + GraphInteraction 类
+// 核心职责：仿真驱动、画布绘制、缩放平移、节点拖拽、命中检测
 // ═══════════════════════════════════════════════════════════════════════
 export default function useGraphCanvas(canvasRef) {
-  // ── Store (reactive) ───────────────────────────────────────────────
+  // ── Zustand Store 响应式状态 ─────────────────────────────────────────
   const storeNodes = useAppStore((s) => s.nodes)
   const storeLinks = useAppStore((s) => s.links)
   const selectedNodeId = useAppStore((s) => s.selectedNodeId)
@@ -50,36 +51,35 @@ export default function useGraphCanvas(canvasRef) {
   const setPickedNid = useAppStore((s) => s.setPickedNid)
   const setStatus = useAppStore((s) => s.setStatus)
 
-  // ── Refs (mutable internal state) ──────────────────────────────────
-  const ctxRef = useRef(null)
-  const W = useRef(0)
-  const H = useRef(0)
-  const simRef = useRef(null)
-  const nodesRef = useRef([]) // simulation nodes with x/y/vx/vy
-  const edgesRef = useRef([]) // processed edges with curvature
-  const graphNodesRef = useRef([]) // original node data for filtering
-  const graphLinksRef = useRef([]) // original link data for filtering
-  const transformRef = useRef(d3.zoomIdentity)
-  const quadtreeRef = useRef(null)
-  const needRender = useRef(false)
-  const rafId = useRef(null)
+  // ── Refs（可变内部状态，不触发重渲染）────────────────────────────────
+  const ctxRef = useRef(null)      // Canvas 2D 渲染上下文
+  const W = useRef(0)              // 画布宽度（CSS 像素）
+  const H = useRef(0)              // 画布高度（CSS 像素）
+  const simRef = useRef(null)      // D3 力导向仿真实例
+  const nodesRef = useRef([])      // 仿真节点数组（含 x/y/vx/vy 坐标）
+  const edgesRef = useRef([])      // 处理后的关系数组（含曲率信息）
+  const graphNodesRef = useRef([]) // 原始节点数据（用于过滤判断）
+  const graphLinksRef = useRef([]) // 原始关系数据（用于过滤判断）
+  const transformRef = useRef(d3.zoomIdentity)  // 当前画布变换矩阵
+  const quadtreeRef = useRef(null) // 四叉树（用于高效的节点命中检测）
+  const needRender = useRef(false) // 是否有待渲染的帧
+  const rafId = useRef(null)       // requestAnimationFrame ID
 
-  // interaction state
-  const hoveredEdgeIdx = useRef(-1)
-  const dragging = useRef(null)
-  const dragWX = useRef(0)
-  const dragWY = useRef(0)
-  const isDrag = useRef(false)
-  const panning = useRef(false)
-  const panX = useRef(0)
-  const panY = useRef(0)
-  const panTX = useRef(0)
-  const panTY = useRef(0)
-  const downX = useRef(0)
-  const downY = useRef(0)
+  // 交互状态
+  const hoveredEdgeIdx = useRef(-1)  // 当前悬停的关系边索引
+  const dragging = useRef(null)      // 正在拖拽的节点对象
+  const dragWX = useRef(0)           // 拖拽起始世界坐标 X
+  const dragWY = useRef(0)           // 拖拽起始世界坐标 Y
+  const isDrag = useRef(false)       // 是否已进入拖拽状态（超过阈值）
+  const panning = useRef(false)      // 是否正在平移画布
+  const panX = useRef(0)             // 平移起始屏幕坐标 X
+  const panY = useRef(0)             // 平移起始屏幕坐标 Y
+  const panTX = useRef(0)            // 平移起始变换偏移 X
+  const panTY = useRef(0)            // 平移起始变换偏移 Y
+  const downX = useRef(0)            // 鼠标按下时的屏幕坐标 X
+  const downY = useRef(0)            // 鼠标按下时的屏幕坐标 Y
 
-  // cache store snapshot refs so drawing code can read latest without
-  // triggering re-render on every keystroke
+  // 缓存 store 快照到 ref，使绘制代码可读取最新状态而不触发每次按键重渲染
   const storeSnap = useRef({
     selectedNodeId: null,
     hoveredNodeId: null,
@@ -91,7 +91,7 @@ export default function useGraphCanvas(canvasRef) {
     pickTarget: null,
   })
 
-  // Keep snapshot in sync
+  // 保持快照与 store 同步
   useEffect(() => {
     storeSnap.current = {
       selectedNodeId,
@@ -114,7 +114,8 @@ export default function useGraphCanvas(canvasRef) {
     pickTarget,
   ])
 
-  // ── Canvas init ────────────────────────────────────────────────────
+  // ── Canvas 初始化 ────────────────────────────────────────────────────
+  /** 初始化画布尺寸和 DPR 缩放，设置渲染上下文 */
   const initCanvas = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -132,7 +133,8 @@ export default function useGraphCanvas(canvasRef) {
     ctxRef.current = ctx
   }, [canvasRef])
 
-  // ── Quadtree ───────────────────────────────────────────────────────
+  // ── 四叉树构建 ───────────────────────────────────────────────────────
+  /** 构建四叉树索引，用于高效的空间近邻查询（节点命中检测） */
   const buildQuadtree = useCallback(() => {
     quadtreeRef.current = d3
       .quadtree()
@@ -141,7 +143,8 @@ export default function useGraphCanvas(canvasRef) {
       .addAll(nodesRef.current)
   }, [])
 
-  // ── Coordinate helpers ─────────────────────────────────────────────
+  // ── 坐标转换辅助 ─────────────────────────────────────────────────────
+  /** 将屏幕坐标转换为世界坐标（考虑当前缩放和平移变换） */
   const toWorld = useCallback((ex, ey) => {
     const canvas = canvasRef.current
     if (!canvas) return [0, 0]
@@ -149,13 +152,18 @@ export default function useGraphCanvas(canvasRef) {
     return transformRef.current.invert([ex - r.left, ey - r.top])
   }, [canvasRef])
 
-  // ── Filtering helpers ──────────────────────────────────────────────
+  // ── 过滤辅助函数 ─────────────────────────────────────────────────────
+  /** 获取节点的标签 key 列表（小写），用于图例类型匹配 */
   const getNodeLabelKeys = useCallback((n) => {
     const labels = Array.isArray(n?.raw?.labels) ? n.raw.labels : []
     const keys = labels.map((x) => clean(x).toLowerCase()).filter(Boolean)
     return keys.length ? keys : [clean(n?.type || 'Node').toLowerCase()]
   }, [])
 
+  /**
+   * 节点过滤判断：检查节点是否通过当前所有筛选条件
+   * 包括：图例类型筛选、孤立节点筛选、关键词搜索
+   */
   const passFilter = useCallback((n) => {
     const snap = storeSnap.current
     if (snap.selectedLegendTypes.size) {
@@ -184,13 +192,15 @@ export default function useGraphCanvas(canvasRef) {
       .includes(snap.searchKeyword)
   }, [getNodeLabelKeys])
 
+  /** 关系边过滤判断：检查关系类型是否在选中的图例类型集合中 */
   const passEdgeFilter = useCallback((edge) => {
     const snap = storeSnap.current
     if (!snap.selectedRelTypes.size) return true
     return snap.selectedRelTypes.has(clean(edge.name).toLowerCase())
   }, [])
 
-  // ── Bezier helpers ─────────────────────────────────────────────────
+  // ── 贝塞尔曲线辅助函数 ─────────────────────────────────────────────────
+  /** 计算贝塞尔曲线的控制点坐标（用于弯曲关系边的绘制） */
   const bezCp = useCallback((e) => {
     const s = e.source
     const t = e.target
@@ -209,6 +219,7 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [])
 
+  /** 计算贝塞尔曲线的中点坐标（用于放置关系标签） */
   const bezMid = useCallback((e) => {
     const s = e.source
     const t = e.target
@@ -221,6 +232,7 @@ export default function useGraphCanvas(canvasRef) {
     return { x: 0.25 * sx + 0.5 * c.cx + 0.25 * tx, y: 0.25 * sy + 0.5 * c.cy + 0.25 * ty }
   }, [bezCp])
 
+  /** 计算贝塞尔曲线上参数 u 处的点坐标（用于边的命中检测） */
   const bezPt = useCallback((e, u) => {
     const s = e.source
     const t = e.target
@@ -240,7 +252,8 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [bezCp])
 
-  // ── Hit testing ────────────────────────────────────────────────────
+  // ── 命中检测 ────────────────────────────────────────────────────────
+  /** 在世界坐标 (wx, wy) 处查找节点，使用四叉树加速 */
   const findNodeAt = useCallback(
     (wx, wy) => {
       const nd = quadtreeRef.current?.find(wx, wy, HIT_RADIUS) ?? null
@@ -254,6 +267,7 @@ export default function useGraphCanvas(canvasRef) {
     [passFilter],
   )
 
+  /** 在世界坐标 (wx, wy) 处查找关系边，沿贝塞尔曲线采样检测 */
   const findEdgeAt = useCallback(
     (wx, wy) => {
       const edges = edgesRef.current
@@ -283,7 +297,8 @@ export default function useGraphCanvas(canvasRef) {
     [passEdgeFilter, passFilter, bezPt],
   )
 
-  // ── isNeighbor ─────────────────────────────────────────────────────
+  // ── 邻居判断 ─────────────────────────────────────────────────────
+  /** 判断两个节点是否通过某条关系边直接相连 */
   const isNeighbor = useCallback((a, b) => {
     return edgesRef.current.some(
       (e) =>
@@ -293,7 +308,18 @@ export default function useGraphCanvas(canvasRef) {
     )
   }, [])
 
-  // ── Draw helpers ───────────────────────────────────────────────────
+  // ── 绘制辅助函数 ───────────────────────────────────────────────────
+  /**
+   * 绘制所有关系边
+   * 包括：视口裁剪、透明度计算、贝塞尔曲线/直线绘制、箭头绘制、标签绘制
+   * @param {CanvasRenderingContext2D} c - Canvas 渲染上下文
+   * @param {number} vx0/vy0/vx1/vy1 - 视口世界坐标范围
+   * @param {number} k - 当前缩放比例
+   * @param {string|null} focusN - 聚焦节点 ID
+   * @param {object|null} feObj - 悬停的关系边对象
+   * @param {Set|null} feIds - 悬停关系边的端点 ID 集合
+   * @param {number} ae - 激活的关系边索引
+   */
   const drawEdges = useCallback(
     (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae) => {
       const hasF = !!(focusN || feObj)
@@ -311,7 +337,7 @@ export default function useGraphCanvas(canvasRef) {
         const sy = s.y
         const tx = t.x
         const ty = t.y
-        // viewport culling
+        // 视口裁剪：跳过不在可视区域内的边（drawEdges 中）
         if (
           Math.max(sx, tx) < vx0 ||
           Math.min(sx, tx) > vx1 ||
@@ -330,7 +356,7 @@ export default function useGraphCanvas(canvasRef) {
           (s.id === focusN || t.id === focusN)
         const act = isE || isNL
 
-        // alpha
+        // 透明度计算：根据聚焦状态、路径高亮、悬停状态综合决定
         let alpha
         if (ph && hasF) {
           alpha = act ? 1 : onPath ? 0.2 : 0.05
@@ -341,7 +367,7 @@ export default function useGraphCanvas(canvasRef) {
         }
         c.globalAlpha = alpha
 
-        // stroke style
+        // 笔触样式：根据路径高亮、激活、悬停状态设置颜色和线宽
         c.beginPath()
         c.lineWidth = onPath ? 2.5 / k : act ? 2.5 / k : 1.6 / k
         c.strokeStyle = onPath
@@ -362,7 +388,7 @@ export default function useGraphCanvas(canvasRef) {
         }
         c.stroke()
 
-        // arrow at target
+        // 箭头绘制：在目标端点附近绘制方向箭头
         if (!edge.isSelfLoop) {
           const tr = t.r ?? 10
           let ax, ay, angle
@@ -399,7 +425,7 @@ export default function useGraphCanvas(canvasRef) {
           c.restore()
         }
 
-        // edge label
+        // 关系标签：在边的中点位置绘制类型名称（带圆角背景）
         c.globalAlpha = alpha
         if (edge.name) {
           if (ph && hasF && !act) return
@@ -435,6 +461,11 @@ export default function useGraphCanvas(canvasRef) {
     [passFilter, passEdgeFilter, bezCp, bezMid],
   )
 
+  /**
+   * 绘制所有节点
+   * 包括：视口裁剪、路径/聚焦高亮发光、圆形填充和描边、名称标签
+   * 节点按权重升序绘制，权重大的在上层
+   */
   const drawNodes = useCallback(
     (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn) => {
       const hasF = !!(focusN || feObj)
@@ -444,7 +475,7 @@ export default function useGraphCanvas(canvasRef) {
         if (passFilter(n)) vis.add(n.id)
       })
 
-      // sort by weight ascending so heavier nodes are drawn on top
+      // 按权重升序排列，确保权重大的节点绘制在上层
       const sorted = [...nodesRef.current].sort(
         (a, b) => (a.weight || 0) - (b.weight || 0),
       )
@@ -452,7 +483,7 @@ export default function useGraphCanvas(canvasRef) {
       sorted.forEach((nd) => {
         const x = nd.x ?? 0
         const y = nd.y ?? 0
-        // viewport culling
+        // 视口裁剪：跳过不在可视区域内的节点
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return
         if (!vis.has(nd.id)) return
 
@@ -473,7 +504,7 @@ export default function useGraphCanvas(canvasRef) {
         const fc = isNF || isEF || isSN
         const r = BR
 
-        // alpha
+        // 透明度计算：路径高亮、聚焦、搜索等状态的综合判断
         if (ph && hasF) {
           c.globalAlpha = fc || isNN ? 1 : onPath ? 0.2 : 0.05
         } else if (ph) {
@@ -482,7 +513,7 @@ export default function useGraphCanvas(canvasRef) {
           c.globalAlpha = hasF ? (fc || isNN ? 1 : 0.15) : 1
         }
 
-        // path glow
+        // 路径高亮发光效果：红色光晕
         if (onPath && (!ph || !hasF || fc || isNN)) {
           c.beginPath()
           c.arc(x, y, r + 6 / k, 0, Math.PI * 2)
@@ -502,7 +533,7 @@ export default function useGraphCanvas(canvasRef) {
                 : 1
         }
 
-        // selected glow
+        // 选中/悬停发光效果：使用节点自身颜色的光晕
         if (fc) {
           c.beginPath()
           c.arc(x, y, r + 5 / k, 0, Math.PI * 2)
@@ -513,7 +544,7 @@ export default function useGraphCanvas(canvasRef) {
           c.globalAlpha = 1
         }
 
-        // circle
+        // 绘制节点圆形：填充 + 描边
         c.beginPath()
         c.arc(x, y, r, 0, Math.PI * 2)
         c.fillStyle = nd.color
@@ -522,7 +553,7 @@ export default function useGraphCanvas(canvasRef) {
         c.lineWidth = (fc ? 3 : 2.5) / k
         c.stroke()
 
-        // label
+        // 节点名称标签：缩放大于 0.6 时显示，聚焦节点显示更长的名称
         if (k > 0.6) {
           const sf = (fc || isNN) && !ph
           const nodeAlpha =
@@ -588,7 +619,8 @@ export default function useGraphCanvas(canvasRef) {
     [passFilter],
   )
 
-  // ── Minimap ────────────────────────────────────────────────────────
+  // ── 小地图绘制 ──────────────────────────────────────────────────────
+  /** 在小地图 Canvas 上绘制缩略图和视口矩形 */
   const drawMinimap = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -648,7 +680,7 @@ export default function useGraphCanvas(canvasRef) {
       mctx.fill()
     })
 
-    // viewport rectangle
+    // 视口矩形：在小地图上标注当前可视区域
     const t = transformRef.current
     const vx0 = -t.x / t.k
     const vy0 = -t.y / t.k
@@ -663,7 +695,8 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [canvasRef])
 
-  // ── Draw frame ─────────────────────────────────────────────────────
+  // ── 绘制帧 ─────────────────────────────────────────────────────────
+  /** 单帧绘制：清空画布 → 应用变换 → 绘制关系 → 绘制节点 → 绘制小地图 */
   const drawFrame = useCallback(() => {
     needRender.current = false
     const c = ctxRef.current
@@ -702,7 +735,8 @@ export default function useGraphCanvas(canvasRef) {
     if (showMinimap) drawMinimap()
   }, [drawEdges, drawNodes, drawMinimap, showMinimap])
 
-  // ── Schedule render ────────────────────────────────────────────────
+  // ── 调度渲染 ──────────────────────────────────────────────────────
+  /** 使用 requestAnimationFrame 调度下一帧渲染，避免重复调度 */
   const drawFrameRef = useRef(drawFrame)
   useEffect(() => { drawFrameRef.current = drawFrame }, [drawFrame])
 
@@ -718,7 +752,8 @@ export default function useGraphCanvas(canvasRef) {
     })
   }, [])
 
-  // ── zoomTo ─────────────────────────────────────────────────────────
+  // ── 缩放到指定比例 ─────────────────────────────────────────────────
+  /** 以画布中心为锚点缩放到指定比例 k */
   const zoomTo = useCallback(
     (k) => {
       const cx = W.current / 2
@@ -734,7 +769,8 @@ export default function useGraphCanvas(canvasRef) {
     [setZoom, scheduleRender],
   )
 
-  // ── gatherIsolates (cluster orphan nodes at center, reset zoom) ────
+  // ── 聚集孤立节点 ──────────────────────────────────────────────────
+  /** 将无连接的孤立节点聚集到画布中心，排列为网格布局 */
   const gatherIsolates = useCallback(() => {
     const isolates = nodesRef.current.filter((n) => n.degree === 0)
     if (!isolates.length) return
@@ -757,7 +793,8 @@ export default function useGraphCanvas(canvasRef) {
     scheduleRender()
   }, [setZoom, scheduleRender])
 
-  // ── focusNode (center viewport on a node) ──────────────────────────
+  // ── 聚焦节点 ──────────────────────────────────────────────────────
+  /** 将视口中心移动到指定节点的位置 */
   const focusNode = useCallback(
     (nodeId) => {
       const nd = nodesRef.current.find((n) => n.id === nodeId)
@@ -771,7 +808,11 @@ export default function useGraphCanvas(canvasRef) {
     [scheduleRender],
   )
 
-  // ── render (main entry point) ──────────────────────────────────────
+  // ── 渲染入口 ──────────────────────────────────────────────────────
+  /**
+   * 主渲染入口：初始化画布 → 数据清洗 → 保留旧坐标 → 计算边曲率 →
+   * 计算节点度数和半径 → 创建/重启 D3 力导向仿真
+   */
   const render = useCallback(
     (nodes, links) => {
       initCanvas()
@@ -792,7 +833,7 @@ export default function useGraphCanvas(canvasRef) {
           target: clean(typeof l.target === 'object' ? l.target?.id : l.target),
         }))
 
-      // preserve previous positions
+      // 保留前一次仿真中节点的位置和速度，避免重新加载时图谱跳动
       const prev = new Map(nodesRef.current.map((n) => [n.id, n]))
       safeN.forEach((n) => {
         const p = prev.get(n.id)
@@ -806,7 +847,7 @@ export default function useGraphCanvas(canvasRef) {
       graphNodesRef.current = safeN
       graphLinksRef.current = safeL
 
-      // compute edge curvature
+      // 计算边的曲率：同一对节点间多条关系使用不同曲率避免重叠
       const pairCount = {}
       safeL.forEach((e) => {
         const pk = [e.source, e.target].sort().join('_')
@@ -837,7 +878,7 @@ export default function useGraphCanvas(canvasRef) {
       })
       edgesRef.current = edges
 
-      // compute degrees and radius
+      // 计算节点度数和可视化半径
       const degMap = {}
       edges.forEach((e) => {
         degMap[e.source] = (degMap[e.source] || 0) + 1
@@ -851,10 +892,10 @@ export default function useGraphCanvas(canvasRef) {
         name: n.label,
       }))
 
-      // stop old simulation
+      // 停止旧仿真
       simRef.current?.stop()
 
-      // create new simulation
+      // 创建新的 D3 力导向仿真，配置各力模型参数
       simRef.current = d3
         .forceSimulation(nodesRef.current)
         .force(
@@ -889,7 +930,8 @@ export default function useGraphCanvas(canvasRef) {
     [initCanvas, buildQuadtree, scheduleRender],
   )
 
-  // ── Pointer event handlers ─────────────────────────────────────────
+  // ── 指针事件处理器 ─────────────────────────────────────────────────
+  /** 鼠标滚轮事件：以光标位置为锚点进行缩放 */
   const onWheel = useCallback(
     (e) => {
       e.preventDefault()
@@ -915,12 +957,13 @@ export default function useGraphCanvas(canvasRef) {
     [canvasRef, setZoom, scheduleRender],
   )
 
+  /** 指针移动事件：处理节点拖拽、画布平移、悬停检测 */
   const onPtrMove = useCallback(
     (e) => {
       const canvas = canvasRef.current
       if (!canvas) return
 
-      // dragging a node
+      // 拖拽节点：将鼠标位置转换为世界坐标并更新节点固定位置
       if (dragging.current) {
         const [wx, wy] = toWorld(e.clientX, e.clientY)
         const dx = wx - dragWX.current
@@ -936,7 +979,7 @@ export default function useGraphCanvas(canvasRef) {
         return
       }
 
-      // panning
+      // 画布平移：更新变换矩阵偏移量
       if (panning.current) {
         transformRef.current = d3.zoomIdentity
           .translate(
@@ -948,7 +991,7 @@ export default function useGraphCanvas(canvasRef) {
         return
       }
 
-      // hover detection
+      // 悬停检测：查找光标处的节点和边，更新高亮状态
       const [wx, wy] = toWorld(e.clientX, e.clientY)
       const nd = findNodeAt(wx, wy)
       const snap = storeSnap.current
@@ -1008,6 +1051,7 @@ export default function useGraphCanvas(canvasRef) {
     ],
   )
 
+  /** 指针按下事件：判断是节点拖拽还是画布平移的起点 */
   const onPtrDown = useCallback(
     (e) => {
       if (e.button !== 0) return
@@ -1040,6 +1084,7 @@ export default function useGraphCanvas(canvasRef) {
     [canvasRef, toWorld, findNodeAt],
   )
 
+  /** 指针释放事件：结束拖拽或平移操作 */
   const onPtrUp = useCallback(() => {
     if (dragging.current) {
       if (isDrag.current) simRef.current?.alphaTarget(0)
@@ -1055,6 +1100,7 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [canvasRef])
 
+  /** 指针离开画布：清除悬停状态和光标样式 */
   const onPtrLeave = useCallback(() => {
     if (panning.current) {
       panning.current = false
@@ -1072,9 +1118,10 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [canvasRef, setHoveredNode, setDetailNode, scheduleRender])
 
+  /** 点击事件：处理节点选中/取消选中、抓取模式、关系点击、空白点击 */
   const onClick = useCallback(
     (e) => {
-      // ignore if it was a drag
+      // 忽略拖拽产生的点击（位移超过阈值视为拖拽而非点击）
       if (
         Math.abs(e.clientX - downX.current) > DRAG_THRESHOLD ||
         Math.abs(e.clientY - downY.current) > DRAG_THRESHOLD
@@ -1086,7 +1133,7 @@ export default function useGraphCanvas(canvasRef) {
       const snap = storeSnap.current
 
       if (nd) {
-        // pick mode
+        // 抓取模式：点击节点后将 nid 写入 store，供表单字段使用
         if (snap.pickTarget) {
           const nid = clean(nd.raw?.nid ?? nd.nid ?? nd.id)
           setPickedNid(nid)
@@ -1095,7 +1142,7 @@ export default function useGraphCanvas(canvasRef) {
         }
 
         if (snap.selectedNodeId === nd.id) {
-          // deselect
+          // 取消选中：清除所有选中/悬停/详情状态
           setSelectedNode(null)
           setHoveredNode(null)
           setDetailNode(null)
@@ -1109,7 +1156,7 @@ export default function useGraphCanvas(canvasRef) {
         return
       }
 
-      // edge click
+      // 点击关系边：显示关系详情
       const ei = findEdgeAt(wx, wy)
       if (ei >= 0) {
         const edge = edgesRef.current[ei]
@@ -1118,16 +1165,14 @@ export default function useGraphCanvas(canvasRef) {
           edge.source?.id === snap.selectedNodeId ||
           edge.target?.id === snap.selectedNodeId
         if (isHighlighted && edge.raw) {
-          // Signal that a relation was clicked — the consumer can listen
-          // to the store for this. For parity with the original, we write
-          // the raw relation data into the store's detail slot.
+          // 将关系原始数据写入详情面板的 store 槽位
           setDetailNode({ _type: 'relation', raw: edge.raw })
           scheduleRender()
           return
         }
       }
 
-      // clicked empty space
+      // 点击空白区域：清除所有选中状态
       setSelectedNode(null)
       setHoveredNode(null)
       setDetailNode(null)
@@ -1148,7 +1193,7 @@ export default function useGraphCanvas(canvasRef) {
     ],
   )
 
-  // ── Keyboard (Escape exits pick mode) ──────────────────────────────
+  // ── 键盘事件（ESC 退出抓取模式）──────────────────────────────────────
   const onKeyDown = useCallback(
     (e) => {
       if (e.key === 'Escape' && storeSnap.current.pickTarget) {
@@ -1159,7 +1204,8 @@ export default function useGraphCanvas(canvasRef) {
     [setPickTarget, setStatus],
   )
 
-  // ── Resize handler ─────────────────────────────────────────────────
+  // ── 窗口尺寸变化处理 ─────────────────────────────────────────────────
+  /** 窗口 resize 时重新初始化画布并更新力导向仿真中心点 */
   const onResize = useCallback(() => {
     initCanvas()
     if (simRef.current) {
@@ -1170,9 +1216,8 @@ export default function useGraphCanvas(canvasRef) {
     scheduleRender()
   }, [initCanvas, scheduleRender])
 
-  // ── Re-render when graph data changes ─────────────────────────────
-  // Use a ref for render to avoid stale closures while preventing
-  // the simulation from being recreated on every render function change.
+  // ── 图谱数据变化时重新渲染 ──────────────────────────────────────────
+  // 使用 ref 缓存 render 函数，避免闭包陈旧同时防止仿真因 render 变化而重建
   const renderRef = useRef(render)
   useEffect(() => { renderRef.current = render }, [render])
   useEffect(() => {
@@ -1181,7 +1226,7 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [storeNodes, storeLinks])
 
-  // ── Re-render when reactive state changes ──────────────────────────
+  // ── 响应式状态变化时触发重渲染 ──────────────────────────────────────
   useEffect(() => {
     scheduleRender()
   }, [
@@ -1196,7 +1241,7 @@ export default function useGraphCanvas(canvasRef) {
     scheduleRender,
   ])
 
-  // Cleanup on unmount only
+  // 组件卸载时清理：停止仿真和取消待渲染帧
   useEffect(() => {
     return () => {
       simRef.current?.stop()
@@ -1207,7 +1252,7 @@ export default function useGraphCanvas(canvasRef) {
     }
   }, [])
 
-  // ── Bind / unbind event listeners ──────────────────────────────────
+  // ── 绑定/解绑事件监听器 ──────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -1249,7 +1294,7 @@ export default function useGraphCanvas(canvasRef) {
     onResize,
   ])
 
-  // ── Public API ─────────────────────────────────────────────────────
+  // ── 对外暴露的公共 API ─────────────────────────────────────────────
   return {
     render,
     zoomTo,

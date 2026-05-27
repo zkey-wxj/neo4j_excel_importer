@@ -8,6 +8,10 @@ import { Database, CircleDot, GitBranch, Route, Repeat } from 'lucide-react'
 
 function clean(v) { return String(v || '').trim() }
 
+/**
+ * 键值对列表组件
+ * 用于编辑节点/关系的自定义属性，支持动态添加和删除字段
+ */
 function KvList({ items, onChange }) {
   const add = () => onChange([...items, { key: '', value: '' }])
   const remove = (idx) => { const n = items.filter((_, i) => i !== idx); onChange(n.length ? n : [{ key: '', value: '' }]) }
@@ -26,10 +30,18 @@ function KvList({ items, onChange }) {
   )
 }
 
+/** 将键值对数组转换为对象 */
 function kvToObj(items) { const o = {}; items.forEach(({ key, value }) => { const k = clean(key); if (k) o[k] = value }); return o }
+/** 将对象转换为键值对数组，用于表单双向绑定 */
 function objToKv(obj) { const e = Object.entries(obj || {}); return e.length ? e.map(([k, v]) => ({ key: String(k), value: v == null ? '' : String(v) })) : [{ key: '', value: '' }] }
+/** 表单字段包装组件：标签 + 输入控件 */
 function Field({ label, children }) { return <div className="grid gap-0.5"><Label className="text-[9px] text-muted-foreground font-mono leading-none">{label}</Label>{children}</div> }
 
+/**
+ * 可抓取的输入框组件
+ * 点击「抓取」按钮后进入抓取模式，用户可通过点击图谱节点自动填入节点 ID
+ * @param {string} inputId - 用于标识此输入框的唯一 ID（如 'relSource'、'pathTarget'）
+ */
 function PickableInput({ label, placeholder, value, onChange, inputId }) {
   const pickTarget = useAppStore((s) => s.pickTarget)
   const setPickTarget = useAppStore((s) => s.setPickTarget)
@@ -44,6 +56,7 @@ function PickableInput({ label, placeholder, value, onChange, inputId }) {
   )
 }
 
+/** CRUD 操作按钮组：新增、更新、删除 */
 function CrudBtns({ onCreate, onUpdate, onDelete, busy }) {
   return (
     <div className="flex gap-1 mt-2">
@@ -54,6 +67,7 @@ function CrudBtns({ onCreate, onUpdate, onDelete, busy }) {
   )
 }
 
+// 操作面板的五个功能分区定义
 const SECTIONS = [
   { key: 'load', icon: Database, label: '图谱加载' },
   { key: 'node', icon: CircleDot, label: '节点操作' },
@@ -62,6 +76,12 @@ const SECTIONS = [
   { key: 'replace', icon: Repeat, label: '关系替换' },
 ]
 
+/**
+ * 操作面板组件
+ * 左侧图标栏 + 右侧展开内容面板的复合布局
+ * 包含五个功能区：图谱加载、节点操作、关系操作、路径查询、关系替换
+ * 支持通过抓取模式从图谱中选取节点 ID 自动填入表单
+ */
 export default function OpsPanel() {
   const [expanded, setExpanded] = useState(false)
   const [activeSection, setActiveSection] = useState('load')
@@ -107,6 +127,7 @@ export default function OpsPanel() {
   const [replaceNew, setReplaceNew] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // 当选中节点变化时，自动填充节点编辑表单
   useEffect(() => {
     if (!selectedNodeId) return
     const n = nodes?.find((x) => x.id === selectedNodeId)
@@ -120,12 +141,14 @@ export default function OpsPanel() {
     setNodeMeta(objToKv(r.meta))
   }, [selectedNodeId])
 
+  // 收到展开信号时（从详情面板点击「编辑」），自动展开到节点操作区
   useEffect(() => {
     if (!opsExpand) return
     setOpsExpand(false)
     handleSectionClick('node')
   }, [opsExpand])
 
+  // 抓取模式：用户在图谱上点击节点后，将 nid 自动填入对应的表单字段
   useEffect(() => {
     if (!pickTarget || !pickedNid) return
     const map = { relSource: setRelSource, relTarget: setRelTarget, pathSource: setPathSource, pathTarget: setPathTarget, replaceOld: setReplaceOld, replaceNew: setReplaceNew }
@@ -134,25 +157,39 @@ export default function OpsPanel() {
     setPickedNid(null)
   }, [pickedNid, pickTarget])
 
+  // 通知工具函数：使用 sonner toast 显示成功/错误消息
   const notify = useCallback(async (m, t) => { const { toast } = await import('sonner'); t === 'error' ? toast.error(m) : toast.success(m) }, [])
+  // 构建节点请求体：校验必填字段并收集表单数据
   const buildNodePayload = () => { const g = clean(groupId), u = clean(nodeNid); if (!g) throw new Error('group_id 不能为空'); if (!u) throw new Error('nid 不能为空'); return { group_id: g, nid: u, name: clean(nodeName), labels: nodeLabels.split(',').map(s => clean(s)).filter(Boolean), description: clean(nodeDesc), properties: kvToObj(nodeProps), meta: kvToObj(nodeMeta) } }
+  // 构建关系请求体：校验必填字段并收集表单数据
   const buildRelPayload = () => { const g = clean(groupId), s = clean(relSource), t = clean(relTarget), rt = clean(relType); if (!g || !s || !t || !rt) throw new Error('字段不能为空'); return { group_id: g, source_nid: s, target_nid: t, rel_type: rt, description: clean(relDesc), properties: kvToObj(relProps) } }
+  // 忙碌状态包装器：防重复点击，自动处理异常
   const wrap = (fn) => async () => { if (busy) return; try { setBusy(true); await fn() } catch (e) { notify(e.message, 'error') } finally { setBusy(false) } }
 
+  // ── 操作处理函数 ──
+  // 加载图谱
   const handleLoad = wrap(async () => { const g = clean(groupId); if (!g) { setStatus('group_id 不能为空', true); return }; await loadGroup(g) })
+  // 节点 CRUD
   const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认新增节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'POST', p) })
   const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认更新节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'PUT', p) })
   const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }) })
   const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'POST', p) })
   const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'PUT', p) })
   const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }) })
+  // 路径查询：BFS 最短路径
   const handleFindPath = () => { const s = clean(pathSource), t = clean(pathTarget); if (!s || !t) { setStatus('请输入起点和终点', true); return }; if (s === t) { setStatus('起点和终点相同', true); return }; const r = findPath(s, t); if (r.error) { setStatus(r.error, true); return }; setPathHighlight(r.highlight); setHasPath(true); setStatus(`路径: ${r.hops} 跳, ${r.pathNodes.length} 节点`) }
+  // 清除路径高亮
   const handleClearPath = () => { setPathHighlight(null); setHasPath(false); setStatus('已清除路径高亮') }
+  // 关系替换：将旧节点的所有关系转移到新节点
   const handleReplace = wrap(async () => { const g = clean(groupId), o = clean(replaceOld), n = clean(replaceNew); if (!g || !o || !n) { notify('字段不能为空', 'error'); return }; if (o === n) { notify('不能相同', 'error'); return }; if (!await confirm(`确认将全部关系从 ${o} 转移至 ${n}？`)) return; await mutate('/group-graph/api/replace-node-relations', 'POST', { group_id: g, old_nid: o, new_nid: n }) })
 
   const [panelOffset, setPanelOffset] = useState(0)
   const [panelReady, setPanelReady] = useState(false)
 
+  /**
+   * 切换功能区面板：测量图标位置，计算面板和箭头的偏移量
+   * 使用双层 requestAnimationFrame 等待 DOM 渲染完成后再测量
+   */
   const handleSectionClick = (key) => {
     if (expanded && activeSection === key) {
       setExpanded(false)
@@ -161,7 +198,7 @@ export default function OpsPanel() {
     setActiveSection(key)
     setPanelReady(false)
     setExpanded(true)
-    // Wait for panel to render (invisible), then measure and position
+    // 等待面板渲染完成后测量并定位
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
@@ -173,11 +210,11 @@ export default function OpsPanel() {
             const barH = bar.getBoundingClientRect().height
             const panelH = panel.getBoundingClientRect().height
             const iconCenter = icon.getBoundingClientRect().top + icon.getBoundingClientRect().height / 2 - barTop
-            // Panel offset: align panel top so arrow matches icon center
+            // 面板偏移：对齐面板顶部使箭头指向图标中心
             let offset = iconCenter - 20
             offset = Math.max(0, Math.min(offset, barH - panelH))
             setPanelOffset(offset)
-            // Arrow tip at icon center: rotate(-45) shifts visual tip ~4px down from CSS top
+            // 箭头尖端对准图标中心：rotate(-45) 使视觉尖端比 CSS top 偏移约 4px
             const arrowY = Math.max(0, Math.min(iconCenter - offset - 4, panelH - 11))
             setArrowTop(arrowY)
             setPanelReady(true)

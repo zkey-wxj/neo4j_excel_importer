@@ -9,6 +9,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 
+/**
+ * 确认对话框组件
+ * 通用的二次确认弹窗，用于删除节点、导入覆盖等危险操作前
+ * 返回 Promise<boolean>，用户点击「确认」resolve true，点击「取消」或关闭 resolve false
+ */
 export default function ConfirmDialog() {
   const open = useAppStore((s) => s.confirmOpen)
   const message = useAppStore((s) => s.confirmMessage)

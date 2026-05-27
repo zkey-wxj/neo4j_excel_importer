@@ -6,62 +6,62 @@ const graphStore = new GraphStore()
 const graphAPI = new GraphAPI(graphStore)
 
 export const useAppStore = create((set, get) => ({
-  // ── Data ──
-  nodes: [],
-  links: [],
-  rawNodes: graphStore.nodeMap,
-  rawLinks: graphStore.linkMap,
-  graphStore,
-  graphAPI,
+  // ── 图谱数据 ──
+  nodes: [],           // 渲染就绪的节点数组（含计算后的颜色、半径、权重等）
+  links: [],           // 渲染就绪的关系数组（含曲线曲率、端点引用等）
+  rawNodes: graphStore.nodeMap,   // 原始节点存储（nid → 节点对象，去重）
+  rawLinks: graphStore.linkMap,   // 原始关系存储（relStoreKey → 关系对象，去重）
+  graphStore,           // 底层 GraphStore 实例，负责数据去重和图算法计算
+  graphAPI,             // GraphAPI 实例，负责与后端 HTTP 通信
 
-  // ── Stats ──
+  // ── 统计信息 ──
   stats: { nodeCount: 0, linkCount: 0, orphanCount: 0, nodeTypeCount: 0, relTypeCount: 0 },
 
-  // ── UI state ──
-  groupId: '',
-  pageSize: 300,
-  status: '',
-  statusError: false,
-  isLoading: false,
-  isFullscreenLoading: true,
+  // ── UI 状态 ──
+  groupId: '',          // 当前加载的图谱分组 ID
+  pageSize: 300,        // 分页加载时每页的条目数
+  status: '',           // 底部状态栏显示的文本信息
+  statusError: false,   // 状态信息是否为错误样式
+  isLoading: false,     // 是否正在执行异步操作（如 CRUD 操作）
+  isFullscreenLoading: true,  // 是否显示全屏加载遮罩（初始加载/切换分组时）
 
-  // ── Interaction state ──
-  selectedNodeId: null,
-  hoveredNodeId: null,
-  searchKeyword: '',
-  orphanFilter: false,
-  selectedLegendTypes: new Set(),
-  selectedRelTypes: new Set(),
-  pathHighlight: null,
+  // ── 交互状态 ──
+  selectedNodeId: null,        // 当前选中的节点 ID
+  hoveredNodeId: null,         // 当前鼠标悬停的节点 ID
+  searchKeyword: '',           // 搜索过滤关键词（小写，已 trim）
+  orphanFilter: false,         // 是否只显示孤立节点（无任何关系连接的节点）
+  selectedLegendTypes: new Set(),  // 图例面板中选中的节点类型集合
+  selectedRelTypes: new Set(),     // 图例面板中选中的关系类型集合
+  pathHighlight: null,         // 路径高亮集合（包含节点 ID 和边 key）
 
-  // ── Detail panel ──
-  detailNode: null,
+  // ── 详情面板 ──
+  detailNode: null,      // 详情面板展示的节点或关系对象
 
-  // ── Minimap ──
-  showMinimap: false,
+  // ── 小地图 ──
+  showMinimap: false,    // 是否显示右下角小地图
 
-  // ── Import modal ──
-  showImportModal: false,
-  importFile: null,
-  importMode: 'merge',
+  // ── 导入弹窗 ──
+  showImportModal: false,  // 是否显示导入弹窗
+  importFile: null,        // 待导入的文件对象（File 实例）
+  importMode: 'merge',     // 导入模式：'merge' 合并 / 'override' 覆盖
 
-  // ── Pick mode (for "grab node" buttons) ──
-  pickTarget: null, // input field id
-  pickedNid: null, // nid of picked node
+  // ── 抓取模式（用于表单字段自动填入节点 ID）──
+  pickTarget: null,  // 当前激活的抓取目标表单字段 ID（如 'relSource'）
+  pickedNid: null,   // 最近一次抓取到的节点 nid
 
-  // ── Zoom ──
-  zoom: 1.0,
+  // ── 缩放 ──
+  zoom: 1.0,         // 当前画布缩放比例
 
-  // ── Ops panel trigger ──
-  opsExpand: false,
+  // ── 操作面板触发器 ──
+  opsExpand: false,    // 从详情面板「编辑」按钮触发展开操作面板的信号
 
-  // ── Confirm dialog ──
-  confirmOpen: false,
-  confirmMessage: '',
-  _confirmResolve: null,
+  // ── 确认对话框 ──
+  confirmOpen: false,       // 是否显示确认对话框
+  confirmMessage: '',       // 确认对话框的提示文本
+  _confirmResolve: null,    // Promise resolve 回调（内部使用）
 
   // ═══════════════════════════════════════════════════════════════════
-  // Simple setters
+  // 简单 setter 方法：直接更新 Zustand 状态
   // ═══════════════════════════════════════════════════════════════════
   setGroupId: (v) => set({ groupId: v }),
   setPageSize: (v) => set({ pageSize: v }),
@@ -95,7 +95,8 @@ export const useAppStore = create((set, get) => ({
   },
 
   // ═══════════════════════════════════════════════════════════════════
-  // Legend type toggles
+  // 图例类型筛选切换
+  // 用于图例面板中按节点类型或关系类型过滤图谱显示
   // ═══════════════════════════════════════════════════════════════════
   toggleLegendType: (key) => {
     const s = new Set(get().selectedLegendTypes)
@@ -111,7 +112,8 @@ export const useAppStore = create((set, get) => ({
   clearRelTypes: () => set({ selectedRelTypes: new Set() }),
 
   // ═══════════════════════════════════════════════════════════════════
-  // Sync graph data from the plain store into Zustand state
+  // 同步图谱数据：将底层 GraphStore 的原始数据转换为 React 渲染状态
+  // 每次数据变更后调用，触发组件重新渲染
   // ═══════════════════════════════════════════════════════════════════
   updateGraphData: () => {
     const g = graphStore.mapGraphData()
@@ -128,10 +130,10 @@ export const useAppStore = create((set, get) => ({
   },
 
   // ═══════════════════════════════════════════════════════════════════
-  // Async actions
+  // 异步操作：加载图谱、执行增删改、导入文件
   // ═══════════════════════════════════════════════════════════════════
 
-  /** Load a graph group by gid with paginated cursor support */
+  /** 按分组 ID 加载图谱，支持游标分页，每加载一页更新一次 UI */
   loadGroup: async (gid) => {
     const { graphAPI, updateGraphData } = get()
     set({ isFullscreenLoading: true })
@@ -151,7 +153,7 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  /** Load demo graph data with simulated pagination */
+  /** 加载示例图谱数据，模拟分页加载效果 */
   loadDemo: async () => {
     const { graphAPI, updateGraphData } = get()
     set({ isFullscreenLoading: true })
@@ -163,7 +165,7 @@ export const useAppStore = create((set, get) => ({
     set({ status: '已加载示例图谱' })
   },
 
-  /** Execute a CRUD mutation, then sync graph data to React state */
+  /** 执行 CRUD 操作（POST/PUT/DELETE），成功后同步图谱数据到 React 状态 */
   mutate: async (path, method, payload) => {
     const { graphAPI, updateGraphData } = get()
     set({ isLoading: true })
@@ -183,7 +185,7 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  /** Import a file (Excel/JSON) to the backend */
+  /** 上传文件（Excel/JSON）到后端进行导入 */
   importFileToServer: async (file) => {
     const { graphAPI } = get()
     const { groupId, importMode } = get()
@@ -191,7 +193,7 @@ export const useAppStore = create((set, get) => ({
     try {
       const data = await graphAPI.importFile(groupId, file, importMode)
       set({ status: `导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}` })
-      // Reload the group after import
+      // 导入完成后重新加载当前分组数据以刷新图谱
       await get().loadGroup(groupId)
       return data
     } catch (e) {
@@ -204,12 +206,17 @@ export const useAppStore = create((set, get) => ({
   },
 
   // ═══════════════════════════════════════════════════════════════════
-  // Path finding (BFS shortest path)
+  // 路径查找（BFS 广度优先搜索最短路径）
+  // 在 store 的 linkMap 上构建无向邻接表，使用 BFS 寻找两节点间最短路径
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Find shortest path between two nodes using BFS on the store's linkMap.
-   * Returns { pathNodes, highlight, hops } or { error }.
+   * 使用 BFS 查找两个节点之间的最短路径
+   * @param {string} src - 起点节点 ID
+   * @param {string} tgt - 终点节点 ID
+   * @returns {{ pathNodes: string[], highlight: Set, hops: number } | { error: string }}
+   *   成功时返回路径节点数组、高亮集合（节点+边）、跳数；
+   *   失败时返回错误信息
    */
   findPath: (src, tgt) => {
     const store = get().graphStore
@@ -217,7 +224,7 @@ export const useAppStore = create((set, get) => ({
     if (!store.nodeMap.has(tgt)) return { error: `终点 ${tgt} 不存在` }
     if (src === tgt) return { error: '起点和终点相同' }
 
-    // Build undirected adjacency list from linkMap
+    // 根据 linkMap 构建无向邻接表
     const adj = new Map()
     store.linkMap.forEach((r) => {
       const s = (r.source_nid || '').trim()
@@ -229,7 +236,7 @@ export const useAppStore = create((set, get) => ({
       adj.get(t).push(s)
     })
 
-    // BFS
+    // BFS 广度优先搜索
     const queue = [src]
     const visited = new Set([src])
     const parent = new Map()
@@ -251,7 +258,7 @@ export const useAppStore = create((set, get) => ({
 
     if (!found) return { error: '未找到路径' }
 
-    // Backtrack path
+    // 回溯构建完整路径
     const pathNodes = []
     let node = tgt
     while (node) {
@@ -259,7 +266,7 @@ export const useAppStore = create((set, get) => ({
       node = parent.get(node)
     }
 
-    // Build highlight set: nodes + edge keys
+    // 构建高亮集合：包含路径上所有节点 ID 和边 key（双向）
     const highlight = new Set()
     for (const nid of pathNodes) highlight.add(nid)
     for (let i = 0; i < pathNodes.length - 1; i++) {

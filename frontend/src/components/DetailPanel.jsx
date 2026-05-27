@@ -8,6 +8,10 @@ function clean(v) {
   return String(v || '').trim()
 }
 
+/**
+ * 节点详情子组件
+ * 展示选中节点的名称、类型标签、nid、属性、权重及关联节点列表
+ */
 function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
   const raw = detailNode.raw || detailNode
   const nodeType = detailNode.type || 'Node'
@@ -16,7 +20,7 @@ function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
   const nodeNid = clean(raw.nid)
   const weight = detailNode.weight ?? 0
 
-  // Find neighbors
+  // 查找当前节点的所有邻居（通过关系连接的节点）
   const nodeId = detailNode.id || nodeNid
   const neighbors = []
   ;(links || []).forEach((l) => {
@@ -101,6 +105,10 @@ function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
   )
 }
 
+/**
+ * 关系详情子组件
+ * 展示选中关系的类型、源节点、目标节点及属性信息
+ */
 function RelationDetail({ raw, nodes, onNavigate }) {
   const relType = clean(raw.rel_type) || 'RELATED'
   const srcNid = clean(raw.source_nid)
@@ -154,6 +162,11 @@ function RelationDetail({ raw, nodes, onNavigate }) {
   )
 }
 
+/**
+ * 详情面板组件
+ * 在右侧滑出显示选中节点或关系的详细信息面板，
+ * 支持节点/关系两种视图切换，以及节点间导航和编辑操作
+ */
 export default function DetailPanel() {
   const detailNode = useAppStore((s) => s.detailNode)
   const setDetailNode = useAppStore((s) => s.setDetailNode)

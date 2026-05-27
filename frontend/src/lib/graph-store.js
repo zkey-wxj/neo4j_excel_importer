@@ -2,22 +2,22 @@ import * as d3 from 'd3'
 import { DEMO_NAMES, DEMO_TYPES, DEMO_RELS } from './constants'
 
 /* ═══════════════════════════════════════════════════════════════════
- Helper utilities
+ 辅助工具函数
  ═══════════════════════════════════════════════════════════════════ */
 
-/** Safe string trim: null/undefined → empty trimmed string */
+/** 安全的字符串 trim：null/undefined 转为空字符串后 trim */
 export function clean(v) {
   return String(v || '').trim()
 }
 
-/** Get the first label from a node's labels array, falling back to "Node" */
+/** 从节点的 labels 数组中提取第一个标签作为节点类型，无标签时回退为 "Node" */
 export function parseType(labels) {
   const a = Array.isArray(labels) ? labels.map(x => clean(x)).filter(Boolean) : []
   if (a.length > 0) return a[0]
   return 'Node'
 }
 
-/** Extract weight from a node's various locations, clamped to [1, 100] */
+/** 从节点的多个可能位置提取权重值，限制在 [1, 100] 范围内 */
 export function parseWeight(n) {
   for (const v of [n.weight, n.properties?.weight, n.properties?.score, n.meta?.score]) {
     const x = Number(v)
@@ -26,28 +26,29 @@ export function parseWeight(n) {
   return 50
 }
 
-/** Display name for a node */
+/** 获取节点的显示名称：优先使用 name，其次 nid，最后回退为 "Node" */
 export function nodeLabel(n) {
   return clean(n.name) || clean(n.nid) || 'Node'
 }
 
-/** Relation type string */
+/** 获取关系的类型字符串，无类型时回退为 "RELATED" */
 export function relLabel(r) {
   return clean(r.rel_type) || 'RELATED'
 }
 
-/** Dedup key for a relation: source_nid=>target_nid:rel_type */
+/** 生成关系的去重 key：source_nid=>target_nid:rel_type */
 export function relStoreKey(r) {
   return `${clean(r.source_nid)}=>${clean(r.target_nid)}:${relLabel(r)}`
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- Type metadata cache – color / background / radius per node type
- Colours are deterministically computed from the type string via FNV-1a hash → HSL.
+ 类型元信息缓存 – 为每种节点类型缓存颜色、背景色、半径
+ 颜色通过 FNV-1a 哈希算法从类型字符串确定性地映射到 HSL 色值，
+ 保证相同类型始终获得相同颜色，不同类型大概率获得不同颜色
  ═══════════════════════════════════════════════════════════════════ */
 const _typeMetaCache = new Map()
 
-/** Hash a string to a 32-bit integer (FNV-1a) */
+/** 将字符串哈希为 32 位整数（FNV-1a 算法，分布均匀且计算高效） */
 function fnv1a(str) {
   let h = 0x811c9dc5
   for (let i = 0; i < str.length; i++) {
@@ -57,7 +58,7 @@ function fnv1a(str) {
   return h >>> 0
 }
 
-/** Returns { color, bg, r } for a given node type string */
+/** 根据节点类型字符串返回 { color, bg, r } 元信息，带缓存 */
 export function getTypeMeta(type) {
   if (!_typeMetaCache.has(type)) {
     const hash = fnv1a(type)
@@ -74,11 +75,13 @@ export function getTypeMeta(type) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- Demo data generators
+ 示例数据生成器
+ 用于在无后端连接时生成模拟的图谱数据，方便前端开发和演示
  ═══════════════════════════════════════════════════════════════════ */
 
 /**
- * Simple seeded PRNG (Mulberry32) for deterministic demo data.
+ * 简单的种子随机数生成器（Mulberry32 算法）
+ * 使用固定种子确保每次生成相同的随机序列，便于重现
  */
 function mulberry32(seed) {
   return function () {
@@ -90,21 +93,21 @@ function mulberry32(seed) {
 }
 
 /**
- * Generate demo nodes in a tree hierarchy for knowledge-graph root entities.
+ * 生成示例节点，采用树形层级结构模拟知识图谱的根实体
  *
- *   Level 0:  3  roots     (System)
- *   Level 1:  30 children  (Component)
- *   Level 2:  120 leaves   (Database / Model / Task)
- *   Level 3:  remainder    (Model / Task)
+ *   第 0 层：3 个根节点     (System 类型)
+ *   第 1 层：30 个子节点    (Component 类型)
+ *   第 2 层：120 个叶子节点  (Database / Model / Task 类型)
+ *   第 3 层：剩余节点        (Model / Task 类型)
  *
- * Root nodes can reach every descendant → highest reachability weight.
+ * 根节点可到达所有后代节点，因此拥有最高的可达性权重
  */
 export function genDemoNodes(count) {
   const now = new Date().toISOString()
   const meta = { created_at: now, updated_at: now, source: 'demo', version: 1 }
   const rand = mulberry32(42)
 
-  // Shuffle names with seeded PRNG
+  // 使用种子随机数打乱名称顺序
   const names = [...DEMO_NAMES]
   for (let i = names.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
@@ -131,11 +134,12 @@ export function genDemoNodes(count) {
 }
 
 /**
- * Generate demo links as a tree with cross-links.
+ * 生成示例关系数据，采用树形结构 + 少量交叉链接
  *
- * Tree edges: each non-root node connects to a random parent in the level
- * above, creating a clear reachability hierarchy (root → … → leaf).
- * Cross-links: a small number of random edges between same-level siblings.
+ * 树边：每个非根节点随机连接到上一层的某个父节点，
+ *   形成清晰的可达性层级结构（根 → … → 叶子）
+ * 交叉链接：在同层兄弟节点之间随机添加少量边（约占总数 10%），
+ *   增加图谱的复杂度和真实感
  */
 export function genDemoLinks(nodes) {
   const now = new Date().toISOString()
@@ -166,7 +170,7 @@ export function genDemoLinks(nodes) {
 
   const nids = nodes.map(nd => nd.nid)
 
-  // Tree edges: level boundaries at 3, 33, 153
+  // 树边：根据层级边界（3, 33, 153）构建父子关系
   const cuts = [3, 33, 153, n]
   for (let lv = 1; lv < cuts.length; lv++) {
     const pStart = cuts[lv - 1]
@@ -179,7 +183,7 @@ export function genDemoLinks(nodes) {
     }
   }
 
-  // Cross-links between random same-level siblings (~10% of n)
+  // 交叉链接：在随机的同层兄弟节点之间添加（约占节点数 10%）
   const crossTarget = Math.floor(n * 0.1)
   let attempts = 0
   while (links.length - (n - 1) < crossTarget && attempts < crossTarget * 10) {
@@ -193,29 +197,30 @@ export function genDemoLinks(nodes) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- GraphStore – plain (non-React) data manager
+ GraphStore – 纯数据管理器（非 React 组件）
 
- - nodeMap / linkMap: deduplicated raw storage (nid → node, relKey → relation)
- - mapGraphData(): convert raw → render-ready arrays with computed weights
- - computeNodeWeights(): PageRank + HITS + degree centrality composite score
- - applyMutation() / applyReplaceRelations(): frontend-side CRUD
+ 负责图谱原始数据的存储、去重和计算，核心职责包括：
+ - nodeMap / linkMap: 去重的原始数据存储（nid → 节点，relKey → 关系）
+ - mapGraphData():    将原始数据转换为渲染就绪的数组，计算节点权重
+ - computeNodeWeights(): 通过可达性 BFS + 度中心性综合计算节点权重
+ - applyMutation() / applyReplaceRelations(): 前端侧的乐观 CRUD 更新
  ═══════════════════════════════════════════════════════════════════ */
 
 export class GraphStore {
   constructor() {
-    /** @type {Map<string, object>} nid → raw node */
+    /** @type {Map<string, object>} 原始节点存储：nid → 节点对象 */
     this.nodeMap = new Map()
-    /** @type {Map<string, object>} relStoreKey → raw relation */
+    /** @type {Map<string, object>} 原始关系存储：relStoreKey → 关系对象 */
     this.linkMap = new Map()
-    /** Render-ready node array (populated by mapGraphData) */
+    /** 渲染就绪的节点数组（由 mapGraphData 填充） */
     this.nodes = []
-    /** Render-ready link array (populated by mapGraphData) */
+    /** 渲染就绪的关系数组（由 mapGraphData 填充） */
     this.links = []
-    /** Computed graph-level stats */
+    /** 图谱级别的统计信息：孤立节点数、节点类型数、关系类型数 */
     this.stats = { orphanCount: 0, nodeTypeCount: 0, relTypeCount: 0 }
   }
 
-  /** Clear all data */
+  /** 清空所有数据（重置 nodeMap、linkMap、nodes、links、stats） */
   reset() {
     this.nodeMap.clear()
     this.linkMap.clear()
@@ -225,8 +230,8 @@ export class GraphStore {
   }
 
   /**
-   * Add nodes, dedup by nid.
-   * @param {object[]} arr - raw node objects with { nid, name, labels, ... }
+   * 批量添加节点，按 nid 去重（已存在则覆盖更新）
+   * @param {object[]} arr - 原始节点对象数组，需包含 { nid, name, labels, ... }
    */
   addNodes(arr) {
     for (const n of arr) {
@@ -236,8 +241,8 @@ export class GraphStore {
   }
 
   /**
-   * Add links, dedup by source_nid=>target_nid:rel_type.
-   * @param {object[]} arr - raw relation objects
+   * 批量添加关系，按 source_nid=>target_nid:rel_type 去重
+   * @param {object[]} arr - 原始关系对象数组
    */
   addLinks(arr) {
     for (const r of arr) {
@@ -247,9 +252,8 @@ export class GraphStore {
   }
 
   /**
-   * Convert raw data to render-ready arrays.
-   * Validates link connectivity, extracts type/colour, computes composite
-   * node weights via PageRank + HITS + degree centrality.
+   * 将原始数据转换为渲染就绪的数组
+   * 处理流程：验证关系连通性 → 提取类型/颜色 → 计算综合节点权重
    * @returns {{ nodes: object[], links: object[] }}
    */
   mapGraphData() {
@@ -259,7 +263,7 @@ export class GraphStore {
     const degMap = new Map()
     const valid = []
 
-    // Validate relations – both endpoints must exist in nodeMap
+    // 验证关系有效性：两个端点都必须存在于 nodeMap 中
     for (const r of rels) {
       const s = clean(r.source_nid)
       const t = clean(r.target_nid)
@@ -269,7 +273,7 @@ export class GraphStore {
       degMap.set(t, (degMap.get(t) || 0) + 1)
     }
 
-    // Build render nodes
+    // 构建渲染节点数组：附加类型、颜色、半径等计算属性
     this.nodes = raw.map((n, i) => {
       const type = parseType(n.labels)
       const m = getTypeMeta(type)
@@ -288,10 +292,10 @@ export class GraphStore {
       }
     })
 
-    // Map nid → render id for link resolution
+    // 构建 nid → 渲染 id 的映射表，用于关系端点解析
     const idMap = new Map(this.nodes.map(n => [n.nid, n.id]))
 
-    // Build render links
+    // 构建渲染关系数组：将原始关系转换为 source/target 引用格式
     this.links = valid
       .map((r, i) => {
         const s = idMap.get(clean(r.source_nid))
@@ -307,14 +311,14 @@ export class GraphStore {
       })
       .filter(Boolean)
 
-    // Compute composite node weights via graph algorithms
+    // 通过图算法计算综合节点权重
     this.computeNodeWeights()
     this.computeStats()
 
     return { nodes: this.nodes, links: this.links }
   }
 
-  /** Compute orphan count, distinct node type count, distinct rel type count */
+  /** 计算图谱统计信息：孤立节点数、节点类型数、关系类型数 */
   computeStats() {
     const connectedNids = new Set()
     this.links.forEach(l => {
@@ -344,10 +348,11 @@ export class GraphStore {
   }
 
   /**
-   * Apply a CRUD mutation directly to the frontend store.
-   * @param {string} path  - API path (contains "/node" or "/relation")
-   * @param {string} method - POST / PUT / DELETE
-   * @param {object} payload - the request payload
+   * 将 CRUD 操作直接应用到前端 store（乐观更新）
+   * 根据 API 路径判断操作对象是节点还是关系，执行对应的增删改
+   * @param {string} path  - API 路径（包含 "/node" 或 "/relation"）
+   * @param {string} method - HTTP 方法：POST / PUT / DELETE
+   * @param {object} payload - 请求体数据
    */
   applyMutation(path, method, payload) {
     if (path.includes('/node')) {
@@ -356,7 +361,7 @@ export class GraphStore {
         this.nodeMap.set(nid, payload)
       } else if (method === 'DELETE') {
         this.nodeMap.delete(nid)
-        // Also remove any relations referencing this node
+        // 删除节点时，同时移除所有引用该节点的关系
         const toRemove = []
         for (const [k, r] of this.linkMap) {
           if (clean(r.source_nid) === nid || clean(r.target_nid) === nid) toRemove.push(k)
@@ -374,8 +379,8 @@ export class GraphStore {
   }
 
   /**
-   * Remove all relations referencing oldNid (used after replace-node-relations).
-   * @param {string} oldNid
+   * 移除指定节点的所有关联关系（用于 replace-node-relations 操作后）
+   * @param {string} oldNid - 需要清除关系的旧节点 ID
    */
   applyReplaceRelations(oldNid) {
     const toRemove = []
@@ -386,13 +391,13 @@ export class GraphStore {
   }
 
   /**
-   * Compute composite node weights for knowledge-graph root entities.
+   * 计算知识图谱中每个节点的综合权重
    *
-   * Primary metric: reachability — how many downstream nodes a node can reach
-   * via outgoing edges (BFS).  Root entities that expand into the most
-   * descendants score highest.
+   * 主要指标：可达性（Reachability）—— 通过出边 BFS 计算每个节点
+   *   能到达的下游节点数量。可扩展到最多后代的根实体得分最高。
    *
-   * Final score = rawWeight * 0.25 + reachability * 0.75, clamped to [1, 100].
+   * 最终得分 = 原始权重 × 0.25 + 可达性 × 0.75，限制在 [1, 100] 范围内
+   * 这种加权方式确保图谱中具有广泛影响的根节点显示得更大更突出
    */
   computeNodeWeights() {
     const N = this.nodes.length
@@ -403,7 +408,7 @@ export class GraphStore {
       return
     }
 
-    // Build adjacency (outgoing only) indexed by node position
+    // 构建出边邻接表（按节点索引）
     const idIdx = new Map(this.nodes.map((n, i) => [n.id, i]))
     const adj = Array.from({ length: N }, () => [])
 
@@ -415,7 +420,7 @@ export class GraphStore {
       adj[si].push(ti)
     }
 
-    // ── Reachability (BFS from each node) ──
+    // ── 可达性计算：对每个节点执行 BFS，统计可到达的下游节点数 ──
     const reach = new Float64Array(N)
     const visited = new Uint8Array(N)
     for (let u = 0; u < N; u++) {
@@ -436,7 +441,7 @@ export class GraphStore {
       reach[u] = count
     }
 
-    // ── Min-max normalise reachability to [0, 1] ──
+    // ── 归一化可达性到 [0, 1] 区间 ──
     let mn = Infinity, mx = -Infinity
     for (let i = 0; i < N; i++) {
       if (reach[i] < mn) mn = reach[i]
@@ -445,7 +450,7 @@ export class GraphStore {
     const range = mx - mn || 1
     for (let i = 0; i < N; i++) reach[i] = (reach[i] - mn) / range
 
-    // ── Weighted combination ──
+    // ── 加权组合：原始权重占 25%，可达性占 75% ──
     for (let i = 0; i < N; i++) {
       const raw = parseWeight(this.nodes[i].raw) / 100
       this.nodes[i].weight = Math.round(Math.max(1, Math.min(100, (raw * 0.25 + reach[i] * 0.75) * 100)))

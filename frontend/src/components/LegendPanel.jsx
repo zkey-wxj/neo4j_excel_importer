@@ -13,6 +13,11 @@ const REL_COLORS = [
   '#e76f51', '#264653', '#2a9d8f', '#e9c46a', '#606c38',
 ]
 
+/**
+ * 图例项组件
+ * 显示单个类型的颜色标识和名称，支持点击切换筛选
+ * @param {boolean} isRel - 是否为关系类型（关系显示为横线，节点显示为圆点）
+ */
 function LegendItem({ label, color, active, onClick, isRel }) {
   return (
     <div onClick={onClick} className={cn(
@@ -28,6 +33,12 @@ function LegendItem({ label, color, active, onClick, isRel }) {
   )
 }
 
+/**
+ * 图例面板组件
+ * 右下角的可折叠图例，支持按节点类型和关系类型筛选图谱
+ * 折叠状态仅显示调色板图标，展开后显示类型列表和重置筛选按钮
+ * 关系类型使用预定义的 15 种循环颜色方案
+ */
 export default function LegendPanel() {
   const [collapsed, setCollapsed] = useState(true)
   const [activeTab, setActiveTab] = useState('node')
@@ -40,6 +51,7 @@ export default function LegendPanel() {
   const toggleRelType = useAppStore((s) => s.toggleRelType)
   const clearRelTypes = useAppStore((s) => s.clearRelTypes)
 
+  // 从节点数据中提取去重的节点类型列表（含颜色信息）
   const nodeTypes = useMemo(() => {
     const byType = new Map()
     ;(nodes || []).forEach((n) => {
@@ -53,6 +65,7 @@ export default function LegendPanel() {
     return [...byType.values()]
   }, [nodes])
 
+  // 从关系数据中提取去重的关系类型列表
   const relTypes = useMemo(() => {
     const byType = new Map()
     ;(links || []).forEach((l) => {

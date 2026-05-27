@@ -1,6 +1,11 @@
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 
+/**
+ * 全屏加载遮罩组件
+ * 在图谱数据初始加载或切换分组时显示，包含旋转加载动画和提示文字
+ * 通过 opacity 和 pointer-events 实现平滑的显示/隐藏过渡
+ */
 export default function FullscreenLoading() {
   const isFullscreenLoading = useAppStore((s) => s.isFullscreenLoading)
 

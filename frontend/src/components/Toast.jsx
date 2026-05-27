@@ -1,5 +1,10 @@
 import { Toaster as SonnerToaster } from 'sonner'
 
+/**
+ * 消息通知组件（Toast）
+ * 使用 sonner 库实现顶部居中的操作结果提示
+ * 已在 App.jsx 中直接内联使用，此文件为备选独立引用方式
+ */
 export default function Toast() {
   return (
     <SonnerToaster
