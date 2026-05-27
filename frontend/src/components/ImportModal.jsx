@@ -24,6 +24,7 @@ export default function ImportModal() {
   const loadGroup = useAppStore((s) => s.loadGroup)
   const setLoading = useAppStore((s) => s.setLoading)
   const setStatus = useAppStore((s) => s.setStatus)
+  const confirm = useAppStore((s) => s.confirm)
   const fileInputRef = useRef(null)
 
   const handleConfirm = async () => {
@@ -34,7 +35,7 @@ export default function ImportModal() {
       return
     }
     const modeLabel = importMode === 'override' ? '覆盖导入（将清空现有数据）' : '合并导入'
-    if (!window.confirm(`确认以「${modeLabel}」方式导入 ${importFile.name} 到分组 ${gid}？`)) return
+    if (!await confirm(`确认以「${modeLabel}」方式导入 ${importFile.name} 到分组 ${gid}？`)) return
 
     setShowImportModal(false)
     setLoading(true)

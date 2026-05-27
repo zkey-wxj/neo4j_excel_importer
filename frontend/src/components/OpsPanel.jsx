@@ -79,12 +79,15 @@ export default function OpsPanel() {
   const setPathHighlight = useAppStore((s) => s.setPathHighlight)
   const pickTarget = useAppStore((s) => s.pickTarget)
   const setPickTarget = useAppStore((s) => s.setPickTarget)
+  const pickedNid = useAppStore((s) => s.pickedNid)
+  const setPickedNid = useAppStore((s) => s.setPickedNid)
   const selectedNodeId = useAppStore((s) => s.selectedNodeId)
   const nodes = useAppStore((s) => s.nodes)
   const opsExpand = useAppStore((s) => s.opsExpand)
   const setOpsExpand = useAppStore((s) => s.setOpsExpand)
   const status = useAppStore((s) => s.status)
   const statusError = useAppStore((s) => s.statusError)
+  const confirm = useAppStore((s) => s.confirm)
 
   const [nodeNid, setNodeNid] = useState('')
   const [nodeName, setNodeName] = useState('')
@@ -124,13 +127,12 @@ export default function OpsPanel() {
   }, [opsExpand])
 
   useEffect(() => {
-    if (!pickTarget || !selectedNodeId) return
-    const n = nodes?.find((x) => x.id === selectedNodeId)
-    const v = clean(n?.raw?.nid || n?.nid || selectedNodeId)
+    if (!pickTarget || !pickedNid) return
     const map = { relSource: setRelSource, relTarget: setRelTarget, pathSource: setPathSource, pathTarget: setPathTarget, replaceOld: setReplaceOld, replaceNew: setReplaceNew }
-    map[pickTarget]?.(v)
+    map[pickTarget]?.(pickedNid)
     setPickTarget(null)
-  }, [selectedNodeId, pickTarget])
+    setPickedNid(null)
+  }, [pickedNid, pickTarget])
 
   const notify = useCallback(async (m, t) => { const { toast } = await import('sonner'); t === 'error' ? toast.error(m) : toast.success(m) }, [])
   const buildNodePayload = () => { const g = clean(groupId), u = clean(nodeNid); if (!g) throw new Error('group_id 不能为空'); if (!u) throw new Error('nid 不能为空'); return { group_id: g, nid: u, name: clean(nodeName), labels: nodeLabels.split(',').map(s => clean(s)).filter(Boolean), description: clean(nodeDesc), properties: kvToObj(nodeProps), meta: kvToObj(nodeMeta) } }
@@ -138,15 +140,15 @@ export default function OpsPanel() {
   const wrap = (fn) => async () => { if (busy) return; try { setBusy(true); await fn() } catch (e) { notify(e.message, 'error') } finally { setBusy(false) } }
 
   const handleLoad = wrap(async () => { const g = clean(groupId); if (!g) { setStatus('group_id 不能为空', true); return }; await loadGroup(g) })
-  const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!window.confirm(`确认新增节点 nid=${p.nid}？`)) return; await mutate('/group-graph/api/node', 'POST', p) })
-  const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!window.confirm(`确认更新节点 nid=${p.nid}？`)) return; await mutate('/group-graph/api/node', 'PUT', p) })
-  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!window.confirm(`确认删除节点 nid=${p.nid}？`)) return; await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }) })
-  const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!window.confirm('确认新增关系？')) return; await mutate('/group-graph/api/relation', 'POST', p) })
-  const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!window.confirm('确认更新关系？')) return; await mutate('/group-graph/api/relation', 'PUT', p) })
-  const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!window.confirm('确认删除关系？')) return; await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }) })
-  const handleFindPath = () => { const s = clean(pathSource), t = clean(pathTarget); if (!s || !t) { setStatus('请输入起点和终点', true); return }; if (s === t) { setStatus('起点和终点相同', true); return }; const r = findPath(s, t); if (r.error) { setStatus(r.error, true); return }; setHasPath(true); setStatus(`路径: ${r.hops} 跳, ${r.pathNodes.length} 节点`) }
+  const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认新增节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'POST', p) })
+  const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认更新节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'PUT', p) })
+  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }) })
+  const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'POST', p) })
+  const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'PUT', p) })
+  const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }) })
+  const handleFindPath = () => { const s = clean(pathSource), t = clean(pathTarget); if (!s || !t) { setStatus('请输入起点和终点', true); return }; if (s === t) { setStatus('起点和终点相同', true); return }; const r = findPath(s, t); if (r.error) { setStatus(r.error, true); return }; setPathHighlight(r.highlight); setHasPath(true); setStatus(`路径: ${r.hops} 跳, ${r.pathNodes.length} 节点`) }
   const handleClearPath = () => { setPathHighlight(null); setHasPath(false); setStatus('已清除路径高亮') }
-  const handleReplace = wrap(async () => { const g = clean(groupId), o = clean(replaceOld), n = clean(replaceNew); if (!g || !o || !n) { notify('字段不能为空', 'error'); return }; if (o === n) { notify('不能相同', 'error'); return }; if (!window.confirm(`确认将 ${o} 的全部关系转移至 ${n}？`)) return; await mutate('/group-graph/api/replace-node-relations', 'POST', { group_id: g, old_nid: o, new_nid: n }) })
+  const handleReplace = wrap(async () => { const g = clean(groupId), o = clean(replaceOld), n = clean(replaceNew); if (!g || !o || !n) { notify('字段不能为空', 'error'); return }; if (o === n) { notify('不能相同', 'error'); return }; if (!await confirm(`确认将全部关系从 ${o} 转移至 ${n}？`)) return; await mutate('/group-graph/api/replace-node-relations', 'POST', { group_id: g, old_nid: o, new_nid: n }) })
 
   const [panelOffset, setPanelOffset] = useState(0)
   const [panelReady, setPanelReady] = useState(false)

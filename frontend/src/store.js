@@ -47,12 +47,18 @@ export const useAppStore = create((set, get) => ({
 
   // ── Pick mode (for "grab node" buttons) ──
   pickTarget: null, // input field id
+  pickedNid: null, // nid of picked node
 
   // ── Zoom ──
   zoom: 1.0,
 
   // ── Ops panel trigger ──
   opsExpand: false,
+
+  // ── Confirm dialog ──
+  confirmOpen: false,
+  confirmMessage: '',
+  _confirmResolve: null,
 
   // ═══════════════════════════════════════════════════════════════════
   // Simple setters
@@ -73,8 +79,20 @@ export const useAppStore = create((set, get) => ({
   setImportFile: (v) => set({ importFile: v }),
   setImportMode: (v) => set({ importMode: v }),
   setPickTarget: (v) => set({ pickTarget: v }),
+  setPickedNid: (v) => set({ pickedNid: v }),
   setPathHighlight: (v) => set({ pathHighlight: v }),
   setDetailNode: (v) => set({ detailNode: v }),
+  setConfirmOpen: (v) => set({ confirmOpen: v }),
+
+  /** 显示确认对话框，返回 Promise<boolean> */
+  confirm: (message) => new Promise((resolve) => {
+    set({ confirmOpen: true, confirmMessage: message, _confirmResolve: resolve })
+  }),
+  _handleConfirm: (result) => {
+    const { _confirmResolve } = get()
+    _confirmResolve?.(result)
+    set({ confirmOpen: false, confirmMessage: '', _confirmResolve: null })
+  },
 
   // ═══════════════════════════════════════════════════════════════════
   // Legend type toggles
@@ -136,7 +154,7 @@ export const useAppStore = create((set, get) => ({
   /** Load demo graph data with simulated pagination */
   loadDemo: async () => {
     const { graphAPI, updateGraphData } = get()
-    set({ isFullscreenLoading: true, groupId: '' })
+    set({ isFullscreenLoading: true })
     await graphAPI.loadDemoPaged(() => {
       updateGraphData()
       set({ isFullscreenLoading: false })

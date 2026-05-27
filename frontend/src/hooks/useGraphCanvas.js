@@ -47,6 +47,7 @@ export default function useGraphCanvas(canvasRef) {
   const setZoom = useAppStore((s) => s.setZoom)
   const setDetailNode = useAppStore((s) => s.setDetailNode)
   const setPickTarget = useAppStore((s) => s.setPickTarget)
+  const setPickedNid = useAppStore((s) => s.setPickedNid)
   const setStatus = useAppStore((s) => s.setStatus)
 
   // ── Refs (mutable internal state) ──────────────────────────────────
@@ -1087,13 +1088,9 @@ export default function useGraphCanvas(canvasRef) {
       if (nd) {
         // pick mode
         if (snap.pickTarget) {
-          setPickTarget(null)
-          setStatus(`Picked node: ${clean(nd.raw?.nid ?? nd.nid ?? nd.id)}`)
-          // The caller is responsible for reading the picked nid from the
-          // input field that pickTarget was pointing at.
-          // We write it directly into the DOM input as the original did.
-          const el = document.getElementById(snap.pickTarget)
-          if (el) el.value = clean(nd.raw?.nid ?? nd.nid ?? nd.id)
+          const nid = clean(nd.raw?.nid ?? nd.nid ?? nd.id)
+          setPickedNid(nid)
+          setStatus(`已抓取节点: ${nid}`)
           return
         }
 
@@ -1145,6 +1142,7 @@ export default function useGraphCanvas(canvasRef) {
       setHoveredNode,
       setDetailNode,
       setPickTarget,
+      setPickedNid,
       setStatus,
       scheduleRender,
     ],

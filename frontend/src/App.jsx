@@ -10,6 +10,7 @@ import OpsPanel from '@/components/OpsPanel'
 import DetailPanel from '@/components/DetailPanel'
 import LegendPanel from '@/components/LegendPanel'
 import ImportModal from '@/components/ImportModal'
+import ConfirmDialog from '@/components/ConfirmDialog'
 import FullscreenLoading from '@/components/FullscreenLoading'
 import Minimap from '@/components/Minimap'
 
@@ -23,12 +24,11 @@ export default function App() {
     const gid = params.get('group_id') || ''
     const demo = params.get('demo') === 'true'
     const store = useAppStore.getState()
-
-    if (gid) {
-      store.setGroupId(gid)
-      store.loadGroup(gid).finally(() => store.setFullscreenLoading(false))
-    } else if (demo) {
+    if (gid) store.setGroupId(gid)
+    if (demo) {
       store.loadDemo().finally(() => store.setFullscreenLoading(false))
+    } else if (gid) {
+      store.loadGroup(gid).finally(() => store.setFullscreenLoading(false))
     } else {
       store.setFullscreenLoading(false)
       store.setStatus('请输入 group_id 后加载图谱')
@@ -85,6 +85,9 @@ export default function App() {
 
         {/* Import modal */}
         <ImportModal />
+
+        {/* Confirm dialog */}
+        <ConfirmDialog />
 
         {/* Toast notifications */}
         <Toaster
