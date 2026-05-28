@@ -61,6 +61,19 @@ parameters:
     llm_description: Optional Neo4j database name.
     form: form
 
+  - name: embedding_model
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Embedding Model
+      zh_Hans: 向量模型
+    human_description:
+      en_US: Optional text-embedding model for vector search. When set, enables vector-based fuzzy query.
+      zh_Hans: 可选的向量模型，设置后启用基于向量的模糊查询。
+    llm_description: Optional text-embedding model. Enables vector search when provided.
+    form: form
+
 output_schema:
   type: object
   properties:

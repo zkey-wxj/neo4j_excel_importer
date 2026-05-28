@@ -66,6 +66,19 @@ parameters:
     llm_description: Optional default group id for this write. Falls back to provider default when not set.
     form: llm
 
+  - name: embedding_model
+    type: model-selector
+    scope: text-embedding
+    required: false
+    label:
+      en_US: Embedding Model
+      zh_Hans: 向量模型
+    human_description:
+      en_US: Optional text-embedding model. When set, generates an embedding for the saved node.
+      zh_Hans: 可选的向量模型，设置后为保存的节点生成向量。
+    llm_description: Optional text-embedding model. Generates node embedding when provided.
+    form: form
+
 output_schema:
   type: object
   properties:

@@ -20,7 +20,7 @@ logger.addHandler(plugin_logger_handler)
 class SaveNodeSingleTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         node_payload = tool_parameters.get("node_json")
-        embedding_model = self.runtime.credentials.get("embedding_model")
+        embedding_model = tool_parameters.get("embedding_model")
         group_id = clean_text(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("SaveNodeSingleTool invoked | group_id=%s", group_id)
         if node_payload is None:

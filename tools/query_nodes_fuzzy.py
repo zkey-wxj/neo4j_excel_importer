@@ -44,7 +44,7 @@ LIMIT $limit
 
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         keyword = clean_text(tool_parameters.get("keyword"))
-        embedding_model = self.runtime.credentials.get("embedding_model")
+        embedding_model = tool_parameters.get("embedding_model")
         database = clean_text(tool_parameters.get("database"))
         group_id = normalize_group_id(tool_parameters.get("group_id")) or clean_text(self.runtime.credentials.get("group_id"))
         logger.info("QueryNodesFuzzyTool invoked | keyword=%s group_id=%s", keyword, group_id)
