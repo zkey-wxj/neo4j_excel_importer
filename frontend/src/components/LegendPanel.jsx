@@ -21,7 +21,7 @@ const REL_COLORS = [
 function LegendItem({ label, color, active, onClick, isRel }) {
   return (
     <div onClick={onClick} className={cn(
-      'flex items-center gap-2 py-0.5 px-1.5 rounded-md cursor-pointer select-none transition-all text-[11px] font-mono',
+      'flex items-center gap-2 py-0.5 px-1.5 rounded-md cursor-pointer select-none transition-all text-xs font-mono',
       'border border-transparent',
       active ? 'bg-primary/10 border-primary/25' : 'hover:bg-muted/40 hover:border-border'
     )}>
@@ -100,12 +100,12 @@ export default function LegendPanel() {
         {/* Tab header */}
         <div className="flex items-center px-3 pt-2.5 pb-1.5 gap-2">
           <button onClick={() => setActiveTab('node')}
-            className={cn('text-[10px] px-2 py-0.5 rounded-md transition-colors',
+            className={cn('text-xs px-2 py-0.5 rounded-md transition-colors',
               isNode ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground')}>
             节点类型
           </button>
           <button onClick={() => setActiveTab('rel')}
-            className={cn('text-[10px] px-2 py-0.5 rounded-md transition-colors',
+            className={cn('text-xs px-2 py-0.5 rounded-md transition-colors',
               !isNode ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground')}>
             关系类型
           </button>
@@ -119,7 +119,7 @@ export default function LegendPanel() {
         {/* Content */}
         <div className="max-h-[200px] overflow-y-auto graph-scrollbar px-3 pb-2">
           {items.length === 0 && (
-            <div className="text-[10px] text-muted-foreground/60 py-1">
+            <div className="text-xs text-muted-foreground/60 py-1">
               {isNode ? '暂无节点' : '暂无关系'}
             </div>
           )}
@@ -139,7 +139,7 @@ export default function LegendPanel() {
         {activeSet.size > 0 && (
           <div className="px-3 pb-2.5 pt-1 border-t border-border">
             <Button variant="outline" size="sm" onClick={clear}
-              className="w-full h-6 text-[10px] font-mono">
+              className="w-full h-6 text-xs font-mono">
               重置筛选
             </Button>
           </div>

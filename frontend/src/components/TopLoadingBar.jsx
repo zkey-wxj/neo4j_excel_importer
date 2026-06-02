@@ -14,7 +14,7 @@ export default function TopLoadingBar() {
     <div
       className={cn(
         'absolute top-[72px] left-1/2 -translate-x-1/2 z-10',
-        'flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground',
+        'flex items-center gap-1.5 font-mono text-xs text-muted-foreground',
         'transition-all duration-300 ease-out',
         active
           ? 'opacity-100 translate-y-0'

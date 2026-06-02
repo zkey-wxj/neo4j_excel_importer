@@ -456,7 +456,7 @@ export default function useGraphCanvas(canvasRef) {
           const lb =
             edge.name.length > 14 ? edge.name.slice(0, 14) + '…' : edge.name
           const fs = Math.max(9, 9 / k)
-          c.font = `${fs}px 'JetBrains Mono',monospace`
+          c.font = `${fs}px ui-monospace, monospace`
           const tw = c.measureText(lb).width
           const th = fs * 1.4
           const hl = isE || isNL

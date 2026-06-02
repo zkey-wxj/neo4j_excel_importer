@@ -25,7 +25,7 @@ function StatCell({ value, label, clickable, active, onClick }) {
       >
         {value}
       </span>
-      <span className="text-[9px] text-muted-foreground tracking-wide mt-1 leading-none">
+      <span className="text-xs text-muted-foreground tracking-wide mt-1 leading-none">
         {label}
       </span>
     </div>

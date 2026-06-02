@@ -36,7 +36,7 @@ function CtrlBtn({ title, onClick, active, children }) {
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-[10px] font-mono">
+      <TooltipContent side="top" className="text-xs font-mono">
         {title}
       </TooltipContent>
     </Tooltip>

@@ -130,7 +130,7 @@ export default function EdgeCreatePopover() {
     >
       {/* 头部：源→目标 */}
       <div className="px-3 py-1.5 border-b border-border">
-        <div className="text-[9px] text-muted-foreground truncate">
+        <div className="text-xs text-muted-foreground truncate">
           <span className="text-foreground font-semibold">{srcName}</span>
           {' → '}
           <span className="text-foreground font-semibold">{tgtName}</span>
@@ -140,7 +140,7 @@ export default function EdgeCreatePopover() {
       {/* 表单 */}
       <div className="p-2.5 grid gap-2">
         <div className="grid gap-0.5">
-          <Label className="text-[9px] text-muted-foreground font-mono leading-none">
+          <Label className="text-xs text-muted-foreground font-mono leading-none">
             关系类型 <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -152,7 +152,7 @@ export default function EdgeCreatePopover() {
           />
         </div>
         <div className="grid gap-0.5">
-          <Label className="text-[9px] text-muted-foreground font-mono leading-none">
+          <Label className="text-xs text-muted-foreground font-mono leading-none">
             描述
           </Label>
           <Input

@@ -53,53 +53,53 @@ function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
       <div className="flex flex-wrap gap-1 mb-3">
         {(Array.isArray(raw.labels) ? raw.labels : [nodeType]).map((label, i, arr) => (
           <Badge key={i} variant="outline"
-            className={cn('text-[9.5px] tracking-widest font-semibold border-transparent', i === 0 && 'pl-0', i === arr.length - 1 && 'pr-0')}
+            className={cn('text-xs tracking-widest font-semibold border-transparent', i === 0 && 'pl-0', i === arr.length - 1 && 'pr-0')}
             style={{ color: nodeColor }}>
             {clean(label)}
           </Badge>
         ))}
       </div>
       <div className="flex items-center gap-1.5 mb-4">
-        <span className="text-[9px] text-muted-foreground uppercase tracking-widest">nid</span>
-        <code className="text-[11px] font-semibold bg-muted/60 px-1.5 py-0.5 rounded break-all">{nodeNid}</code>
+        <span className="text-xs text-muted-foreground uppercase tracking-widest">nid</span>
+        <code className="text-sm font-semibold bg-muted/60 px-1.5 py-0.5 rounded break-all">{nodeNid}</code>
       </div>
       <div className="mb-3">
-        <div className="text-[10px] text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">属性 / 描述</div>
+        <div className="text-xs text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">属性 / 描述</div>
         {raw.description && (
-          <div className="flex justify-between py-0.5 text-[11px]">
+          <div className="flex justify-between py-0.5 text-xs">
             <span className="text-muted-foreground">描述</span>
             <span className="font-semibold text-right max-w-[60%] break-all">{clean(raw.description).slice(0, 80)}</span>
           </div>
         )}
         {propEntries.map(([k, v]) => (
-          <div key={k} className="flex justify-between py-0.5 text-[11px]">
+          <div key={k} className="flex justify-between py-0.5 text-xs">
             <span className="text-muted-foreground">{clean(k)}</span>
             <span className="font-semibold text-right max-w-[60%] break-all">{String(v).slice(0, 60)}</span>
           </div>
         ))}
-        <div className="flex justify-between py-0.5 text-[11px]">
+        <div className="flex justify-between py-0.5 text-xs">
           <span className="text-muted-foreground">权重</span>
           <span className="font-semibold">{weight} / 100</span>
         </div>
       </div>
       <div className="mb-3">
         <div className="flex justify-between items-center border-b border-border pb-1 mb-1.5">
-          <span className="text-[10px] text-muted-foreground tracking-wide">关联节点</span>
-          <span className="text-[10px] text-muted-foreground">{neighbors.length}</span>
+          <span className="text-xs text-muted-foreground tracking-wide">关联节点</span>
+          <span className="text-xs text-muted-foreground">{neighbors.length}</span>
         </div>
         <div className="max-h-[200px] overflow-y-auto">
-          {neighbors.length === 0 && <div className="text-[10px] text-muted-foreground/60 py-1">无关联节点</div>}
+          {neighbors.length === 0 && <div className="text-xs text-muted-foreground/60 py-1">无关联节点</div>}
           {neighbors.slice(0, 30).map((nb, idx) => (
             <div key={idx} onClick={() => onNavigate(nb.node)}
-              className="flex justify-between items-center py-1 px-1 rounded-md cursor-pointer text-[10.5px] hover:bg-muted/50 transition-colors">
+              className="flex justify-between items-center py-1 px-1 rounded-md cursor-pointer text-xs hover:bg-muted/50 transition-colors">
               <span className="truncate max-w-[70%]">{nb.dir} {nb.node.label}</span>
-              <span className="text-muted-foreground text-[9.5px] shrink-0 ml-2">{nb.rel}</span>
+              <span className="text-muted-foreground text-xs shrink-0 ml-2">{nb.rel}</span>
             </div>
           ))}
         </div>
       </div>
       <div className="flex gap-2 mt-2">
-        <Button variant="outline" size="sm" className="flex-1 h-7 text-[11px] font-mono" onClick={onEdit}>编辑</Button>
+        <Button variant="outline" size="sm" className="flex-1 h-7 text-xs font-mono" onClick={onEdit}>编辑</Button>
       </div>
     </>
   )
@@ -125,15 +125,15 @@ function RelationDetail({ raw, nodes, onNavigate }) {
     <>
       <div className="text-lg font-bold leading-tight mb-3 text-primary">{relType}</div>
       <div className="mb-3">
-        <div className="text-[10px] text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">关系端点</div>
-        <div className="flex justify-between items-center py-1 text-[11px]">
+        <div className="text-xs text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">关系端点</div>
+        <div className="flex justify-between items-center py-1 text-xs">
           <span className="text-muted-foreground">源节点</span>
           <span className={cn("font-semibold text-right max-w-[60%] break-all", srcNode && "cursor-pointer hover:underline")}
             onClick={() => srcNode && onNavigate(srcNode)}>
             {srcNode?.label || srcNid}
           </span>
         </div>
-        <div className="flex justify-between items-center py-1 text-[11px]">
+        <div className="flex justify-between items-center py-1 text-xs">
           <span className="text-muted-foreground">目标节点</span>
           <span className={cn("font-semibold text-right max-w-[60%] break-all", tgtNode && "cursor-pointer hover:underline")}
             onClick={() => tgtNode && onNavigate(tgtNode)}>
@@ -143,15 +143,15 @@ function RelationDetail({ raw, nodes, onNavigate }) {
       </div>
       {(raw.description || propEntries.length > 0) && (
         <div className="mb-3">
-          <div className="text-[10px] text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">属性 / 描述</div>
+          <div className="text-xs text-muted-foreground tracking-wide mb-1.5 border-b border-border pb-1">属性 / 描述</div>
           {raw.description && (
-            <div className="flex justify-between py-0.5 text-[11px]">
+            <div className="flex justify-between py-0.5 text-xs">
               <span className="text-muted-foreground">描述</span>
               <span className="font-semibold text-right max-w-[60%] break-all">{clean(raw.description).slice(0, 80)}</span>
             </div>
           )}
           {propEntries.map(([k, v]) => (
-            <div key={k} className="flex justify-between py-0.5 text-[11px]">
+            <div key={k} className="flex justify-between py-0.5 text-xs">
               <span className="text-muted-foreground">{clean(k)}</span>
               <span className="font-semibold text-right max-w-[60%] break-all">{String(v).slice(0, 60)}</span>
             </div>

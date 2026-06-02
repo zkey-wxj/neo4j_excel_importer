@@ -25,7 +25,7 @@ function KvList({ items, onChange }) {
           <Button type="button" variant="ghost" size="icon" onClick={() => remove(idx)} className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"><span className="text-xs">×</span></Button>
         </div>
       ))}
-      <Button type="button" variant="ghost" size="sm" onClick={add} className="h-5 text-[9px] font-mono text-muted-foreground hover:text-foreground justify-start">+ 添加属性</Button>
+      <Button type="button" variant="ghost" size="sm" onClick={add} className="h-5 text-xs font-mono text-muted-foreground hover:text-foreground justify-start">+ 添加属性</Button>
     </div>
   )
 }
@@ -35,7 +35,7 @@ function kvToObj(items) { const o = {}; items.forEach(({ key, value }) => { cons
 /** 将对象转换为键值对数组，用于表单双向绑定 */
 function objToKv(obj) { const e = Object.entries(obj || {}); return e.length ? e.map(([k, v]) => ({ key: String(k), value: v == null ? '' : String(v) })) : [{ key: '', value: '' }] }
 /** 表单字段包装组件：标签 + 输入控件 */
-function Field({ label, children }) { return <div className="grid gap-0.5"><Label className="text-[9px] text-muted-foreground font-mono leading-none">{label}</Label>{children}</div> }
+function Field({ label, children }) { return <div className="grid gap-0.5"><Label className="text-xs text-muted-foreground font-mono leading-none">{label}</Label>{children}</div> }
 
 /**
  * 可抓取的输入框组件
@@ -50,7 +50,7 @@ function PickableInput({ label, placeholder, value, onChange, inputId }) {
     <Field label={label}>
       <div className="flex gap-1">
         <Input placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className="h-6 text-xs font-mono flex-1" />
-        <Button type="button" variant="ghost" size="sm" onClick={() => setPickTarget(active ? null : inputId)} className={cn('text-[9px] font-mono px-1.5 h-6 shrink-0', active && 'text-primary bg-primary/10 border border-primary/30')}>{active ? '...' : '抓取'}</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setPickTarget(active ? null : inputId)} className={cn('text-xs font-mono px-1.5 h-6 shrink-0', active && 'text-primary bg-primary/10 border border-primary/30')}>{active ? '...' : '抓取'}</Button>
       </div>
     </Field>
   )
@@ -305,7 +305,7 @@ export default function OpsPanel() {
           </div>
 
           {/* Status */}
-          <div className={cn('shrink-0 border-t border-border px-2.5 py-1 font-mono text-[9px] text-right truncate', statusError ? 'text-destructive' : 'text-muted-foreground')}>
+          <div className={cn('shrink-0 border-t border-border px-2.5 py-1 font-mono text-xs text-right truncate', statusError ? 'text-destructive' : 'text-muted-foreground')}>
             {status || ''}
           </div>
           </div>

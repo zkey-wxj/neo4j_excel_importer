@@ -58,7 +58,7 @@ export default function NodeContextMenu() {
       style={{ left: px, top: py }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="px-3 py-1.5 text-[10px] text-muted-foreground truncate border-b border-border mb-1">
+      <div className="px-3 py-1.5 text-xs text-muted-foreground truncate border-b border-border mb-1">
         {contextMenu.nodeName}
       </div>
       <button
