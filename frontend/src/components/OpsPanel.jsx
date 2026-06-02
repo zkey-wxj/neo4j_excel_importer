@@ -102,6 +102,8 @@ export default function OpsPanel() {
   const pickedNid = useAppStore((s) => s.pickedNid)
   const setPickedNid = useAppStore((s) => s.setPickedNid)
   const selectedNodeId = useAppStore((s) => s.selectedNodeId)
+  const setSelectedNode = useAppStore((s) => s.setSelectedNode)
+  const setDetailNode = useAppStore((s) => s.setDetailNode)
   const nodes = useAppStore((s) => s.nodes)
   const opsExpand = useAppStore((s) => s.opsExpand)
   const setOpsExpand = useAppStore((s) => s.setOpsExpand)
@@ -172,7 +174,7 @@ export default function OpsPanel() {
   // 节点 CRUD
   const handleNodeCreate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认新增节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'POST', p); r ? notify('新增成功') : notify('新增失败', 'error') })
   const handleNodeUpdate = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认更新节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'PUT', p); r ? notify('更新成功') : notify('更新失败', 'error') })
-  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }); r ? notify('删除成功') : notify('删除失败', 'error') })
+  const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }); if (r) { notify('删除成功'); setSelectedNode(null); setDetailNode(null) } else { notify('删除失败', 'error') } })
   const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'POST', p); r ? notify('新增成功') : notify('新增失败', 'error') })
   const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'PUT', p); r ? notify('更新成功') : notify('更新失败', 'error') })
   const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }); r ? notify('删除成功') : notify('删除失败', 'error') })
