@@ -62,10 +62,10 @@ export default function App() {
   return (
     <TooltipProvider delay={300}>
       <div className="relative w-full h-dvh overflow-hidden graph-bg">
-        {/* 全屏加载遮罩层：图谱数据加载期间显示旋转动画 */}
+        {/* 全屏加载遮罩：操作性 loading（CRUD、导入等），背景透明 */}
         <FullscreenLoading />
 
-        {/* 顶部加载条：CRUD/导入操作时从顶部弹出 */}
+        {/* 顶部加载条：图谱数据加载时显示 */}
         <TopLoadingBar />
 
         {/* 顶部统计栏：显示节点数、关系数、孤立节点数等图谱统计信息 */}

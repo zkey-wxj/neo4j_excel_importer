@@ -24,7 +24,9 @@ export const useAppStore = create((set, get) => ({
   statusError: false,   // 状态信息是否为错误样式
   isLoading: false,     // 是否正在执行异步操作（如 CRUD 操作）
   isLoadingData: false, // 是否正在分页加载图谱数据（含后续分页）
-  isFullscreenLoading: true,  // 是否显示全屏加载遮罩（初始加载/切换分组时）
+  isFullscreenLoading: false,  // 是否显示全屏加载遮罩（初始加载/切换分组时）
+  loadingText: '',      // 全屏 loading 显示的业务文字
+  loadingBackdrop: 'semi',  // 全屏 loading 背景：'transparent' 全透明 / 'semi' 半透明
 
   // ── 交互状态 ──
   selectedNodeId: null,        // 当前选中的节点 ID
@@ -81,7 +83,11 @@ export const useAppStore = create((set, get) => ({
   setPageSize: (v) => set({ pageSize: v }),
   setStatus: (t, err = false) => set({ status: t, statusError: err }),
   setLoading: (v) => set({ isLoading: v }),
-  setFullscreenLoading: (v) => set({ isFullscreenLoading: v }),
+  setFullscreenLoading: (v, text = '', backdrop = 'semi') => set({
+    isFullscreenLoading: v,
+    loadingText: text || (v ? '加载中...' : ''),
+    loadingBackdrop: v ? backdrop : 'semi',
+  }),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setSearchKeyword: (v) => set({ searchKeyword: v }),
@@ -161,31 +167,34 @@ export const useAppStore = create((set, get) => ({
 
   /** 按分组 ID 加载图谱，支持游标分页，每加载一页更新一次 UI */
   loadGroup: async (gid) => {
-    const { graphAPI, updateGraphData } = get()
-    set({ isFullscreenLoading: true, isLoadingData: true })
+    const { graphAPI, updateGraphData, setFullscreenLoading } = get()
+    setFullscreenLoading(true, '加载图谱数据...', 'semi')
+    set({ isLoadingData: true })
     try {
       const ps = get().pageSize
       await graphAPI.loadGroup(gid, ps, (_, pg) => {
         updateGraphData()
-        set({ isFullscreenLoading: false })
-        set({ status: `游标加载中: 第 ${pg} 页` })
+        if (pg === 1) setFullscreenLoading(false)
+        set({ status: `加载中: 第 ${pg} 页` })
       })
       updateGraphData()
       set({ status: `加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}` })
     } catch (e) {
       set({ status: `加载失败: ${e.message}`, statusError: true })
     } finally {
-      set({ isFullscreenLoading: false, isLoadingData: false })
+      setFullscreenLoading(false)
+      set({ isLoadingData: false })
     }
   },
 
   /** 加载示例图谱数据，模拟分页加载效果 */
   loadDemo: async () => {
-    const { graphAPI, updateGraphData } = get()
-    set({ isFullscreenLoading: true, isLoadingData: true })
-    await graphAPI.loadDemoPaged(() => {
+    const { graphAPI, updateGraphData, setFullscreenLoading } = get()
+    setFullscreenLoading(true, '加载示例图谱...', 'semi')
+    set({ isLoadingData: true })
+    await graphAPI.loadDemoPaged((_, pg) => {
       updateGraphData()
-      set({ isFullscreenLoading: false })
+      if (pg === 1) setFullscreenLoading(false)
     })
     updateGraphData()
     set({ status: '已加载示例图谱', isLoadingData: false })
@@ -193,8 +202,8 @@ export const useAppStore = create((set, get) => ({
 
   /** 执行 CRUD 操作（POST/PUT/DELETE），成功后同步图谱数据到 React 状态 */
   mutate: async (path, method, payload) => {
-    const { graphAPI, updateGraphData } = get()
-    set({ isLoading: true })
+    const { graphAPI, updateGraphData, setFullscreenLoading } = get()
+    setFullscreenLoading(true, '执行操作...')
     try {
       set({ status: '执行中...' })
       const result = await graphAPI.mutate(path, method, payload)
@@ -207,15 +216,15 @@ export const useAppStore = create((set, get) => ({
       set({ status: `操作失败: ${e.message}`, statusError: true })
       return null
     } finally {
-      set({ isLoading: false })
+      setFullscreenLoading(false)
     }
   },
 
   /** 上传文件（Excel/JSON）到后端进行导入 */
   importFileToServer: async (file) => {
-    const { graphAPI } = get()
+    const { graphAPI, setFullscreenLoading } = get()
     const { groupId, importMode } = get()
-    set({ isLoading: true })
+    setFullscreenLoading(true, '导入数据中...')
     try {
       const data = await graphAPI.importFile(groupId, file, importMode)
       set({ status: `导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}` })
@@ -226,7 +235,7 @@ export const useAppStore = create((set, get) => ({
       set({ status: `导入失败: ${e.message}`, statusError: true })
       return null
     } finally {
-      set({ isLoading: false })
+      setFullscreenLoading(false)
       set({ showImportModal: false, importFile: null })
     }
   },
