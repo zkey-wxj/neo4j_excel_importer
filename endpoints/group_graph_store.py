@@ -84,6 +84,14 @@ RETURN count(*) AS deleted
     _CREATE_REL = """
 MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
 MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
+CALL apoc.merge.relationship(src, $rel_type, {group_id: $group_id}, $props, tgt) YIELD rel
+SET rel.group_id = $group_id
+RETURN elementId(rel) AS relation_id
+"""
+
+    _CREATE_REL_FALLBACK = """
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
+MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 CREATE (src)-[r:RELATED {
   rel_type: $rel_type,
   group_id: $group_id
@@ -93,6 +101,15 @@ RETURN elementId(r) AS relation_id
 """
 
     _MERGE_REL = """
+MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
+MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
+CALL apoc.merge.relationship(src, $rel_type, {group_id: $group_id}, $props, tgt) YIELD rel
+SET rel.rel_type = $rel_type,
+    rel.group_id = $group_id
+RETURN elementId(rel) AS relation_id
+"""
+
+    _MERGE_REL_FALLBACK = """
 MATCH (src:KnowledgeNode {nid: $source_nid, group_id: $group_id})
 MATCH (tgt:KnowledgeNode {nid: $target_nid, group_id: $group_id})
 MERGE (src)-[r:RELATED]->(tgt)
@@ -436,7 +453,10 @@ RETURN count(*) AS deleted
     def create_relation(self, payload: Mapping[str, Any]) -> str:
         """新增关系并返回 element id。"""
         params = self._relation_create_params(payload)
-        rows = self._run(self._CREATE_REL, params, write=True)
+        try:
+            rows = self._run(self._CREATE_REL, params, write=True)
+        except Exception:
+            rows = self._run(self._CREATE_REL_FALLBACK, params, write=True)
         if rows:
             return f"{params['source_nid']}->{params['target_nid']}"
         return ""
@@ -790,7 +810,10 @@ RETURN [n IN nodes(path) | n] AS nodes,
                 skipped += 1
                 continue
             params = self._relation_create_params(r)
-            self._run(self._MERGE_REL, params, write=True)
+            try:
+                self._run(self._MERGE_REL, params, write=True)
+            except Exception:
+                self._run(self._MERGE_REL_FALLBACK, params, write=True)
             rel_count += 1
 
         return {"nodes_imported": node_count, "relations_imported": rel_count, "relations_skipped": skipped}

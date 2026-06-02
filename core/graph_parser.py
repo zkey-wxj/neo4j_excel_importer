@@ -324,13 +324,13 @@ class GraphParser:
         nid_ok = clean_text(row[0]) in {clean_text(node["nid"]), clean_text("nid")}
         name_ok = clean_text(row[1]) in {clean_text(node["name"]), clean_text("name")}
 
-
         if not nid_ok or not name_ok:
             return False
         label_fields = self._normalize_label_fields(node.get("labels"))
-        if not self._matches_any(row[2], label_fields or ["node_type", "labels"]):
+        all_label_candidates = list(label_fields) + ["node_type", "labels", "keywords"]
+        if not self._matches_any(row[2], all_label_candidates):
             return False
-        
+
         return True
 
     def _is_rel_header(self, row: list[str], mapping: dict[str, Any]) -> bool:
@@ -454,9 +454,14 @@ class GraphParser:
                         for lb in self._split_labels_text(self._get_cell(row, current_index, f)):
                             if lb not in labels:
                                 labels.append(lb)
+                    if not labels and "labels" in current_index:
+                        for lb in self._split_labels_text(self._get_cell(row, current_index, "labels")):
+                            if lb not in labels:
+                                labels.append(lb)
                     if not labels:
                         labels = [DEFAULT_NODE_LABEL]
-                    reserved = {nid_field, name_field, *label_fields, *desc_fields}
+                    all_label_fields = set(label_fields) | {"labels"}
+                    reserved = {nid_field, name_field, *all_label_fields, *desc_fields}
                     props = self._collect_properties(row, current_index, node_property_fields, reserved)
                     desc = self._extract_first_by_fields(row, current_index, desc_fields)
                     payload: dict[str, Any] = {
