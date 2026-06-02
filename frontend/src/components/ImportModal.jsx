@@ -127,6 +127,21 @@ export default function ImportModal() {
           </Label>
         </RadioGroup>
 
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs"
+          disabled={!groupId}
+          onClick={() => {
+            const gid = groupId
+            const m = window.location.pathname.match(/^\/e\/[^/]+/)
+            const base = m ? m[0] : ''
+            window.open(`${base}/group-graph/api/export?group_id=${encodeURIComponent(gid)}&format=excel`, '_blank')
+          }}
+        >
+          导出 Excel 备份
+        </Button>
+
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={handleCancel}>
             取消
