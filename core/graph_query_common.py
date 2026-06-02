@@ -387,12 +387,13 @@ def node_display_name(node_obj: Mapping[str, Any]) -> str:
 
 
 def relation_display_name(rel_obj: Any) -> str:
-    rel_type = ""
-    if hasattr(rel_obj, "type"):
+    """获取关系的显示名称，优先使用自定义 rel_type 属性。"""
+    rel_map = as_mapping(rel_obj)
+    # 优先使用自定义属性 rel_type
+    rel_type = clean_text(rel_map.get("rel_type"))
+    # 回退到 Neo4j 关系类型
+    if not rel_type and hasattr(rel_obj, "type"):
         rel_type = clean_text(getattr(rel_obj, "type"))
-    if not rel_type:
-        rel_map = as_mapping(rel_obj)
-        rel_type = clean_text(rel_map.get("rel_type"))
     return rel_type or "RELATED"
 
 

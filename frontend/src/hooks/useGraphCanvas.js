@@ -1325,6 +1325,29 @@ export default function useGraphCanvas(canvasRef) {
     ],
   )
 
+  /** 右键点击节点：弹出上下文菜单 */
+  const onContextMenu = useCallback(
+    (e) => {
+      e.preventDefault()
+      const [wx, wy] = toWorld(e.clientX, e.clientY)
+      const nd = findNodeAt(wx, wy)
+      if (!nd) {
+        useAppStore.getState().setContextMenu(null)
+        return
+      }
+      const nid = clean(nd.raw?.nid ?? nd.nid ?? nd.id)
+      const nodeName = clean(nd.raw?.name ?? nd.name ?? nid)
+      useAppStore.getState().setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        nodeId: nd.id,
+        nid,
+        nodeName,
+      })
+    },
+    [toWorld, findNodeAt],
+  )
+
   // ── 键盘事件（ESC 退出抓取模式）──────────────────────────────────────
   const onKeyDown = useCallback(
     (e) => {
@@ -1413,6 +1436,7 @@ export default function useGraphCanvas(canvasRef) {
     canvas.addEventListener('pointercancel', onPtrUp)
     canvas.addEventListener('pointerleave', onPtrLeave)
     canvas.addEventListener('click', onClick)
+    canvas.addEventListener('contextmenu', onContextMenu)
     document.addEventListener('keydown', onKeyDown)
     window.addEventListener('resize', onResize)
 
@@ -1424,6 +1448,7 @@ export default function useGraphCanvas(canvasRef) {
       canvas.removeEventListener('pointercancel', onPtrUp)
       canvas.removeEventListener('pointerleave', onPtrLeave)
       canvas.removeEventListener('click', onClick)
+      canvas.removeEventListener('contextmenu', onContextMenu)
       document.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('resize', onResize)
       simRef.current?.stop()
@@ -1437,6 +1462,7 @@ export default function useGraphCanvas(canvasRef) {
     onPtrUp,
     onPtrLeave,
     onClick,
+    onContextMenu,
     onKeyDown,
     onResize,
   ])

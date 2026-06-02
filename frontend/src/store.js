@@ -63,6 +63,12 @@ export const useAppStore = create((set, get) => ({
   edgeTargetId: null,          // 悬停的目标节点 ID
   edgePopoverPos: null,        // 浮窗屏幕坐标 {x, y}
 
+  // ── 右键菜单 ──
+  contextMenu: null,       // { x, y, nodeId, nid, nodeName } 或 null
+
+  // ── 关联节点对话框 ──
+  addRelatedDialog: null,  // { direction: 'outgoing'|'incoming', sourceNid, sourceName } 或 null
+
   // ── 确认对话框 ──
   confirmOpen: false,       // 是否显示确认对话框
   confirmMessage: '',       // 确认对话框的提示文本
@@ -93,6 +99,8 @@ export const useAppStore = create((set, get) => ({
   setEdgeMouseWorld: (v) => set({ edgeMouseWorld: v }),
   setEdgeTargetId: (v) => set({ edgeTargetId: v }),
   setEdgePopoverPos: (v) => set({ edgePopoverPos: v }),
+  setContextMenu: (v) => set({ contextMenu: v }),
+  setAddRelatedDialog: (v) => set({ addRelatedDialog: v }),
   /** 重置所有建边状态 */
   resetEdgeCreation: () => set({
     edgeCreating: false, edgeSourceId: null,

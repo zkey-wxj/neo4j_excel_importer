@@ -12,6 +12,8 @@ import LegendPanel from '@/components/LegendPanel'
 import ImportModal from '@/components/ImportModal'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import EdgeCreatePopover from '@/components/EdgeCreatePopover'
+import NodeContextMenu from '@/components/NodeContextMenu'
+import AddRelatedNodeDialog from '@/components/AddRelatedNodeDialog'
 import FullscreenLoading from '@/components/FullscreenLoading'
 import TopLoadingBar from '@/components/TopLoadingBar'
 import Minimap from '@/components/Minimap'
@@ -101,6 +103,12 @@ export default function App() {
 
         {/* 建边浮窗：拖拽建边完成后弹出，输入关系类型并创建 */}
         <EdgeCreatePopover />
+
+        {/* 节点右键菜单 */}
+        <NodeContextMenu />
+
+        {/* 新增关联节点对话框 */}
+        <AddRelatedNodeDialog />
 
         {/* 消息通知：顶部居中显示操作结果的 Toast 提示 */}
         <Toaster

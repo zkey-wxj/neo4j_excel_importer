@@ -63,11 +63,17 @@ LIMIT $limit
 
     def _serialize_node(self, node_obj: Any) -> dict[str, Any]:
         node_map = as_mapping(node_obj)
+        # Neo4j 节点的 labels 需要从对象单独获取，as_mapping 只返回属性
+        labels = []
+        if hasattr(node_obj, "labels"):
+            labels = list(node_obj.labels)
+        elif "labels" in node_map:
+            labels = list(node_map.get("labels", []) or [])
         return {
             "nid": clean_text(node_map.get("nid")),
             "name": clean_text(node_map.get("name")),
             "group_id": clean_text(node_map.get("group_id")),
-            "labels": list(node_map.get("labels", []) or []),
+            "labels": labels,
             "description": clean_text(node_map.get("description")),
             "properties": node_map.get("properties") if isinstance(node_map.get("properties"), dict) else {},
         }
