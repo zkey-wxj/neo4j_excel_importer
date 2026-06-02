@@ -42,7 +42,7 @@ RETURN count(r) AS total
     _NODES_QUERY = """
 MATCH (n:KnowledgeNode)
 WHERE n.group_id = $group_id
-RETURN n
+RETURN n, labels(n) AS neo_labels
 ORDER BY n.name ASC, n.nid ASC
 SKIP $skip
 LIMIT $limit
@@ -51,7 +51,7 @@ LIMIT $limit
     _RELS_QUERY = """
 MATCH (src:KnowledgeNode)-[r]->(tgt:KnowledgeNode)
 WHERE r.group_id = $group_id
-RETURN src, r, tgt
+RETURN src, r, tgt, type(r) AS neo_type
 ORDER BY src.nid ASC, tgt.nid ASC, type(r)
 SKIP $skip
 LIMIT $limit
@@ -61,11 +61,13 @@ LIMIT $limit
     _IMAGE_REL_LIMIT = 120
     _SAFE_DETAIL_LIMIT = 200
 
-    def _serialize_node(self, node_obj: Any) -> dict[str, Any]:
+    def _serialize_node(self, node_obj: Any, neo_labels: Any = None) -> dict[str, Any]:
         node_map = as_mapping(node_obj)
-        # Neo4j 节点的 labels 需要从对象单独获取，as_mapping 只返回属性
+        # 优先使用显式返回的 neo_labels
         labels = []
-        if hasattr(node_obj, "labels"):
+        if neo_labels:
+            labels = list(neo_labels)
+        elif hasattr(node_obj, "labels"):
             labels = list(node_obj.labels)
         elif "labels" in node_map:
             labels = list(node_map.get("labels", []) or [])
@@ -83,10 +85,12 @@ LIMIT $limit
         tgt = self._serialize_node(row.get("tgt"))
         rel = row.get("r")
         rel_map = as_mapping(rel)
+        # 优先使用显式返回的 neo_type
+        rel_type = clean_text(row.get("neo_type")) or relation_display_name(rel)
         return {
             "source_nid": src.get("nid"),
             "target_nid": tgt.get("nid"),
-            "rel_type": relation_display_name(rel),
+            "rel_type": rel_type,
             "direction": "forward",
             "group_id": clean_text(rel_map.get("group_id")),
             "description": clean_text(rel_map.get("description")),
@@ -136,7 +140,7 @@ LIMIT $limit
         nodes_rows = raw_nodes[:page_size]
         rels_rows = raw_rels[:page_size]
 
-        nodes_payload = [self._serialize_node(row.get("n")) for row in nodes_rows]
+        nodes_payload = [self._serialize_node(row.get("n"), neo_labels=row.get("neo_labels")) for row in nodes_rows]
         rels_payload = [self._serialize_relation_row(row) for row in rels_rows]
         nodes_payload = strip_embedding_fields(nodes_payload)
         rels_payload = strip_embedding_fields(rels_payload)
