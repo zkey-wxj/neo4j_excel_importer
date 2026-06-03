@@ -29,7 +29,7 @@ export default function ImportModal() {
   const setImportMode = useAppStore((s) => s.setImportMode)
   const groupId = useAppStore((s) => s.groupId)
   const loadGroup = useAppStore((s) => s.loadGroup)
-  const setLoading = useAppStore((s) => s.setLoading)
+  const setFullscreenLoading = useAppStore((s) => s.setFullscreenLoading)
   const setStatus = useAppStore((s) => s.setStatus)
   const confirm = useAppStore((s) => s.confirm)
   const fileInputRef = useRef(null)
@@ -46,7 +46,7 @@ export default function ImportModal() {
     if (!await confirm(`确认以「${modeLabel}」方式导入 ${importFile.name} 到分组 ${gid}？`)) return
 
     setShowImportModal(false)
-    setLoading(true)
+    setFullscreenLoading(true, '导入数据中...')
     try {
       const fd = new FormData()
       fd.append('file', importFile)
@@ -67,7 +67,7 @@ export default function ImportModal() {
       const { toast } = await import('sonner')
       toast.error(`导入失败: ${err.message}`)
     } finally {
-      setLoading(false)
+      setFullscreenLoading(false)
       setImportFile(null)
     }
   }

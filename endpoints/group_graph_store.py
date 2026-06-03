@@ -72,7 +72,11 @@ SET n += $props
 FOREACH (_ IN CASE WHEN $embedding IS NULL THEN [] ELSE [1] END |
   SET n.embedding = $embedding
 )
-RETURN elementId(n) AS node_id
+WITH n
+CALL apoc.create.removeLabels(n, [l IN labels(n) WHERE l <> 'KnowledgeNode']) YIELD node
+WITH node
+CALL apoc.create.addLabels(node, $labels) YIELD node AS n2
+RETURN elementId(n2) AS node_id
 """
 
     _DELETE_NODE = """
