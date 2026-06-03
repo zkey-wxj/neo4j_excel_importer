@@ -394,6 +394,9 @@ class GraphParser:
         rel_desc_fields = self._normalize_relation_description_fields(rel_map.get("description"))
         node_property_fields = self._normalize_label_fields(node_map.get("properties"))
         rel_property_fields = self._normalize_label_fields(rel_map.get("properties"))
+        if not label_fields:
+            label_fields = []
+        label_fields.append("labels")
 
         for table_index, table in enumerate(blocks):
             scope_key = f"TABLE#T{table_index + 1}"
@@ -454,10 +457,7 @@ class GraphParser:
                         for lb in self._split_labels_text(self._get_cell(row, current_index, f)):
                             if lb not in labels:
                                 labels.append(lb)
-                    if not labels and "labels" in current_index:
-                        for lb in self._split_labels_text(self._get_cell(row, current_index, "labels")):
-                            if lb not in labels:
-                                labels.append(lb)
+                    print(f"DEBUG: labels from fields {label_fields} = {labels}")
                     if not labels:
                         labels = [DEFAULT_NODE_LABEL]
                     all_label_fields = set(label_fields) | {"labels"}

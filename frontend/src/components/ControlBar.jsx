@@ -126,11 +126,12 @@ export default function ControlBar({ graphCanvas }) {
     const XLSX = await import('xlsx')
 
     // 收集节点的动态属性字段作为额外表头
-    const nodeExtra = new Set()
+    const nodeExtraSet = new Set()
     rawNodes.forEach((n) =>
-      Object.keys(n.properties || {}).forEach((k) => nodeExtra.add(k))
+      Object.keys(n.properties || {}).forEach((k) => nodeExtraSet.add(k))
     )
-    const nodeHeaders = ['nid', 'name', 'labels', 'description', ...[...nodeExtra].sort()]
+    const nodeExtra = [...nodeExtraSet].sort()
+    const nodeHeaders = ['nid', 'name', 'labels', 'description', ...nodeExtra]
     const nodeRows = rawNodes.map((n) => {
       const row = [n.nid || '', n.name || '', (n.labels || []).join(', '), n.description || '']
       nodeExtra.forEach((k) => row.push((n.properties || {})[k] ?? ''))
@@ -138,11 +139,12 @@ export default function ControlBar({ graphCanvas }) {
     })
 
     // 收集关系的动态属性字段作为额外表头
-    const relExtra = new Set()
+    const relExtraSet = new Set()
     rawLinks.forEach((r) =>
-      Object.keys(r.properties || {}).forEach((k) => relExtra.add(k))
+      Object.keys(r.properties || {}).forEach((k) => relExtraSet.add(k))
     )
-    const relHeaders = ['source_nid', 'rel_type', 'target_nid', 'description', ...[...relExtra].sort()]
+    const relExtra = [...relExtraSet].sort()
+    const relHeaders = ['source_nid', 'rel_type', 'target_nid', 'description', ...relExtra]
     const relRows = rawLinks.map((r) => {
       const row = [r.source_nid || '', r.rel_type || '', r.target_nid || '', r.description || '']
       relExtra.forEach((k) => row.push((r.properties || {})[k] ?? ''))
