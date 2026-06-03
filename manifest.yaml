@@ -1,4 +1,4 @@
-version: 0.0.81
+version: 0.0.82
 type: plugin
 author: "zkey_wxj"
 name: "neo4j_excel_importer"

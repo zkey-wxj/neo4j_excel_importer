@@ -24,7 +24,7 @@ DEFAULT_FIELD_MAPPING: dict[str, Any] = {
     "node": {
         "nid": "NodeID",
         "name": "name",
-        "labels": ["node_type", "keywords"],
+        "labels": ["node_type"],
         "description": ["description", "definition", "说明", "备注", "简介"],
         "properties": ["level", "grade_range", "keywords", "teaching_tip"],
     },
