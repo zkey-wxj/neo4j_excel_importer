@@ -10,15 +10,14 @@ from core.types import NodePayload, RelationPayload, clean_text
 
 CONSTRAINT_CYPHER = (
     "CREATE CONSTRAINT IF NOT EXISTS "
-    f"FOR (n:{NODE_LABEL}) REQUIRE n.nid IS UNIQUE"
+    f"FOR (n:{NODE_LABEL}) REQUIRE (n.nid, n.group_id) IS UNIQUE"
 )
 
 UPSERT_NODES = """
 UNWIND $rows AS row
-MERGE (n:KnowledgeNode {nid: row.nid})
+MERGE (n:KnowledgeNode {nid: row.nid, group_id: row.group_id})
 SET n.name        = row.name,
-    n.description = row.description,
-    n.group_id    = row.group_id
+    n.description = row.description
 FOREACH (_ IN CASE WHEN row.embedding IS NULL THEN [] ELSE [1] END |
   SET n.embedding = row.embedding
 )
@@ -30,10 +29,9 @@ RETURN count(node)
 
 UPSERT_NODES_GENERIC = """
 UNWIND $rows AS row
-MERGE (n:KnowledgeNode {nid: row.nid})
+MERGE (n:KnowledgeNode {nid: row.nid, group_id: row.group_id})
 SET n.name        = row.name,
-    n.description = row.description,
-    n.group_id    = row.group_id
+    n.description = row.description
 FOREACH (_ IN CASE WHEN row.embedding IS NULL THEN [] ELSE [1] END |
   SET n.embedding = row.embedding
 )
@@ -42,16 +40,16 @@ SET n += row.props
 
 UPSERT_RELS_APOC = """
 UNWIND $rows AS row
-MATCH (src:KnowledgeNode {nid: row.source_nid})
-MATCH (tgt:KnowledgeNode {nid: row.target_nid})
+MATCH (src:KnowledgeNode {nid: row.source_nid, group_id: row.group_id})
+MATCH (tgt:KnowledgeNode {nid: row.target_nid, group_id: row.group_id})
 CALL apoc.merge.relationship(src, row.rel_type, {group_id: row.group_id}, row.props, tgt)
 YIELD rel RETURN count(rel)
 """
 
 UPSERT_RELS_GENERIC = """
 UNWIND $rows AS row
-MATCH (src:KnowledgeNode {nid: row.source_nid})
-MATCH (tgt:KnowledgeNode {nid: row.target_nid})
+MATCH (src:KnowledgeNode {nid: row.source_nid, group_id: row.group_id})
+MATCH (tgt:KnowledgeNode {nid: row.target_nid, group_id: row.group_id})
 MERGE (src)-[r:RELATED {rel_type: row.rel_type, group_id: row.group_id}]->(tgt)
 SET r += row.props
 """
@@ -248,6 +246,23 @@ def get_apoc_capabilities(uri: str, user: str, pwd: str) -> tuple[bool, bool]:
         return has_apoc_add_labels(session), has_apoc_merge_relationship(session)
 
 
+def _drop_legacy_nid_constraint(session: Any) -> None:
+    """尝试删除旧的 nid 单字段唯一约束（已迁移为 nid+group_id 复合约束）。"""
+    try:
+        result = session.run(
+            "SHOW ALL CONSTRAINTS YIELD name, type, labelsOrTypes, properties "
+            "WHERE type = 'UNIQUE' AND labelsOrTypes = ['KnowledgeNode'] AND properties = ['nid'] "
+            "RETURN name"
+        )
+        for record in result:
+            name = record.get("name", "")
+            if name:
+                session.run(f"DROP CONSTRAINT {name}")
+    except Exception:
+        # SHOW CONSTRAINTS 不可用时忽略，后续 CREATE IF NOT EXISTS 不受影响
+        pass
+
+
 def write_nodes(
     uri: str,
     user: str,
@@ -260,6 +275,7 @@ def write_nodes(
     detected_dimensions = _detect_embedding_dimensions(cypher_rows)
     driver = get_driver(uri, user, pwd)
     with driver.session() as session:
+        _drop_legacy_nid_constraint(session)
         session.run(CONSTRAINT_CYPHER)
         if detected_dimensions > 0:
             _ensure_vector_index(

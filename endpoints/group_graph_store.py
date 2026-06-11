@@ -10,7 +10,7 @@ from neo4j import Driver, GraphDatabase
 
 from core.constants import DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
 from core.graph_query_common import _ensure_group_id_index, _ensure_group_id_prop
-from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row
+from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row, CONSTRAINT_CYPHER, _drop_legacy_nid_constraint
 from core.types import NodePayload, RelationPayload, clean_text, extract_properties, split_meta_from_props
 
 
@@ -244,6 +244,8 @@ RETURN count(*) AS deleted
             with self._driver.session(**kwargs) as session:
                 _ensure_group_id_index(session, self.database)
                 _ensure_group_id_prop(session, self.database)
+                _drop_legacy_nid_constraint(session)
+                session.run(CONSTRAINT_CYPHER)
 
     def _session_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
