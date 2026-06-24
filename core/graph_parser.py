@@ -53,6 +53,12 @@ _NAME_PREFIX_PATTERN = re.compile(
     r")\s*"
 )
 _EMPTY_VALUES = {"", "nan", "none", "null"}
+# ── 常见表头关键词：这些值出现在 nid 列说明该行是误匹配的表头，而非节点数据 ──
+_COMMON_HEADER_KEYWORDS: set[str] = {
+    "nid", "id", "node_id", "nodeid", "node",
+    "节点", "节点id", "编号", "序号", "id编号",
+    "类型", "合计", "总计", "总数",
+}
 _EDGE_SYMBOL_PATTERN = re.compile(
     r"""^[\s*＊`'"''\[\]【】\(\)（）{}<>《》,，.;；:：!！?？、|\\/]+|[\s*＊`'"''\[\]【】\(\)（）{}<>《》,，.;；:：!！?？、|\\/]+$"""
 )
@@ -452,12 +458,15 @@ class GraphParser:
                     node_id = _normalize_edge_symbols(self._get_cell(row, current_index, nid_field))
                     if self._is_empty_like(node_id):
                         continue
+                    # 跳过表头关键词误匹配行（如汇总表中的 nid/类型/总计 等）
+                    # 以及含空格的自然语言文本（非合法节点标识符）
+                    if node_id.lower() in _COMMON_HEADER_KEYWORDS or " " in node_id:
+                        continue
                     labels: list[str] = []
                     for f in label_fields:
                         for lb in self._split_labels_text(self._get_cell(row, current_index, f)):
                             if lb not in labels:
                                 labels.append(lb)
-                    print(f"DEBUG: labels from fields {label_fields} = {labels}")
                     if not labels:
                         labels = [DEFAULT_NODE_LABEL]
                     all_label_fields = set(label_fields) | {"labels"}

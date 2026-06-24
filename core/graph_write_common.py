@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from typing import Any
 
@@ -246,23 +247,6 @@ def get_apoc_capabilities(uri: str, user: str, pwd: str) -> tuple[bool, bool]:
         return has_apoc_add_labels(session), has_apoc_merge_relationship(session)
 
 
-def _drop_legacy_nid_constraint(session: Any) -> None:
-    """尝试删除旧的 nid 单字段唯一约束（已迁移为 nid+group_id 复合约束）。"""
-    try:
-        result = session.run(
-            "SHOW ALL CONSTRAINTS YIELD name, type, labelsOrTypes, properties "
-            "WHERE type = 'UNIQUE' AND labelsOrTypes = ['KnowledgeNode'] AND properties = ['nid'] "
-            "RETURN name"
-        )
-        for record in result:
-            name = record.get("name", "")
-            if name:
-                session.run(f"DROP CONSTRAINT {name}")
-    except Exception:
-        # SHOW CONSTRAINTS 不可用时忽略，后续 CREATE IF NOT EXISTS 不受影响
-        pass
-
-
 def write_nodes(
     uri: str,
     user: str,
@@ -275,7 +259,6 @@ def write_nodes(
     detected_dimensions = _detect_embedding_dimensions(cypher_rows)
     driver = get_driver(uri, user, pwd)
     with driver.session() as session:
-        _drop_legacy_nid_constraint(session)
         session.run(CONSTRAINT_CYPHER)
         if detected_dimensions > 0:
             _ensure_vector_index(
