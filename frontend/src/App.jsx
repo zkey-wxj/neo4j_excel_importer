@@ -80,8 +80,8 @@ export default function App() {
         {/* 底部控制栏：缩放、重置视图、小地图开关、导入/导出功能 */}
         <ControlBar graphCanvas={graphCanvas} />
 
-        {/* 搜索面板：支持按名称、nid、标签搜索过滤节点 */}
-        <SearchPanel />
+        {/* 搜索面板：支持按名称/nid/标签搜索，点击结果定位并选中图谱节点 */}
+        <SearchPanel graphCanvas={graphCanvas} />
 
         {/* 操作面板：图谱加载、节点/关系 CRUD、路径查询、关系替换 */}
         <OpsPanel />
