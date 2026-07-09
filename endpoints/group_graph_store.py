@@ -10,7 +10,7 @@ from neo4j import Driver, GraphDatabase
 
 from core.constants import DEFAULT_REL_TYPE, NODE_RESERVED_PROP_KEYS, RELATION_RESERVED_PROP_KEYS
 from core.graph_query_common import _ensure_group_id_index, _ensure_group_id_prop
-from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row, CONSTRAINT_CYPHER, check_legacy_nid_constraint
+from core.graph_write_common import node_payload_to_cypher_row, relation_payload_to_cypher_row, CONSTRAINT_CYPHER
 from core.types import NodePayload, RelationPayload, clean_text, extract_properties, split_meta_from_props
 
 
