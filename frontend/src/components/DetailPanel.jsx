@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 function clean(v) {
   return String(v || '').trim()
@@ -12,13 +14,17 @@ function clean(v) {
  * 节点详情子组件
  * 展示选中节点的名称、类型标签、nid、属性、权重及关联节点列表
  */
-function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
+function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit }) {
   const raw = detailNode.raw || detailNode
   const nodeType = detailNode.type || 'Node'
   const nodeColor = detailNode.color || '#888'
   const nodeName = detailNode.label || clean(raw.name) || 'Unknown'
   const nodeNid = clean(raw.nid)
   const weight = detailNode.weight ?? 0
+
+  // 删除关系所需的 store 方法
+  const mutate = useAppStore((s) => s.mutate)
+  const confirm = useAppStore((s) => s.confirm)
 
   // 查找当前节点的所有邻居（通过关系连接的节点）
   const nodeId = detailNode.id || nodeNid
@@ -36,9 +42,39 @@ function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
         node: otherNode,
         rel: clean(l.relation),
         dir: isSrc ? '->' : '<-',
+        link: l,
       })
     }
   })
+
+  // 删除该邻居关系：二次确认后调用后端 DELETE，成功后前端 store 同步移除
+  const handleDeleteRel = async (e, nb) => {
+    e.stopPropagation()
+    const relRaw = nb.link?.raw || {}
+    const groupId = clean(relRaw.group_id) || clean(raw.group_id)
+    const sourceNid = clean(relRaw.source_nid)
+    const targetNid = clean(relRaw.target_nid)
+    const relType = clean(relRaw.rel_type)
+    if (!groupId || !sourceNid || !targetNid) {
+      toast.error('关系信息不完整，无法删除')
+      return
+    }
+    // 按 nid 匹配两端 label：邻居为另一端，当前节点为本端
+    const nbLabel = nb.node?.label || clean(nb.node?.nid) || '-'
+    const srcLabel = sourceNid === nodeNid ? nodeName : nbLabel
+    const tgtLabel = targetNid === nodeNid ? nodeName : nbLabel
+    const ok = await confirm(
+      `确认删除关系？\n源节点: ${srcLabel} (${sourceNid})\n目标节点: ${tgtLabel} (${targetNid})\n类型: ${relType || '-'}`
+    )
+    if (!ok) return
+    const r = await mutate('/group-graph/api/relation', 'DELETE', {
+      group_id: groupId,
+      source_nid: sourceNid,
+      target_nid: targetNid,
+      rel_type: relType,
+    })
+    r ? toast.success('删除成功') : toast.error('删除失败')
+  }
 
   const props = raw.properties || {}
   const propEntries = Object.entries(props).filter(
@@ -92,8 +128,15 @@ function NodeDetail({ detailNode, nodes, links, onNavigate, onEdit, onClose }) {
           {neighbors.slice(0, 30).map((nb, idx) => (
             <div key={idx} onClick={() => onNavigate(nb.node)}
               className="flex justify-between items-center py-1 px-1 rounded-md cursor-pointer text-xs hover:bg-muted/50 transition-colors">
-              <span className="truncate max-w-[70%]">{nb.dir} {nb.node.label}</span>
-              <span className="text-muted-foreground text-xs shrink-0 ml-2">{nb.rel}</span>
+              <span className="truncate max-w-[55%]">{nb.dir} {nb.node.label}</span>
+              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                <span className="text-muted-foreground text-xs">{nb.rel}</span>
+                <button type="button" title="删除关系"
+                  onClick={(e) => handleDeleteRel(e, nb)}
+                  className="text-muted-foreground/60 hover:text-destructive transition-colors leading-none">
+                  <Trash2 className="size-3" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

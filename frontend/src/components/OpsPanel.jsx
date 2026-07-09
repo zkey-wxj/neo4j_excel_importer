@@ -104,6 +104,7 @@ export default function OpsPanel() {
   const selectedNodeId = useAppStore((s) => s.selectedNodeId)
   const setSelectedNode = useAppStore((s) => s.setSelectedNode)
   const setDetailNode = useAppStore((s) => s.setDetailNode)
+  const detailNode = useAppStore((s) => s.detailNode)
   const nodes = useAppStore((s) => s.nodes)
   const opsExpand = useAppStore((s) => s.opsExpand)
   const setOpsExpand = useAppStore((s) => s.setOpsExpand)
@@ -143,6 +144,17 @@ export default function OpsPanel() {
     setNodeMeta(objToKv(r.meta))
   }, [selectedNodeId])
 
+  // 点击关系边后（detailNode 为关系），自动把端点、类型等赋值到关系操作表单
+  useEffect(() => {
+    if (!detailNode || detailNode._type !== 'relation') return
+    const r = detailNode.raw || {}
+    setRelSource(clean(r.source_nid))
+    setRelTarget(clean(r.target_nid))
+    setRelType(clean(r.rel_type))
+    setRelDesc(clean(r.description))
+    setRelProps(objToKv(r.properties))
+  }, [detailNode])
+
   // 收到展开信号时（从详情面板点击「编辑」），自动展开到节点操作区
   useEffect(() => {
     if (!opsExpand) return
@@ -177,7 +189,7 @@ export default function OpsPanel() {
   const handleNodeDelete = wrap(async () => { const p = buildNodePayload(); if (!await confirm(`确认删除节点？\n节点ID: ${p.nid}\n名称: ${p.name || '-'}`)) return; const r = await mutate('/group-graph/api/node', 'DELETE', { group_id: p.group_id, nid: p.nid }); if (r) { notify('删除成功'); setSelectedNode(null); setDetailNode(null) } else { notify('删除失败', 'error') } })
   const handleRelCreate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认新增关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'POST', p); r ? notify('新增成功') : notify('新增失败', 'error') })
   const handleRelUpdate = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认更新关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'PUT', p); r ? notify('更新成功') : notify('更新失败', 'error') })
-  const handleRelDelete = wrap(async () => { const p = buildRelPayload(); if (!await confirm(`确认删除关系？\n源节点: ${p.source_nid}\n目标节点: ${p.target_nid}\n类型: ${p.rel_type}`)) return; const r = await mutate('/group-graph/api/relation', 'DELETE', { group_id: p.group_id, source_nid: p.source_nid, target_nid: p.target_nid }); r ? notify('删除成功') : notify('删除失败', 'error') })
+  const handleRelDelete = wrap(async () => { const g = clean(groupId), s = clean(relSource), t = clean(relTarget); if (!g || !s || !t) { notify('group_id / 源节点 / 目标节点 不能为空', 'error'); return }; if (!await confirm(`确认删除关系？\n源节点: ${s}\n目标节点: ${t}`)) return; const r = await mutate('/group-graph/api/relation', 'DELETE', { group_id: g, source_nid: s, target_nid: t }); r ? notify('删除成功') : notify('删除失败', 'error') })
   // 路径查询：BFS 最短路径
   const handleFindPath = () => { const s = clean(pathSource), t = clean(pathTarget); if (!s || !t) { setStatus('请输入起点和终点', true); return }; if (s === t) { setStatus('起点和终点相同', true); return }; const r = findPath(s, t); if (r.error) { setStatus(r.error, true); return }; setPathHighlight(r.highlight); setHasPath(true); setStatus(`路径: ${r.hops} 跳, ${r.pathNodes.length} 节点`) }
   // 清除路径高亮
