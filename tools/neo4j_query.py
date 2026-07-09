@@ -36,7 +36,6 @@ def _detect_forbidden_query(query: str) -> str | None:
             return label
     return None
 
-
 class Neo4jQueryTool(Tool):
     """执行 Cypher 查询，默认只读，可按参数显式开启写入。"""
 
