@@ -17,11 +17,11 @@ logger.setLevel(logging.INFO)
 logger.addHandler(plugin_logger_handler)
 
 
-# 只读模式（allow_write=False）下兜底拦截的写/删除类操作：标准 Cypher 删除关键字 + 可绕过 EXPLAIN query_type 的 apoc 写/重构过程。
+# 只读模式（allow_write=False）下兜底拦截的写/删除类操作：标准 Cypher 删除关键字 + 可绕过 EXPLAIN query_type 的 apoc 写/批量删除/清空/导入覆盖过程。
 # 作为 query_type 白名单之外的补充防线，仅在关闭写入时生效；显式开启 allow_write_queries 时不拦截。
 _FORBIDDEN_QUERY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(?:DELETE|DETACH|DROP|REMOVE)\b", re.IGNORECASE), "DELETE/DETACH/DROP/REMOVE 等删除或破坏性关键字"),
-    (re.compile(r"\bapoc\.(?:refactor|create|periodic)\.", re.IGNORECASE), "apoc.refactor/create/periodic 写入或重构过程"),
+    (re.compile(r"\bapoc\.(?:refactor|create|periodic|nodes|import)\.", re.IGNORECASE), "apoc.refactor/create/periodic/nodes/import 等写入/批量删除/清空/导入覆盖过程"),
     (re.compile(r"\bapoc\.cypher\.run\b", re.IGNORECASE), "apoc.cypher.run 动态执行"),
 ]
 _LITERAL_RE = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|`[^`]*`")

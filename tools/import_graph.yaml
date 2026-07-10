@@ -80,9 +80,9 @@ parameters:
       en_US: Clear Database Before Import
       zh_Hans: 导入前清空数据库
     human_description:
-      en_US: "WARNING: deletes ALL nodes and relationships before importing. Use with caution."
-      zh_Hans: "警告：导入前删除数据库中所有节点和关系，请谨慎使用。"
-    llm_description: If true, wipes the Neo4j database before importing.
+      en_US: "WARNING: deletes ALL nodes and relationships of the current group_id before importing. Use with caution."
+      zh_Hans: "警告：导入前删除当前 group_id 下的所有节点和关系，请谨慎使用。"
+    llm_description: If true, deletes all nodes and relationships of the current group_id before importing.
     form: form
 
   - name: group_id

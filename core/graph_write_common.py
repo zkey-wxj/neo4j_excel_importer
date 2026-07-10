@@ -181,29 +181,28 @@ def relation_payload_to_cypher_row(payload: RelationPayload) -> dict[str, Any]:
 
 
 def clear_graph(uri: str, user: str, pwd: str, group_id: str = "") -> None:
-    """清理图数据：传 group_id 时按组清理，否则清空全图。"""
+    """按 group_id 清理该组图数据；group_id 为空时拒绝执行，避免误清整个数据库。"""
+    normalized_group_id = clean_text(group_id)
+    if not normalized_group_id:
+        raise ValueError("clear_graph 拒绝空 group_id：未限定分组会清空整个数据库。")
     driver = get_driver(uri, user, pwd)
     with driver.session() as session:
-        normalized_group_id = clean_text(group_id)
-        if normalized_group_id:
-            session.run(
-                """
-                MATCH ()-[r]-()
-                WHERE r.group_id = $group_id
-                DELETE r
-                """,
-                group_id=normalized_group_id,
-            )
-            session.run(
-                """
-                MATCH (n:KnowledgeNode)
-                WHERE n.group_id = $group_id
-                DETACH DELETE n
-                """,
-                group_id=normalized_group_id,
-            )
-        else:
-            session.run("MATCH (n) DETACH DELETE n")
+        session.run(
+            """
+            MATCH ()-[r]-()
+            WHERE r.group_id = $group_id
+            DELETE r
+            """,
+            group_id=normalized_group_id,
+        )
+        session.run(
+            """
+            MATCH (n:KnowledgeNode)
+            WHERE n.group_id = $group_id
+            DETACH DELETE n
+            """,
+            group_id=normalized_group_id,
+        )
 
 
 def _has_procedure(session: Any, procedure_name: str) -> bool:
