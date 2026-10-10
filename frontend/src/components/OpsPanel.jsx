@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Database, CircleDot, GitBranch, Route, Repeat } from 'lucide-react'
 
@@ -296,7 +297,7 @@ export default function OpsPanel() {
             {activeSection === 'node' && <div className="grid gap-2">
               <div className="grid grid-cols-2 gap-2"><Field label="节点ID (nid)"><Input value={nodeNid} onChange={(e) => setNodeNid(e.target.value)} className="h-7 text-xs font-mono" placeholder="唯一ID" /></Field><Field label="名称"><Input value={nodeName} onChange={(e) => setNodeName(e.target.value)} className="h-7 text-xs font-mono" /></Field></div>
               <Field label="标签 (逗号分隔)"><Input value={nodeLabels} onChange={(e) => setNodeLabels(e.target.value)} className="h-7 text-xs font-mono" placeholder="Core,Service" /></Field>
-              <Field label="描述"><Input value={nodeDesc} onChange={(e) => setNodeDesc(e.target.value)} className="h-7 text-xs font-mono" /></Field>
+              <Field label="描述"><Textarea placeholder="可选" value={nodeDesc} onChange={(e) => setNodeDesc(e.target.value)} className="text-xs font-mono" /></Field>
               <Field label="属性"><KvList items={nodeProps} onChange={setNodeProps} /></Field>
               <Field label="元信息"><KvList items={nodeMeta} onChange={setNodeMeta} /></Field>
               <CrudBtns onCreate={handleNodeCreate} onUpdate={handleNodeUpdate} onDelete={handleNodeDelete} busy={busy} />
@@ -304,7 +305,7 @@ export default function OpsPanel() {
             {activeSection === 'rel' && <div className="grid gap-2">
               <div className="grid grid-cols-2 gap-2"><PickableInput label="源节点" placeholder="source nid" value={relSource} onChange={setRelSource} inputId="relSource" /><PickableInput label="目标节点" placeholder="target nid" value={relTarget} onChange={setRelTarget} inputId="relTarget" /></div>
               <Field label="关系类型"><Input value={relType} onChange={(e) => setRelType(e.target.value)} className="h-7 text-xs font-mono" placeholder="RELATED" /></Field>
-              <Field label="描述"><Input value={relDesc} onChange={(e) => setRelDesc(e.target.value)} className="h-7 text-xs font-mono" /></Field>
+              <Field label="描述"><Textarea placeholder="可选" value={relDesc} onChange={(e) => setRelDesc(e.target.value)} className="text-xs font-mono" /></Field>
               <Field label="属性"><KvList items={relProps} onChange={setRelProps} /></Field>
               <CrudBtns onCreate={handleRelCreate} onUpdate={handleRelUpdate} onDelete={handleRelDelete} busy={busy} />
             </div>}

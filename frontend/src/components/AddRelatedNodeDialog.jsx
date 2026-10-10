@@ -4,6 +4,7 @@ import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { ArrowRight, ArrowLeft } from 'lucide-react'
 
@@ -211,7 +212,7 @@ export default function AddRelatedNodeDialog() {
               )}
             </div>
             <Field label="关系描述">
-              <Input placeholder="可选" value={relDesc} onChange={(e) => setRelDesc(e.target.value)} className="h-7 text-xs font-mono" />
+              <Textarea placeholder="可选" value={relDesc} onChange={(e) => setRelDesc(e.target.value)} className="text-xs font-mono" />
             </Field>
           </div>
         </div>
@@ -232,7 +233,7 @@ export default function AddRelatedNodeDialog() {
               <Input placeholder="Core,Service" value={labels} onChange={(e) => setLabels(e.target.value)} className="h-7 text-xs font-mono" />
             </Field>
             <Field label="描述">
-              <Input placeholder="可选" value={desc} onChange={(e) => setDesc(e.target.value)} className="h-7 text-xs font-mono" />
+              <Textarea placeholder="可选" value={desc} onChange={(e) => setDesc(e.target.value)} className="text-xs font-mono" />
             </Field>
             <Field label="属性">
               <KvList items={props} onChange={setProps} />

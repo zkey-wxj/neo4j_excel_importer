@@ -4,6 +4,7 @@ import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 
 function clean(v) { return String(v ?? '').trim() }
@@ -155,11 +156,11 @@ export default function EdgeCreatePopover() {
           <Label className="text-xs text-muted-foreground font-mono leading-none">
             描述
           </Label>
-          <Input
+          <Textarea
             placeholder="可选"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
-            className="h-6 text-xs font-mono"
+            className="text-xs font-mono"
           />
         </div>
         <div className="flex gap-1 mt-0.5">
