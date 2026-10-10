@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from 'sonner'
 import { useAppStore } from '@/store'
@@ -21,8 +21,19 @@ import PasswordGate from '@/components/PasswordGate'
 
 export default function App() {
   const canvasRef = useRef(null)
-  const overlayRef = useRef(null)
-  const graphCanvas = useGraphCanvas(canvasRef)
+
+  /**
+   * canvas 元素状态 + 回调 ref。
+   * 鉴权未通过时 App 渲染的是密码门，canvas 要等 authState 变为 ready 之后才挂载；
+   * 把元素本身作为状态传给 useGraphCanvas，事件绑定的 effect 才能在元素真正挂载后执行
+   * （否则监听器会被绑到一个 null 上，表现为悬浮/点击/拖动/缩放全部失效）。
+   */
+  const [canvasEl, setCanvasEl] = useState(null)
+  const bindCanvas = useCallback((el) => {
+    canvasRef.current = el
+    setCanvasEl(el)
+  }, [])
+  const graphCanvas = useGraphCanvas(canvasRef, canvasEl)
   const isLoadingData = useAppStore((s) => s.isLoadingData)
 
   const authState = useAppStore((s) => s.authState)
@@ -49,28 +60,6 @@ export default function App() {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  // 数据加载遮罩期间，将滚轮事件转发到画布，保留缩放交互
-  // 遮罩层本身仍拦截悬浮/点击/拖动，仅放开滚轮缩放
-  useEffect(() => {
-    const overlay = overlayRef.current
-    if (!overlay) return
-    const onWheel = (e) => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      e.preventDefault()
-      canvas.dispatchEvent(
-        new WheelEvent('wheel', {
-          deltaY: e.deltaY,
-          deltaX: e.deltaX,
-          deltaMode: e.deltaMode,
-          clientX: e.clientX,
-          clientY: e.clientY,
-        }),
-      )
-    }
-    overlay.addEventListener('wheel', onWheel, { passive: false })
-    return () => overlay.removeEventListener('wheel', onWheel)
-  }, [isLoadingData])
 
   // 未通过访问校验时，只渲染密码门
   if (authState !== 'ready') {
@@ -91,12 +80,13 @@ export default function App() {
 
         {/* 图谱画布：核心 Canvas 元素，由 D3 力导向仿真驱动渲染 */}
         <canvas
-          ref={canvasRef}
+          ref={bindCanvas}
           className="absolute inset-0 w-full h-full block z-[1]"
         />
 
-        {/* 数据加载遮罩：分页加载期间覆盖画布，拦截悬浮/点击/拖动，防止误操作（滚轮缩放已转发至画布） */}
-        {isLoadingData && <div ref={overlayRef} className="absolute inset-0 z-[2] cursor-wait" />}
+        {/* 数据加载遮罩：分页加载期间覆盖画布，完全禁用悬浮/点击/拖动/缩放等交互，
+            避免加载过程中产生误操作；加载进度由顶部 TopLoadingBar 呈现 */}
+        {isLoadingData && <div className="absolute inset-0 z-[15] cursor-wait" />}
 
         {/* 底部控制栏：缩放、重置视图、小地图开关、导入/导出功能 */}
         <ControlBar graphCanvas={graphCanvas} />

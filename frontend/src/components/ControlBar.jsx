@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import * as d3 from 'd3'
+import { FIT_DURATION } from '@/lib/constants'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -54,8 +54,11 @@ export default function ControlBar({ graphCanvas }) {
   const groupId = useAppStore((s) => s.groupId)
   const showMinimap = useAppStore((s) => s.showMinimap)
   const setShowMinimap = useAppStore((s) => s.setShowMinimap)
+  const hoverFocus = useAppStore((s) => s.hoverFocus)
+  const setHoverFocus = useAppStore((s) => s.setHoverFocus)
+  const layoutPinned = useAppStore((s) => s.layoutPinned)
+  const setLayoutPinned = useAppStore((s) => s.setLayoutPinned)
   const zoom = useAppStore((s) => s.zoom)
-  const setZoom = useAppStore((s) => s.setZoom)
   const nodes = useAppStore((s) => s.nodes)
   const links = useAppStore((s) => s.links)
   const setStatus = useAppStore((s) => s.setStatus)
@@ -73,13 +76,14 @@ export default function ControlBar({ graphCanvas }) {
     graphCanvas?.zoomTo?.(newK)
   }
 
-  /** 重置视图：将画布变换重置为初始状态（缩放 1x，无平移） */
-  const handleReset = () => {
-    if (graphCanvas?.transform) {
-      graphCanvas.transform.current = d3.zoomIdentity
-    }
-    setZoom(1)
-    graphCanvas?.scheduleRender?.()
+  /** 适配视图：缩放到恰好容纳当前全部可见节点（用户主动触发，会重置自动相机） */
+  const handleFitView = () => {
+    graphCanvas?.fitView?.({ duration: FIT_DURATION, fromUser: true })
+  }
+
+  /** 恢复实际大小：以画布中心为锚点回到 1:1 缩放 */
+  const handleActualSize = () => {
+    graphCanvas?.zoomTo?.(1)
   }
 
   /** 导出图谱数据为 JSON 文件，包含节点和关系的原始数据 */
@@ -200,7 +204,7 @@ export default function ControlBar({ graphCanvas }) {
             <line x1="5" y1="7" x2="9" y2="7" />
           </svg>
         </CtrlBtn>
-        <CtrlBtn title="重置视图" onClick={handleReset}>
+        <CtrlBtn title="适配视图" onClick={handleFitView}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 8a6 6 0 0 1 10.3-4.2" />
             <path d="M14 8a6 6 0 0 1-10.3 4.2" />
@@ -208,12 +212,40 @@ export default function ControlBar({ graphCanvas }) {
             <polyline points="14 14 14 11 11 11" />
           </svg>
         </CtrlBtn>
+        <CtrlBtn title="实际大小 1:1" onClick={handleActualSize}>
+          <span className="text-[10px] font-semibold leading-none">1:1</span>
+        </CtrlBtn>
         <CtrlBtn title="小地图" active={showMinimap} onClick={() => setShowMinimap(!showMinimap)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
             <circle cx="8" cy="8" r="6" />
             <ellipse cx="8" cy="8" rx="3" ry="6" />
             <line x1="2" y1="6" x2="14" y2="6" />
             <line x1="2" y1="10" x2="14" y2="10" />
+          </svg>
+        </CtrlBtn>
+        <CtrlBtn
+          title="悬浮聚焦：开启后悬停节点会高亮其关联、其余变暗（关闭可避免节点密集时一片灰）"
+          active={hoverFocus}
+          onClick={() => setHoverFocus(!hoverFocus)}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+            <circle cx="8" cy="8" r="5" />
+            <circle cx="8" cy="8" r="1.6" />
+            <line x1="8" y1="0.6" x2="8" y2="2.4" />
+            <line x1="8" y1="13.6" x2="8" y2="15.4" />
+            <line x1="0.6" y1="8" x2="2.4" y2="8" />
+            <line x1="13.6" y1="8" x2="15.4" y2="8" />
+          </svg>
+        </CtrlBtn>
+        <CtrlBtn
+          title="固定布局：冻结力导向仿真、锁住当前节点位置；再次点击恢复自动布局"
+          active={layoutPinned}
+          onClick={() => setLayoutPinned(!layoutPinned)}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+            <circle cx="8" cy="6.5" r="2.6" />
+            <line x1="8" y1="9.1" x2="8" y2="14.2" />
+            <line x1="4.6" y1="12.4" x2="11.4" y2="12.4" />
           </svg>
         </CtrlBtn>
         <CtrlBtn title="导出 JSON" onClick={handleExportJSON}>

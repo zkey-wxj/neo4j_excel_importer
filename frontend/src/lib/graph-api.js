@@ -188,12 +188,13 @@ export class GraphAPI {
    *
    * @param {string} gid - 分组 ID（group_id）
    * @param {number} pageSize - 每页条目数
-   * @param {function} [onPage] - 每页加载完成的回调函数，参数为 (graphData, pageNum)
+   * @param {function} [onPage] - 每页加载完成的回调函数，签名为 (graphData, pageNum, meta)，
+   *   meta 含 page / totalNodes / totalRels / loadedNodes / loadedRels（后端未提供总数时 total 为 -1）
    * @returns {Promise<{nodes: object[], links: object[]}>} 最终的图谱数据
    */
   async loadGroup(gid, pageSize, onPage) {
     this.store.reset();
-    const ps = Number(clean(pageSize) || "300");
+    const ps = Number(clean(pageSize) || "500");
     let nc = "",
       rc = "",
       pg = 0,
@@ -223,8 +224,18 @@ export class GraphAPI {
 
       // 节流：首页与末页强制推送，其余满 PUSH_INTERVAL 才推送；不推送时跳过 mapGraphData 与 UI 渲染
       const now = performance.now();
+      // 后端首页会返回 nodes_total / relations_total（-1 表示未统计），
+      // 透传给 UI 以便展示确定性进度条（节点与关系分别推进，UI 按总数加权）
+      const totalNodes = Number(d.nodes_total);
+      const totalRels = Number(d.relations_total);
       if (onPage && (pg === 1 || !hasMore || now - lastPushTime >= PUSH_INTERVAL)) {
-        onPage(this.store.mapGraphData(), pg);
+        onPage(this.store.mapGraphData(), pg, {
+          page: pg,
+          totalNodes: Number.isFinite(totalNodes) && totalNodes >= 0 ? totalNodes : -1,
+          totalRels: Number.isFinite(totalRels) && totalRels >= 0 ? totalRels : -1,
+          loadedNodes: this.store.nodeMap.size,
+          loadedRels: this.store.linkMap.size,
+        });
         lastPushTime = now;
       }
     }
@@ -234,9 +245,10 @@ export class GraphAPI {
 
   /**
    * 生成并加载示例图谱数据，模拟分页加载效果
-   * 创建 1000 个节点和关联关系，每 200 条为一页，页间延迟 2 秒模拟网络加载
+   * 创建 10000 个节点和关联关系，每 500 条为一页，页间延迟 2 秒模拟网络加载
    *
-   * @param {function} [onPage] - 每页加载完成的回调函数，参数为 (graphData, pageNum)
+   * @param {function} [onPage] - 每页加载完成的回调函数，签名为 (graphData, pageNum, meta)，
+   *   meta 含 page / totalNodes / totalRels / loadedNodes / loadedRels
    * @returns {Promise<{nodes: object[], links: object[]}>} 最终的图谱数据
    */
   async loadDemoPaged(onPage) {
@@ -246,12 +258,21 @@ export class GraphAPI {
     const total = Math.max(dn.length, dl.length);
     let pg = 1;
 
-    for (let s = 0; s < total; s += 200) {
-      const e = s + 200;
+    // 每页 500 条（与真实分页的默认值保持一致）
+    const DEMO_PAGE = 500;
+    for (let s = 0; s < total; s += DEMO_PAGE) {
+      const e = s + DEMO_PAGE;
       this.store.addNodes(dn.slice(s, e));
       this.store.addLinks(dl.slice(s, e));
       const g = this.store.mapGraphData();
-      if (onPage) onPage(g, pg);
+      if (onPage)
+        onPage(g, pg, {
+          page: pg,
+          totalNodes: dn.length,
+          totalRels: dl.length,
+          loadedNodes: this.store.nodeMap.size,
+          loadedRels: this.store.linkMap.size,
+        });
       pg++;
       // 模拟网络延迟，每页间隔 2 秒
       await new Promise((r) => setTimeout(r, 2000));
@@ -299,7 +320,7 @@ export class GraphAPI {
     if (!anyNode?.group_id) return;
 
     const gid = anyNode.group_id;
-    const ps = 300;
+    const ps = 500;
     const d = await this.req(`/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page=1&page_size=${ps}`);
 
     let added = 0;
