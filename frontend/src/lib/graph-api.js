@@ -87,6 +87,11 @@ export class GraphAPI {
       hasMore = true;
     const base = `/group-graph/api/graph?group_id=${encodeURIComponent(gid)}&page_size=${ps}`;
 
+    // 分页推送节流：至少间隔 PUSH_INTERVAL 才触发一次 onPage 回调，
+    // 避免后端出页过快时每页都跑完整渲染管线；最后一页强制推送保证数据完整
+    const PUSH_INTERVAL = 300;
+    let lastPushTime = 0;
+
     while (hasMore) {
       pg++;
       let url = base;
@@ -103,8 +108,12 @@ export class GraphAPI {
 
       if (!d.nodes_has_more && !d.relations_has_more) hasMore = false;
 
-      const g = this.store.mapGraphData();
-      if (onPage) onPage(g, pg);
+      // 节流：首页与末页强制推送，其余满 PUSH_INTERVAL 才推送；不推送时跳过 mapGraphData 与 UI 渲染
+      const now = performance.now();
+      if (onPage && (pg === 1 || !hasMore || now - lastPushTime >= PUSH_INTERVAL)) {
+        onPage(this.store.mapGraphData(), pg);
+        lastPushTime = now;
+      }
     }
 
     return this.store.mapGraphData();
@@ -119,7 +128,7 @@ export class GraphAPI {
    */
   async loadDemoPaged(onPage) {
     this.store.reset();
-    const dn = genDemoNodes(1000);
+    const dn = genDemoNodes(10000);
     const dl = genDemoLinks(dn);
     const total = Math.max(dn.length, dl.length);
     let pg = 1;

@@ -218,6 +218,8 @@ export class GraphStore {
     this.links = []
     /** 图谱级别的统计信息：孤立节点数、节点类型数、关系类型数 */
     this.stats = { orphanCount: 0, nodeTypeCount: 0, relTypeCount: 0 }
+    /** true 时 mapGraphData 跳过可达性 BFS（加载期间用原始权重，全部完成后算一次） */
+    this.skipWeights = false
   }
 
   /** 清空所有数据（重置 nodeMap、linkMap、nodes、links、stats） */
@@ -312,7 +314,8 @@ export class GraphStore {
       .filter(Boolean)
 
     // 通过图算法计算综合节点权重
-    this.computeNodeWeights()
+    // 加载期间 skipWeights=true 时跳过，避免每页 mapGraphData 触发 O(N×(V+E)) 的全量重算
+    if (!this.skipWeights) this.computeNodeWeights()
     this.computeStats()
 
     return { nodes: this.nodes, links: this.links }

@@ -170,6 +170,8 @@ export const useAppStore = create((set, get) => ({
     const { graphAPI, updateGraphData, setFullscreenLoading } = get()
     setFullscreenLoading(true, '加载图谱数据...', 'semi')
     set({ isLoadingData: true })
+    // 加载期间跳过可达性 BFS，避免每页 mapGraphData 触发 O(N×(V+E)) 重算
+    graphStore.skipWeights = true
     try {
       const ps = get().pageSize
       await graphAPI.loadGroup(gid, ps, (_, pg) => {
@@ -177,9 +179,12 @@ export const useAppStore = create((set, get) => ({
         if (pg === 1) setFullscreenLoading(false)
         set({ status: `加载中: 第 ${pg} 页` })
       })
+      // 恢复后末次更新会计算一次完整可达性权重
+      graphStore.skipWeights = false
       updateGraphData()
       set({ status: `加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}` })
     } catch (e) {
+      graphStore.skipWeights = false
       set({ status: `加载失败: ${e.message}`, statusError: true })
     } finally {
       setFullscreenLoading(false)
@@ -192,10 +197,13 @@ export const useAppStore = create((set, get) => ({
     const { graphAPI, updateGraphData, setFullscreenLoading } = get()
     setFullscreenLoading(true, '加载示例图谱...', 'semi')
     set({ isLoadingData: true })
+    // 加载期间跳过可达性 BFS，完成后算一次
+    graphStore.skipWeights = true
     await graphAPI.loadDemoPaged((_, pg) => {
       updateGraphData()
       if (pg === 1) setFullscreenLoading(false)
     })
+    graphStore.skipWeights = false
     updateGraphData()
     set({ status: '已加载示例图谱', isLoadingData: false })
   },

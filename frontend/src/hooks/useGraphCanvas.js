@@ -71,6 +71,9 @@ export default function useGraphCanvas(canvasRef) {
   const graphLinksRef = useRef([]) // 原始关系数据（用于过滤判断）
   const transformRef = useRef(d3.zoomIdentity)  // 当前画布变换矩阵
   const quadtreeRef = useRef(null) // 四叉树（用于高效的节点命中检测）
+  const adjacencyRef = useRef(new Map()) // 邻接表：id -> Set<邻居 id>，O(1) 邻居判定
+  const sortedNodesRef = useRef([]) // 按权重升序排列的节点快照，避免每帧重排
+  const nodeMapRef = useRef(new Map()) // id -> 原始节点，命中检测 O(1) 查找
   const needRender = useRef(false) // 是否有待渲染的帧
   const rafId = useRef(null)       // requestAnimationFrame ID
 
@@ -191,15 +194,7 @@ export default function useGraphCanvas(canvasRef) {
       const keys = getNodeLabelKeys(n)
       if (!keys.some((k) => snap.selectedLegendTypes.has(k))) return false
     }
-    if (snap.orphanFilter) {
-      const id = n.id
-      const connected = graphLinksRef.current.some((l) => {
-        const s = clean(typeof l.source === 'object' ? l.source?.id : l.source)
-        const t = clean(typeof l.target === 'object' ? l.target?.id : l.target)
-        return s === id || t === id
-      })
-      if (connected) return false
-    }
+    if (snap.orphanFilter && (n.degree || 0) > 0) return false
     if (!snap.searchKeyword) return true
     const ll = Array.isArray(n?.raw?.labels) ? n.raw.labels : []
     return [
@@ -281,7 +276,7 @@ export default function useGraphCanvas(canvasRef) {
       if (!nd) return null
       const snap = storeSnap.current
       if (snap.pathHighlight && !snap.pathHighlight.has(nd.id)) return null
-      const g = graphNodesRef.current.find((n) => n.id === nd.id)
+      const g = nodeMapRef.current.get(nd.id)
       if (g && !passFilter(g)) return null
       return nd
     },
@@ -303,9 +298,18 @@ export default function useGraphCanvas(canvasRef) {
           const ekR = `${t.id}=>${s.id}`
           if (!snap.pathHighlight.has(ek) && !snap.pathHighlight.has(ekR)) continue
         }
-        const sg = graphNodesRef.current.find((n) => n.id === s.id)
-        const tg = graphNodesRef.current.find((n) => n.id === t.id)
+        const sg = nodeMapRef.current.get(s.id)
+        const tg = nodeMapRef.current.get(t.id)
         if (!sg || !tg || !passFilter(sg) || !passFilter(tg)) continue
+        // 直线边用包围盒预筛，剔除远离光标的边以减少贝塞尔采样开销
+        if (
+          !e.curvature &&
+          (wx < Math.min(s.x, t.x) - EDGE_HIT_TH ||
+            wx > Math.max(s.x, t.x) + EDGE_HIT_TH ||
+            wy < Math.min(s.y, t.y) - EDGE_HIT_TH ||
+            wy > Math.max(s.y, t.y) + EDGE_HIT_TH)
+        )
+          continue
         for (let u = 0; u <= 1; u += 0.05) {
           const p = bezPt(e, u)
           const dx = p.x - wx
@@ -321,12 +325,7 @@ export default function useGraphCanvas(canvasRef) {
   // ── 邻居判断 ─────────────────────────────────────────────────────
   /** 判断两个节点是否通过某条关系边直接相连 */
   const isNeighbor = useCallback((a, b) => {
-    return edgesRef.current.some(
-      (e) =>
-        !e.isSelfLoop &&
-        ((e.source?.id === b && e.target?.id === a) ||
-          (e.target?.id === b && e.source?.id === a)),
-    )
+    return adjacencyRef.current.get(a)?.has(b) || false
   }, [])
 
   // ── 绘制辅助函数 ───────────────────────────────────────────────────
@@ -342,12 +341,8 @@ export default function useGraphCanvas(canvasRef) {
    * @param {number} ae - 激活的关系边索引
    */
   const drawEdges = useCallback(
-    (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae) => {
+    (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, vis) => {
       const hasF = !!(focusN || feObj)
-      const vis = new Set()
-      graphNodesRef.current.forEach((n) => {
-        if (passFilter(n)) vis.add(n.id)
-      })
       const ph = storeSnap.current.pathHighlight
 
       edgesRef.current.forEach((edge, i) => {
@@ -447,8 +442,9 @@ export default function useGraphCanvas(canvasRef) {
         }
 
         // 关系标签：在边的中点位置绘制类型名称（带圆角背景）
+        // 低缩放级别（看全图）时跳过，避免大量文本绘制造成卡顿
         c.globalAlpha = alpha
-        if (edge.name) {
+        if (edge.name && k > 0.7) {
           if (ph && hasF && !act) return
           if (ph && !hasF && !onPath) return
           if (!ph && hasF && !act) return
@@ -479,7 +475,7 @@ export default function useGraphCanvas(canvasRef) {
         }
       })
     },
-    [passFilter, passEdgeFilter, bezCp, bezMid],
+    [passEdgeFilter, bezCp, bezMid],
   )
 
   /**
@@ -488,20 +484,12 @@ export default function useGraphCanvas(canvasRef) {
    * 节点按权重升序绘制，权重大的在上层
    */
   const drawNodes = useCallback(
-    (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn) => {
+    (c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn, vis) => {
       const hasF = !!(focusN || feObj)
       const ph = storeSnap.current.pathHighlight
-      const vis = new Set()
-      graphNodesRef.current.forEach((n) => {
-        if (passFilter(n)) vis.add(n.id)
-      })
 
-      // 按权重升序排列，确保权重大的节点绘制在上层
-      const sorted = [...nodesRef.current].sort(
-        (a, b) => (a.weight || 0) - (b.weight || 0),
-      )
-
-      sorted.forEach((nd) => {
+      // 按权重升序的节点快照已在 render 中缓存，直接遍历（权重大的在上层）
+      sortedNodesRef.current.forEach((nd) => {
         const x = nd.x ?? 0
         const y = nd.y ?? 0
         // 视口裁剪：跳过不在可视区域内的节点
@@ -514,12 +502,7 @@ export default function useGraphCanvas(canvasRef) {
         const isNN =
           focusN &&
           !isNF &&
-          edgesRef.current.some(
-            (e) =>
-              !e.isSelfLoop &&
-              ((e.source?.id === focusN && e.target?.id === nd.id) ||
-                (e.target?.id === focusN && e.source?.id === nd.id)),
-          )
+          (adjacencyRef.current.get(focusN)?.has(nd.id) || false)
         const isEF = feIds?.has(nd.id)
         const isSN = nd.id === sn
         const fc = isNF || isEF || isSN
@@ -637,7 +620,7 @@ export default function useGraphCanvas(canvasRef) {
         c.globalAlpha = 1
       })
     },
-    [passFilter],
+    [],
   )
 
   // ── 小地图绘制 ──────────────────────────────────────────────────────
@@ -748,8 +731,13 @@ export default function useGraphCanvas(canvasRef) {
       ? new Set([feObj.source?.id, feObj.target?.id].filter(Boolean))
       : null
 
-    drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae)
-    drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn)
+    // 可见集合：本帧仅计算一次，供 drawEdges/drawNodes 复用（原每帧各算一次）
+    const vis = new Set()
+    graphNodesRef.current.forEach((n) => {
+      if (passFilter(n)) vis.add(n.id)
+    })
+    drawEdges(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, ae, vis)
+    drawNodes(c, vx0, vy0, vx1, vy1, k, focusN, feObj, feIds, sn, vis)
 
     // 建边预览：源节点到光标的蓝色虚线箭头
     if (snap.edgeCreating && snap.edgeMouseWorld) {
@@ -803,7 +791,7 @@ export default function useGraphCanvas(canvasRef) {
     c.restore()
 
     if (showMinimap) drawMinimap()
-  }, [drawEdges, drawNodes, drawMinimap, showMinimap])
+  }, [drawEdges, drawNodes, drawMinimap, showMinimap, passFilter])
 
   // ── 调度渲染 ──────────────────────────────────────────────────────
   /** 使用 requestAnimationFrame 调度下一帧渲染，避免重复调度 */
@@ -914,17 +902,40 @@ export default function useGraphCanvas(canvasRef) {
         if (Number.isFinite(p.vy)) n.vy = p.vy
       })
 
-      // 为新增节点设定接近图中心的初始位置，避免从随机位置弹入
+      // 为新增节点设定接近画布最外层的初始位置，再被力学拉到本应所在的位置
+      // 沿当前已有节点的包围盒外缘分布；若无旧节点则用画布外缘
       const prevIds = existingMap
+      let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
+      existingMap.forEach((p) => {
+        if (Number.isFinite(p.x)) {
+          if (p.x < bx0) bx0 = p.x
+          if (p.x > bx1) bx1 = p.x
+        }
+        if (Number.isFinite(p.y)) {
+          if (p.y < by0) by0 = p.y
+          if (p.y > by1) by1 = p.y
+        }
+      })
+      const hasBounds = Number.isFinite(bx0)
+      const ringX = hasBounds ? (bx0 + bx1) / 2 : W.current / 2
+      const ringY = hasBounds ? (by0 + by1) / 2 : H.current / 2
+      const margin = 120
+      const ringRX = (hasBounds ? (bx1 - bx0) / 2 : W.current / 2) + margin
+      const ringRY = (hasBounds ? (by1 - by0) / 2 : H.current / 2) + margin
+      let newIdx = 0
       safeN.forEach((n) => {
         if (!prevIds.has(n.id)) {
-          n.x = W.current / 2 + (Math.random() - 0.5) * 100
-          n.y = H.current / 2 + (Math.random() - 0.5) * 100
+          // 沿外缘均匀分布，避免新节点重叠堆在同一处
+          const a = (newIdx * 2.39996) % (Math.PI * 2) // 黄金角分布
+          n.x = ringX + Math.cos(a) * ringRX
+          n.y = ringY + Math.sin(a) * ringRY
+          newIdx++
         }
       })
 
       graphNodesRef.current = safeN
       graphLinksRef.current = safeL
+      nodeMapRef.current = new Map(safeN.map((n) => [n.id, n]))
 
       // 计算边的曲率：同一对节点间多条关系使用不同曲率避免重叠
       const pairCount = {}
@@ -957,12 +968,25 @@ export default function useGraphCanvas(canvasRef) {
       })
       edgesRef.current = edges
 
-      // 计算节点度数和可视化半径
+      // 计算节点度数和可视化半径；同时构建无向邻接表（排除自环）
       const degMap = {}
+      const adj = new Map()
+      const ensureAdj = (id) => {
+        let s = adj.get(id)
+        if (!s) { s = new Set(); adj.set(id, s) }
+        return s
+      }
       edges.forEach((e) => {
         degMap[e.source] = (degMap[e.source] || 0) + 1
         degMap[e.target] = (degMap[e.target] || 0) + 1
+        if (!e.isSelfLoop) {
+          ensureAdj(e.source).add(e.target)
+          ensureAdj(e.target).add(e.source)
+        }
       })
+      adjacencyRef.current = adj
+      // 将度数挂到原始节点上，使 passFilter 的孤立节点判断为 O(1)
+      safeN.forEach((n) => { n.degree = degMap[n.id] || 0 })
       const maxDeg = Math.max(1, ...Object.values(degMap))
       nodesRef.current = safeN.map((n) => ({
         ...n,
@@ -970,6 +994,11 @@ export default function useGraphCanvas(canvasRef) {
         r: 6 + ((Math.log1p(degMap[n.id] || 0) / Math.log1p(maxDeg)) * 18),
         name: n.label,
       }))
+
+      // 缓存按权重升序的节点快照，供 drawNodes 直接遍历（避免每帧重排）
+      sortedNodesRef.current = [...nodesRef.current].sort(
+        (a, b) => (a.weight || 0) - (b.weight || 0),
+      )
 
       // ── 仿真：首次创建或增量更新 ────────────────────────────────
       if (!simRef.current) {
