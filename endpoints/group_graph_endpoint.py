@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
+import threading
+import time
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
@@ -26,6 +31,73 @@ logger.setLevel(logging.INFO)
 logger.addHandler(plugin_logger_handler)
 
 
+TOKEN_TTL_SECONDS = 7 * 24 * 3600
+TOKEN_HEADER = "Authorization"
+TOKEN_SCHEME = "Bearer"
+MAX_TOKEN_LENGTH = 100
+TOKEN_KEY_SALT = b"neo4j-graph-endpoint-token-v1"
+TOKEN_KEY_ITERATIONS = 200_000
+
+# 路由常量：分发逻辑与页面渲染共用同一份字面量，避免路径字符串散落在判断里
+GRAPH_PAGE_PATH = "/group-graph"
+AUTH_API_PATH = "/group-graph/api/auth"
+GRAPH_API_PATH = "/group-graph/api/graph"
+NODE_API_PATH = "/group-graph/api/node"
+RELATION_API_PATH = "/group-graph/api/relation"
+REPLACE_RELATIONS_API_PATH = "/group-graph/api/replace-node-relations"
+NEIGHBORS_API_PATH = "/group-graph/api/neighbors"
+SHORTEST_PATH_API_PATH = "/group-graph/api/path"
+STATS_API_PATH = "/group-graph/api/stats"
+GROUP_API_PATH = "/group-graph/api/group"
+EXPORT_API_PATH = "/group-graph/api/export"
+IMPORT_API_PATH = "/group-graph/api/import"
+
+# 登录冷却：所有来源共享同一个计数器，因为 Dify 网关下无法区分真实客户端来源。
+# 上限 3 秒只用于钝化暴力尝试，不构成定向爆破防护，并会短暂影响他人的登录尝试。
+AUTH_FAILURE_DELAY_STEP = 0.5
+AUTH_FAILURE_DELAY_MAX = 3.0
+
+
+@lru_cache(maxsize=8)
+def _derive_token_key(access_password: str) -> bytes:
+    """把访问密码派生为 HMAC 密钥。
+
+    用 PBKDF2-HMAC-SHA256 而非单轮哈希，避免令牌被拿到后离线高速爆破密码；
+    结果按密码缓存，免去每个请求重复迭代。
+    """
+    return hashlib.pbkdf2_hmac(
+        "sha256", access_password.encode("utf-8"), TOKEN_KEY_SALT, TOKEN_KEY_ITERATIONS,
+    )
+
+
+_AUTH_FAILURE_LOCK = threading.Lock()
+_AUTH_FAILURE_STATE = {"count": 0, "block_until": 0.0}
+
+
+def _auth_retry_after() -> int:
+    """返回登录接口还需等待的秒数；0 表示当前可以尝试。"""
+    with _AUTH_FAILURE_LOCK:
+        remaining = _AUTH_FAILURE_STATE["block_until"] - time.time()
+    return int(remaining) + 1 if remaining > 0 else 0
+
+
+def _register_auth_failure() -> None:
+    """记录一次密码校验失败，按连续失败次数叠加登录冷却。"""
+    with _AUTH_FAILURE_LOCK:
+        _AUTH_FAILURE_STATE["count"] += 1
+        delay = min(
+            _AUTH_FAILURE_STATE["count"] * AUTH_FAILURE_DELAY_STEP, AUTH_FAILURE_DELAY_MAX,
+        )
+        _AUTH_FAILURE_STATE["block_until"] = time.time() + delay
+
+
+def _reset_auth_failures() -> None:
+    """密码校验成功后清零失败计数。"""
+    with _AUTH_FAILURE_LOCK:
+        _AUTH_FAILURE_STATE["count"] = 0
+        _AUTH_FAILURE_STATE["block_until"] = 0.0
+
+
 class GroupGraphEndpoint(Endpoint):
     """提供 group_id 图谱可视化与 CRUD API。"""
 
@@ -37,42 +109,57 @@ class GroupGraphEndpoint(Endpoint):
         store: GroupGraphStore | None = None
 
         try:
-            if path == "/group-graph" and method == "GET":
+            access_password = clean_text(settings.get("access_password"))
+
+            if path == AUTH_API_PATH:
+                return self._handle_auth(r, method, access_password)
+
+            if access_password and not (path == GRAPH_PAGE_PATH and method == "GET"):
+                if not self._is_token_valid(r, access_password):
+                    logger.warning(
+                        "GroupGraphEndpoint rejected unauthorized request, method=%s path=%s",
+                        method, path,
+                    )
+                    return self._json_response(
+                        {"error": "未授权：请先输入访问密码", "auth_required": True}, 401,
+                    )
+
+            if path == GRAPH_PAGE_PATH and method == "GET":
                 return self._render_html(r)
 
             store = GroupGraphStore(settings)
-            if path == "/group-graph/api/graph" and method == "GET":
+            if path == GRAPH_API_PATH and method == "GET":
                 return self._query_graph(r, store)
 
-            if path == "/group-graph/api/node" and method == "POST":
+            if path == NODE_API_PATH and method == "POST":
                 return self._create_node(r, store, settings)
-            if path == "/group-graph/api/node" and method == "PUT":
+            if path == NODE_API_PATH and method == "PUT":
                 return self._update_node(r, store, settings)
-            if path == "/group-graph/api/node" and method == "DELETE":
+            if path == NODE_API_PATH and method == "DELETE":
                 return self._delete_node(r, store)
 
-            if path == "/group-graph/api/relation" and method == "POST":
+            if path == RELATION_API_PATH and method == "POST":
                 return self._create_relation(r, store)
-            if path == "/group-graph/api/relation" and method == "PUT":
+            if path == RELATION_API_PATH and method == "PUT":
                 return self._update_relation(r, store)
-            if path == "/group-graph/api/relation" and method == "DELETE":
+            if path == RELATION_API_PATH and method == "DELETE":
                 return self._delete_relation(r, store)
 
-            if path == "/group-graph/api/replace-node-relations" and method == "POST":
+            if path == REPLACE_RELATIONS_API_PATH and method == "POST":
                 return self._replace_node_relations(r, store)
 
-            if path == "/group-graph/api/neighbors" and method == "GET":
+            if path == NEIGHBORS_API_PATH and method == "GET":
                 return self._expand_neighbors(r, store)
-            if path == "/group-graph/api/path" and method == "GET":
+            if path == SHORTEST_PATH_API_PATH and method == "GET":
                 return self._find_path(r, store)
-            if path == "/group-graph/api/stats" and method == "GET":
+            if path == STATS_API_PATH and method == "GET":
                 return self._get_stats(r, store)
-            if path == "/group-graph/api/group" and method == "DELETE":
+            if path == GROUP_API_PATH and method == "DELETE":
                 return self._clear_group(r, store)
 
-            if path == "/group-graph/api/export" and method == "GET":
+            if path == EXPORT_API_PATH and method == "GET":
                 return self._export_data(r, store)
-            if path == "/group-graph/api/import" and method == "POST":
+            if path == IMPORT_API_PATH and method == "POST":
                 return self._import_data(r, store, settings)
         except Exception as exc:
             logger.exception("endpoint invoke failed")
@@ -82,6 +169,67 @@ class GroupGraphEndpoint(Endpoint):
                 store.close()
 
         return self._json_response({"error": f"Unsupported route: {method} {path}"}, 404)
+
+    def _handle_auth(self, r: Request, method: str, access_password: str) -> Response:
+        """访问密码探测与登录：GET 报告是否需要鉴权，POST 校验密码并签发令牌。"""
+        if method == "GET":
+            return self._json_response({
+                "auth_required": bool(access_password),
+                "authorized": bool(access_password) and self._is_token_valid(r, access_password),
+            }, 200)
+
+        if method == "POST":
+            if not access_password:
+                return self._json_response({"ok": True, "token": ""}, 200)
+
+            retry_after = _auth_retry_after()
+            if retry_after > 0:
+                return self._json_response(
+                    {"error": f"尝试过于频繁，请 {retry_after} 秒后重试"},
+                    429,
+                    headers={"Retry-After": str(retry_after)},
+                )
+
+            body = self._body_json(r)
+            if not hmac.compare_digest(clean_text(body.get("password")), access_password):
+                logger.warning("GroupGraphEndpoint auth failed, path=%s", r.path)
+                _register_auth_failure()
+                return self._json_response({"error": "访问密码错误", "auth_required": True}, 401)
+
+            _reset_auth_failures()
+            return self._json_response({"ok": True, "token": self._issue_token(access_password)}, 200)
+
+        return self._json_response({"error": f"Unsupported route: {method} {r.path}"}, 404)
+
+    def _is_token_valid(self, r: Request, access_password: str) -> bool:
+        """校验 Authorization 头中的 Bearer 令牌：格式正确、签名一致且未过期。"""
+        scheme, _, raw_token = clean_text(r.headers.get(TOKEN_HEADER)).partition(" ")
+        token = clean_text(raw_token)
+        # 非 Bearer 形式或超长令牌直接拒绝，避免把无上限的字符串送进签名比较
+        if scheme.lower() != TOKEN_SCHEME.lower() or not token or len(token) > MAX_TOKEN_LENGTH:
+            return False
+        raw_expires_at, _, signature = token.partition(".")
+        if not raw_expires_at or not signature:
+            return False
+        try:
+            expires_at = int(raw_expires_at)
+        except ValueError:
+            return False
+        if expires_at < int(time.time()):
+            return False
+        return hmac.compare_digest(signature, self._sign_token(access_password, expires_at))
+
+    def _issue_token(self, access_password: str) -> str:
+        """签发无状态令牌 {过期时间戳}.{HMAC 签名}，改密码即旧令牌全部失效。"""
+        expires_at = int(time.time()) + TOKEN_TTL_SECONDS
+        return f"{expires_at}.{self._sign_token(access_password, expires_at)}"
+
+    @staticmethod
+    def _sign_token(access_password: str, expires_at: int) -> str:
+        """以 PBKDF2 派生的密钥，对过期时间戳做 HMAC-SHA256。"""
+        return hmac.new(
+            _derive_token_key(access_password), str(expires_at).encode("utf-8"), hashlib.sha256,
+        ).hexdigest()
 
     def _render_html(self, r: Request) -> Response:
         """渲染 D3 页面。"""
@@ -321,9 +469,16 @@ class GroupGraphEndpoint(Endpoint):
             return "以下字段不能为空: " + ", ".join(missing)
         return ""
 
-    def _json_response(self, data: dict[str, Any], status: int) -> Response:
-        """统一 JSON 响应。"""
-        return Response(json.dumps(data, ensure_ascii=False), status=status, content_type="application/json; charset=utf-8")
+    def _json_response(
+        self, data: dict[str, Any], status: int, headers: Mapping[str, str] | None = None,
+    ) -> Response:
+        """统一 JSON 响应；headers 用于 Retry-After 之类的附加头。"""
+        return Response(
+            json.dumps(data, ensure_ascii=False),
+            status=status,
+            headers=dict(headers or {}),
+            content_type="application/json; charset=utf-8",
+        )
 
     def _build_node_payload(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """将请求体归一化为 NodePayload，抽取 meta_* 并刷新 updated_at。"""

@@ -76,6 +76,10 @@ export const useAppStore = create((set, get) => ({
   confirmMessage: '',       // 确认对话框的提示文本
   _confirmResolve: null,    // Promise resolve 回调（内部使用）
 
+  // ── 访问鉴权 ──
+  authState: 'checking',   // 'checking' 校验中 / 'locked' 需输入密码 / 'ready' 已通过
+  authError: '',           // 密码门上的错误提示
+
   // ═══════════════════════════════════════════════════════════════════
   // 简单 setter 方法：直接更新 Zustand 状态
   // ═══════════════════════════════════════════════════════════════════
@@ -165,6 +169,72 @@ export const useAppStore = create((set, get) => ({
   // 异步操作：加载图谱、执行增删改、导入文件
   // ═══════════════════════════════════════════════════════════════════
 
+  /** 启动访问鉴权：无需密码或已持有有效令牌则直接进入，否则停在密码门 */
+  bootstrapAuth: async () => {
+    const { graphAPI } = get()
+    try {
+      const d = await graphAPI.checkAuth()
+      if (d.auth_required && !d.authorized) {
+        set({ authState: 'locked', authError: '' })
+        return
+      }
+    } catch (e) {
+      if (e.authRequired) {
+        set({ authState: 'locked', authError: '' })
+        return
+      }
+      // 旧版服务端没有鉴权接口：保持原有开放行为
+      if (e.status === 404) {
+        set({ authState: 'ready', authError: '' })
+        get().initFromUrl()
+        return
+      }
+      // 网关或网络异常：停在密码门并给出可重试提示，避免静默放行后被 401 弹回
+      set({ authState: 'locked', authError: e.message || '无法连接鉴权服务，请稍后重试' })
+      return
+    }
+    set({ authState: 'ready', authError: '' })
+    get().initFromUrl()
+  },
+
+  /** 提交访问密码，成功后进入图谱 */
+  submitPassword: async (password) => {
+    const { graphAPI } = get()
+    try {
+      await graphAPI.login(password)
+      set({ authState: 'ready', authError: '' })
+      get().initFromUrl()
+      return true
+    } catch (e) {
+      set({ authError: e.message || '访问密码错误' })
+      return false
+    }
+  },
+
+  /** 令牌失效时清掉本地令牌并退回密码门 */
+  lockSession: () => {
+    get().graphAPI.logout()
+    set({ authState: 'locked', authError: '访问密码已失效，请重新输入', status: '', statusError: false })
+  },
+
+  /** 从 URL 参数初始化图谱数据：demo=true 为示例模式，group_id 为正式模式 */
+  initFromUrl: () => {
+    const params = new URLSearchParams(window.location.search)
+    const gid = params.get('group_id') || ''
+    const demo = params.get('demo') === 'true'
+    if (gid) set({ groupId: gid })
+    if (demo) {
+      // 示例模式：生成模拟数据用于演示
+      get().loadDemo().finally(() => set({ isFullscreenLoading: false }))
+    } else if (gid) {
+      // 正式模式：从后端 API 加载指定分组的图谱数据
+      get().loadGroup(gid).finally(() => set({ isFullscreenLoading: false }))
+    } else {
+      // 未指定参数：提示用户输入 group_id
+      set({ isFullscreenLoading: false, status: '请输入 group_id 后加载图谱' })
+    }
+  },
+
   /** 按分组 ID 加载图谱，支持游标分页，每加载一页更新一次 UI */
   loadGroup: async (gid) => {
     const { graphAPI, updateGraphData, setFullscreenLoading } = get()
@@ -185,6 +255,10 @@ export const useAppStore = create((set, get) => ({
       set({ status: `加载完成: 节点 ${graphStore.nodeMap.size}，关系 ${graphStore.links.length}` })
     } catch (e) {
       graphStore.skipWeights = false
+      if (e.authRequired) {
+        get().lockSession()
+        return
+      }
       set({ status: `加载失败: ${e.message}`, statusError: true })
     } finally {
       setFullscreenLoading(false)
@@ -221,6 +295,10 @@ export const useAppStore = create((set, get) => ({
       }
       return result
     } catch (e) {
+      if (e.authRequired) {
+        get().lockSession()
+        return null
+      }
       set({ status: `操作失败: ${e.message}`, statusError: true })
       return null
     } finally {
@@ -240,11 +318,37 @@ export const useAppStore = create((set, get) => ({
       await get().loadGroup(groupId)
       return data
     } catch (e) {
+      if (e.authRequired) {
+        get().lockSession()
+        return null
+      }
       set({ status: `导入失败: ${e.message}`, statusError: true })
       return null
     } finally {
       setFullscreenLoading(false)
       set({ showImportModal: false, importFile: null })
+    }
+  },
+
+  /** 导出当前分组数据（excel/json），走统一请求层以携带访问令牌 */
+  exportGroup: async (format = 'excel') => {
+    const { graphAPI, groupId, setFullscreenLoading } = get()
+    if (!groupId) {
+      set({ status: '请先输入 group_id', statusError: true })
+      return
+    }
+    setFullscreenLoading(true, '导出数据中...')
+    try {
+      await graphAPI.exportFile(groupId, format)
+      set({ status: `已导出分组 ${groupId} 的数据`, statusError: false })
+    } catch (e) {
+      if (e.authRequired) {
+        get().lockSession()
+        return
+      }
+      set({ status: `导出失败: ${e.message}`, statusError: true })
+    } finally {
+      setFullscreenLoading(false)
     }
   },
 

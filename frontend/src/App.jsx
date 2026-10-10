@@ -17,6 +17,7 @@ import AddRelatedNodeDialog from '@/components/AddRelatedNodeDialog'
 import FullscreenLoading from '@/components/FullscreenLoading'
 import TopLoadingBar from '@/components/TopLoadingBar'
 import Minimap from '@/components/Minimap'
+import PasswordGate from '@/components/PasswordGate'
 
 export default function App() {
   const canvasRef = useRef(null)
@@ -24,25 +25,12 @@ export default function App() {
   const graphCanvas = useGraphCanvas(canvasRef)
   const isLoadingData = useAppStore((s) => s.isLoadingData)
 
-  // 从 URL 参数初始化加载图谱数据（仅在组件挂载时执行一次）
-  // 支持两种模式：demo=true 加载示例数据，或通过 group_id 加载指定分组
+  const authState = useAppStore((s) => s.authState)
+
+  // 启动访问鉴权：无需密码或已持有有效令牌则直接加载图谱，否则停在密码门
+  // 具体的数据初始化在 store.initFromUrl 中，鉴权通过后才执行
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const gid = params.get('group_id') || ''
-    const demo = params.get('demo') === 'true'
-    const store = useAppStore.getState()
-    if (gid) store.setGroupId(gid)
-    if (demo) {
-      // 示例模式：生成模拟数据用于演示
-      store.loadDemo().finally(() => store.setFullscreenLoading(false))
-    } else if (gid) {
-      // 正式模式：从后端 API 加载指定分组的图谱数据
-      store.loadGroup(gid).finally(() => store.setFullscreenLoading(false))
-    } else {
-      // 未指定参数：提示用户输入 group_id
-      store.setFullscreenLoading(false)
-      store.setStatus('请输入 group_id 后加载图谱')
-    }
+    useAppStore.getState().bootstrapAuth()
   }, [])
 
   // 键盘事件监听：按 ESC 键退出「抓取节点」模式
@@ -83,6 +71,11 @@ export default function App() {
     overlay.addEventListener('wheel', onWheel, { passive: false })
     return () => overlay.removeEventListener('wheel', onWheel)
   }, [isLoadingData])
+
+  // 未通过访问校验时，只渲染密码门
+  if (authState !== 'ready') {
+    return <PasswordGate />
+  }
 
   return (
     <TooltipProvider delay={300}>

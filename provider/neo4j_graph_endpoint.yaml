@@ -42,6 +42,15 @@ settings:
     help:
       en_US: Optional text-embedding model for auto-generating node vectors during endpoint create/update.
       zh_Hans: 可选 text-embedding 模型，用于 Endpoint 节点新增/更新时自动生成向量。
+  - name: access_password
+    type: secret-input
+    required: false
+    label:
+      en_US: Page Access Password
+      zh_Hans: 页面访问密码
+    help:
+      en_US: Optional password required to open the graph page and call any API. Leave empty to disable access control.
+      zh_Hans: 可选访问密码，启用后打开页面与调用全部 API 都需先验证；留空则不启用校验（保持旧行为）。
 
 endpoints:
   - endpoints/group_graph_page.yaml

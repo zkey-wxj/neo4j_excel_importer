@@ -12,6 +12,36 @@ import { clean, relStoreKey, genDemoNodes, genDemoLinks } from "./graph-store";
  基础路径自动检测：从 window.location.pathname 匹配 /e/{plugin_id} 格式
  ═══════════════════════════════════════════════════════════════════ */
 
+/** sessionStorage 中保存访问令牌的键名 */
+const TOKEN_KEY = "graph-access-token";
+
+/** 读取本地保存的访问令牌 */
+function readToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+/** 保存后端签发的访问令牌 */
+function saveToken(token) {
+  try {
+    sessionStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* 隐私模式等写入失败场景忽略 */
+  }
+}
+
+/** 清除本地访问令牌 */
+function clearToken() {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* 忽略 */
+  }
+}
+
 export class GraphAPI {
   /**
    * @param {import('./graph-store').GraphStore} store - 底层图数据存储实例
@@ -30,19 +60,24 @@ export class GraphAPI {
 
   /**
    * 统一的 HTTP 请求封装
-   * 自动处理 JSON 解析、错误抛出，以及 multipart 表单数据的特殊处理
+   * 自动处理令牌注入、JSON 解析、错误抛出，以及 multipart 表单数据的特殊处理
    * @param {string} path - 请求路径（相对路径或绝对 URL）
-   * @param {object} [opt] - 配置项：{ method, body, formData }
+   * @param {object} [opt] - 配置项：{ method, body, formData, responseType }
    *   - method: HTTP 方法，默认 GET
    *   - body: 已 JSON.stringify 的请求体
    *   - formData: FormData 对象（用于文件上传，会自动移除 Content-Type 让浏览器设置 boundary）
-   * @returns {Promise<object>} 解析后的 JSON 响应
-   * @throws {Error} 接口返回非 JSON 或 HTTP 状态码非 2xx 时抛出异常
+   *   - responseType: 传 "blob" 时返回二进制 Blob（导出下载用），默认返回解析后的 JSON
+   * @returns {Promise<object|Blob>} 解析后的 JSON 响应，或 responseType 为 "blob" 时的 Blob
+   * @throws {Error} HTTP 状态码非 2xx 时抛出错（错误对象带 status，401 或响应体带 auth_required 时带 authRequired）；
+   *   JSON 响应体无法解析时抛出
    */
   async req(path, opt = {}) {
     const m = (opt.method || "GET").toUpperCase();
     const u = /^https?:\/\//.test(path) ? path : this.url(path);
     const init = { method: m, headers: { Accept: "application/json" } };
+    const token = readToken();
+    // 已通过访问校验时，统一携带令牌
+    if (token) init.headers["Authorization"] = `Bearer ${token}`;
 
     if (opt.body !== undefined) {
       init.headers["Content-Type"] = "application/json";
@@ -56,7 +91,18 @@ export class GraphAPI {
     }
 
     const res = await fetch(u, init);
+
+    // 二进制下载（导出接口）：错误响应仍是 JSON，交给统一错误处理
+    if (opt.responseType === "blob") {
+      if (!res.ok) throw this._errorFrom(res, await res.text());
+      return res.blob();
+    }
+
     const txt = await res.text();
+    // 先判 HTTP 状态再解析：401 的响应体不一定是 JSON（网关可能注入错误页），
+    // 只有交给 _errorFrom 才能清掉令牌并退回密码门
+    if (!res.ok) throw this._errorFrom(res, txt);
+
     let d = {};
     if (txt) {
       try {
@@ -65,8 +111,75 @@ export class GraphAPI {
         throw new Error(`接口返回非 JSON: ${txt.slice(0, 120)}`);
       }
     }
-    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
     return d;
+  }
+
+  /**
+   * 由响应构造错误对象
+   * 401 或响应体带 auth_required 时清除本地令牌并打上标记，由上层退回密码门
+   */
+  _errorFrom(res, txt) {
+    let d = {};
+    if (txt) {
+      try {
+        d = JSON.parse(txt);
+      } catch {
+        /* 非 JSON 错误体，忽略 */
+      }
+    }
+    const err = new Error(d.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    if (res.status === 401 || d.auth_required) {
+      clearToken();
+      err.authRequired = true;
+    }
+    return err;
+  }
+
+  /** 探测是否需要访问密码，以及本地令牌是否仍然有效 */
+  async checkAuth() {
+    return this.req("/group-graph/api/auth");
+  }
+
+  /** 提交访问密码：成功后保存后端签发的令牌 */
+  async login(password) {
+    const d = await this.req("/group-graph/api/auth", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+    if (d.token) saveToken(d.token);
+    return d;
+  }
+
+  /** 退出登录：令牌为无状态签名，只需清除本地副本 */
+  logout() {
+    clearToken();
+  }
+
+  /**
+   * 下载当前分组的导出文件（Excel / JSON）
+   * 走统一 req 通道以携带访问令牌，再以 <a download> 触发保存
+   * @param {string} gid - 分组 ID
+   * @param {'excel'|'json'} [format] - 导出格式，默认 excel
+   */
+  async exportFile(gid, format = "excel") {
+    const fmt = format === "json" ? "json" : "excel";
+    const path = `/group-graph/api/export?group_id=${encodeURIComponent(gid)}&format=${fmt}`;
+    const blob = await this.req(path, { responseType: "blob" });
+    this._downloadBlob(blob, `graph_${gid}.${fmt === "json" ? "json" : "xlsx"}`);
+  }
+
+  /** 触发浏览器保存 Blob（blob 下载不会采用 Content-Disposition 文件名，故本地拼接） */
+  _downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // 延迟释放：部分浏览器在 click 后立刻 revoke，会导致下载尚未开始就被回收
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   /**

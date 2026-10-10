@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -28,48 +27,22 @@ export default function ImportModal() {
   const importMode = useAppStore((s) => s.importMode)
   const setImportMode = useAppStore((s) => s.setImportMode)
   const groupId = useAppStore((s) => s.groupId)
-  const loadGroup = useAppStore((s) => s.loadGroup)
-  const setFullscreenLoading = useAppStore((s) => s.setFullscreenLoading)
+  const importFileToServer = useAppStore((s) => s.importFileToServer)
+  const exportGroup = useAppStore((s) => s.exportGroup)
   const setStatus = useAppStore((s) => s.setStatus)
   const confirm = useAppStore((s) => s.confirm)
-  const fileInputRef = useRef(null)
 
   /** 确认导入：校验参数 → 二次确认 → 上传文件 → 刷新图谱 */
+  /** 确认导入：校验参数 → 二次确认 → 交由 store 走统一请求层上传（携带访问令牌） */
   const handleConfirm = async () => {
     if (!importFile) return
-    const gid = groupId
-    if (!gid) {
+    if (!groupId) {
       setStatus('请先输入 group_id', true)
       return
     }
     const modeLabel = importMode === 'override' ? '覆盖导入（将清空现有数据）' : '合并导入'
-    if (!await confirm(`确认以「${modeLabel}」方式导入 ${importFile.name} 到分组 ${gid}？`)) return
-
-    setShowImportModal(false)
-    setFullscreenLoading(true, '导入数据中...')
-    try {
-      const fd = new FormData()
-      fd.append('file', importFile)
-      const m = window.location.pathname.match(/^\/e\/[^/]+/)
-      const base = m ? m[0] : ''
-      const url = `${base}/group-graph/api/import?group_id=${encodeURIComponent(gid)}&mode=${importMode}`
-      const res = await fetch(url, { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        const { toast } = await import('sonner')
-        toast.error(`导入失败: ${data.error || res.status}`)
-      } else {
-        const { toast } = await import('sonner')
-        toast.success(`导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}`)
-        await loadGroup(gid)
-      }
-    } catch (err) {
-      const { toast } = await import('sonner')
-      toast.error(`导入失败: ${err.message}`)
-    } finally {
-      setFullscreenLoading(false)
-      setImportFile(null)
-    }
+    if (!await confirm(`确认以「${modeLabel}」方式导入 ${importFile.name} 到分组 ${groupId}？`)) return
+    await importFileToServer(importFile)
   }
 
   /** 取消导入：清理文件引用并关闭弹窗 */
@@ -132,12 +105,7 @@ export default function ImportModal() {
           size="sm"
           className="w-full text-xs"
           disabled={!groupId}
-          onClick={() => {
-            const gid = groupId
-            const m = window.location.pathname.match(/^\/e\/[^/]+/)
-            const base = m ? m[0] : ''
-            window.open(`${base}/group-graph/api/export?group_id=${encodeURIComponent(gid)}&format=excel`, '_blank')
-          }}
+          onClick={() => exportGroup('excel')}
         >
           导出 Excel 备份
         </Button>

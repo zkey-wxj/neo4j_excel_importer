@@ -63,7 +63,7 @@
 
 ## 三、Endpoint API & 可视化页面
 
-插件提供 **15 个 RESTful API**，配合一个内嵌的 **D3.js 图谱可视化页面**，浏览器直接访问即可使用。
+插件提供 **16 个 RESTful API**，配合一个内嵌的 **D3.js 图谱可视化页面**，浏览器直接访问即可使用。
 
 ### API 一览
 
@@ -84,6 +84,7 @@
 | DELETE | `/group-graph/api/group` | 清空分组数据 |
 | GET | `/group-graph/api/export` | 导出 Excel/JSON |
 | POST | `/group-graph/api/import` | 导入 Excel/JSON（支持 merge/override 模式） |
+| GET/POST | `/group-graph/api/auth` | 访问鉴权：GET 探测是否需要密码与令牌是否有效，POST 校验密码并签发令牌 |
 
 ### 可视化页面功能
 
@@ -95,6 +96,9 @@
 - **邻居展开**：点击节点展开 N 跳邻居子图
 - **路径查找**：输入起点终点，高亮最短路径
 - **导入导出**：上传 Excel/JSON 导入，导出当前分组数据
+- **访问密码**：配置密码后进入页面需先验证，API 校验登录令牌
+
+> 插件设置 `access_password` 留空时不启用校验（保持原有开放行为）；填写任意密码即启用：`GET /group-graph` 仍返回页面（密码门由前端渲染），其余全部 API 需带 `Authorization: Bearer <令牌>` 请求头。令牌用 HMAC-SHA256 签发，密钥由密码经 PBKDF2 派生，有效期 7 天；改密码后旧令牌立即失效，登录接口连续失败会短暂冷却（返回 429）。
 
 ---
 
@@ -139,6 +143,7 @@
 | `neo4j_uri` | Bolt 连接串，如 `bolt://localhost:7687` 或 `neo4j+s://xxxxx.databases.neo4j.io` |
 | `neo4j_user` | 数据库用户名（默认 `neo4j`） |
 | `neo4j_password` | 数据库密码 |
+| `access_password` | 页面访问密码（可选）。填写后进入 `/group-graph` 页面需先验证，全部 API 需携带登录令牌；留空则不启用校验 |
 
 ---
 
