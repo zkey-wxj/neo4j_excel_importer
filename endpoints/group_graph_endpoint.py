@@ -242,7 +242,7 @@ class GroupGraphEndpoint(Endpoint):
         if not group_id:
             return self._json_response({"error": "group_id 不能为空"}, 400)
         page = self._positive_int(r.args.get("page"), default=1)
-        page_size = self._limit(r.args.get("page_size"), default=300, max_value=5000)
+        page_size = self._limit(r.args.get("page_size"), default=500, max_value=5000)
         node_cursor = clean_text(r.args.get("node_cursor"))
         rel_cursor = clean_text(r.args.get("rel_cursor"))
         return self._json_response(store.query_graph(

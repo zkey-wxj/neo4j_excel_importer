@@ -258,7 +258,7 @@ RETURN count(*) AS deleted
         self,
         group_id: str,
         page: int = 1,
-        page_size: int = 300,
+        page_size: int = 500,
         node_cursor: str = "",
         rel_cursor: str = "",
     ) -> dict[str, Any]:

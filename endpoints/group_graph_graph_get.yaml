@@ -11,7 +11,7 @@ query:
   - name: page_size
     type: number
     required: false
-    default: 300
+    default: 500
   - name: node_cursor
     type: string
     required: false
