@@ -20,7 +20,9 @@ import Minimap from '@/components/Minimap'
 
 export default function App() {
   const canvasRef = useRef(null)
+  const overlayRef = useRef(null)
   const graphCanvas = useGraphCanvas(canvasRef)
+  const isLoadingData = useAppStore((s) => s.isLoadingData)
 
   // 从 URL 参数初始化加载图谱数据（仅在组件挂载时执行一次）
   // 支持两种模式：demo=true 加载示例数据，或通过 group_id 加载指定分组
@@ -59,6 +61,29 @@ export default function App() {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  // 数据加载遮罩期间，将滚轮事件转发到画布，保留缩放交互
+  // 遮罩层本身仍拦截悬浮/点击/拖动，仅放开滚轮缩放
+  useEffect(() => {
+    const overlay = overlayRef.current
+    if (!overlay) return
+    const onWheel = (e) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      e.preventDefault()
+      canvas.dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: e.deltaY,
+          deltaX: e.deltaX,
+          deltaMode: e.deltaMode,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        }),
+      )
+    }
+    overlay.addEventListener('wheel', onWheel, { passive: false })
+    return () => overlay.removeEventListener('wheel', onWheel)
+  }, [isLoadingData])
+
   return (
     <TooltipProvider delay={300}>
       <div className="relative w-full h-dvh overflow-hidden graph-bg">
@@ -76,6 +101,9 @@ export default function App() {
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block z-[1]"
         />
+
+        {/* 数据加载遮罩：分页加载期间覆盖画布，拦截悬浮/点击/拖动，防止误操作（滚轮缩放已转发至画布） */}
+        {isLoadingData && <div ref={overlayRef} className="absolute inset-0 z-[2] cursor-wait" />}
 
         {/* 底部控制栏：缩放、重置视图、小地图开关、导入/导出功能 */}
         <ControlBar graphCanvas={graphCanvas} />
