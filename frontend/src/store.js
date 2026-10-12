@@ -348,18 +348,29 @@ export const useAppStore = create((set, get) => ({
   importFileToServer: async (file) => {
     const { graphAPI, setFullscreenLoading } = get()
     const { groupId, importMode } = get()
+    const { toast } = await import('sonner')
     setFullscreenLoading(true, '导入数据中...')
     try {
       const data = await graphAPI.importFile(groupId, file, importMode)
-      set({ status: `导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}` })
+      const summary = `导入成功: 节点 ${data.nodes_imported}，关系 ${data.relations_imported}，跳过 ${data.relations_skipped}`
+      // 先 toast：随后的图谱重载可能很久，结果提示不能等重载完成才出现
+      toast.success(summary)
       // 导入完成后重新加载当前分组数据以刷新图谱
       await get().loadGroup(groupId)
+      // loadGroup 会把 status 覆盖成「加载中: 第 N 页」/「加载完成: ...」，
+      // 因此在重载结束后回写导入结果；若重载本身失败(statusError 已置位)则保留失败提示
+      if (get().statusError) {
+        toast.error('导入成功，但图谱刷新失败，请手动重新加载')
+      } else {
+        set({ status: summary, statusError: false })
+      }
       return data
     } catch (e) {
       if (e.authRequired) {
         get().lockSession()
         return null
       }
+      toast.error(`导入失败: ${e.message}`)
       set({ status: `导入失败: ${e.message}`, statusError: true })
       return null
     } finally {
